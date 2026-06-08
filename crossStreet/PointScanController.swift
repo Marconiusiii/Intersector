@@ -19,6 +19,7 @@ final class PointScanController: ObservableObject {
 	private let finder = IntersectionFinder()
 	private let haptics = HapticFeedback()
 	private var scanTask: Task<Void, Never>?
+	private var preparationHapticsTask: Task<Void, Never>?
 	private var lastPulse = Date.distantPast
 	private var spokenCooldowns: [String: Date] = [:]
 
@@ -43,6 +44,9 @@ final class PointScanController: ObservableObject {
 		}
 
 		isPreparing = true
+		if prefs.haptics {
+			startPreparationHaptics()
+		}
 
 		scanTask = Task { [weak self] in
 			guard let self else {
@@ -65,6 +69,10 @@ final class PointScanController: ObservableObject {
 
 				isPreparing = false
 				isScanning = true
+				stopPreparationHaptics()
+				let readyText = "Point and Scan Ready."
+				onUpdate(readyText)
+				VoiceOverAnnouncer.reportUpdated(readyText)
 
 				for await heading in locationProvider.headingUpdates() {
 					guard !Task.isCancelled else {
@@ -85,6 +93,7 @@ final class PointScanController: ObservableObject {
 				isPreparing = false
 				isScanning = false
 				scanTask = nil
+				stopPreparationHaptics()
 				let text = "Unable to start Point and Scan. \(error.localizedDescription)"
 				onUpdate(text)
 				VoiceOverAnnouncer.reportUpdated(text)
@@ -95,8 +104,28 @@ final class PointScanController: ObservableObject {
 	private func stop() {
 		scanTask?.cancel()
 		scanTask = nil
+		stopPreparationHaptics()
 		isPreparing = false
 		isScanning = false
+	}
+
+	private func startPreparationHaptics() {
+		preparationHapticsTask?.cancel()
+		preparationHapticsTask = Task { [weak self] in
+			var delay: UInt64 = 700_000_000
+			while !Task.isCancelled {
+				await MainActor.run {
+					self?.haptics.pulse(intensity: 0.25)
+				}
+				try? await Task.sleep(nanoseconds: delay)
+				delay = max(220_000_000, delay - 80_000_000)
+			}
+		}
+	}
+
+	private func stopPreparationHaptics() {
+		preparationHapticsTask?.cancel()
+		preparationHapticsTask = nil
 	}
 
 	private func handleHeading(
