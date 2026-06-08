@@ -44,6 +44,9 @@ final class PointScanController: ObservableObject {
 		}
 
 		isPreparing = true
+		let loadingText = "Point and Scan Loading..."
+		onUpdate(loadingText)
+		VoiceOverAnnouncer.reportUpdated(loadingText)
 		if prefs.haptics {
 			startPreparationHaptics()
 		}
@@ -111,14 +114,18 @@ final class PointScanController: ObservableObject {
 
 	private func startPreparationHaptics() {
 		preparationHapticsTask?.cancel()
+		haptics.pulse(intensity: 0.45)
 		preparationHapticsTask = Task { [weak self] in
-			var delay: UInt64 = 700_000_000
+			var delay: UInt64 = 350_000_000
 			while !Task.isCancelled {
-				await MainActor.run {
-					self?.haptics.pulse(intensity: 0.25)
-				}
 				try? await Task.sleep(nanoseconds: delay)
-				delay = max(220_000_000, delay - 80_000_000)
+				guard !Task.isCancelled else {
+					return
+				}
+				await MainActor.run {
+					self?.haptics.pulse(intensity: 0.45)
+				}
+				delay = max(170_000_000, delay - 45_000_000)
 			}
 		}
 	}
