@@ -80,4 +80,59 @@ struct crossStreetTests {
 
 		#expect(currentStreetIntersections.map(\.title) == ["Oak Street and Pine Street"])
 	}
+
+	@Test func mapDataCacheReusesNearbyResults() async throws {
+		let cache = MapDataCache()
+		let counter = FetchCounter()
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let nearby = CLLocationCoordinate2D(latitude: 37.0002, longitude: -122.0)
+
+		let first = try await cache.data(near: origin, radiusMeters: 450) {
+			await counter.nextDataSet()
+		}
+		let second = try await cache.data(near: nearby, radiusMeters: 450) {
+			await counter.nextDataSet()
+		}
+
+		#expect(first.intersections.first?.id == "fetch-1")
+		#expect(second.intersections.first?.id == "fetch-1")
+		#expect(await counter.count == 1)
+	}
+
+	@Test func mapDataCacheFetchesAgainForDistantResults() async throws {
+		let cache = MapDataCache()
+		let counter = FetchCounter()
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let distant = CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+
+		let first = try await cache.data(near: origin, radiusMeters: 450) {
+			await counter.nextDataSet()
+		}
+		let second = try await cache.data(near: distant, radiusMeters: 450) {
+			await counter.nextDataSet()
+		}
+
+		#expect(first.intersections.first?.id == "fetch-1")
+		#expect(second.intersections.first?.id == "fetch-2")
+		#expect(await counter.count == 2)
+	}
+}
+
+actor FetchCounter {
+	private(set) var count = 0
+
+	func nextDataSet() -> MapDataSet {
+		count += 1
+		let id = "fetch-\(count)"
+		return MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: id,
+					names: ["Oak Street", "Pine Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+				)
+			],
+			roads: []
+		)
+	}
 }

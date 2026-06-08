@@ -11,6 +11,7 @@ import Foundation
 struct MapDataClient: MapDataFetching {
 	var endpoint = URL(string: "https://overpass-api.de/api/interpreter")!
 	var session: URLSession = .shared
+	private static let cache = MapDataCache()
 
 	func intersections(
 		near coordinate: CLLocationCoordinate2D,
@@ -20,6 +21,18 @@ struct MapDataClient: MapDataFetching {
 	}
 
 	func mapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance
+	) async throws -> MapDataSet {
+		try await Self.cache.data(
+			near: coordinate,
+			radiusMeters: radiusMeters
+		) {
+			try await fetchMapData(near: coordinate, radiusMeters: radiusMeters)
+		}
+	}
+
+	private func fetchMapData(
 		near coordinate: CLLocationCoordinate2D,
 		radiusMeters: CLLocationDistance
 	) async throws -> MapDataSet {
@@ -43,13 +56,119 @@ struct MapDataClient: MapDataFetching {
 		let radius = Int(radiusMeters.rounded())
 		let body = """
 		[out:json][timeout:8];
-		way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"]["name"];
+		way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"]["highway"!~"^(motorway|motorway_link|trunk|trunk_link)$"]["name"];
 		(._;>;);
 		out body;
 		"""
 		let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&+"))
 		let encoded = body.addingPercentEncoding(withAllowedCharacters: allowed) ?? body
 		return "data=\(encoded)"
+	}
+}
+
+actor MapDataCache {
+	private struct Entry {
+		var center: CLLocationCoordinate2D
+		var radiusMeters: CLLocationDistance
+		var storedAt: Date
+		var data: MapDataSet
+	}
+
+	private struct InFlightRequest {
+		var center: CLLocationCoordinate2D
+		var radiusMeters: CLLocationDistance
+		var task: Task<MapDataSet, Error>
+	}
+
+	private let reuseDistanceMeters: CLLocationDistance = 100
+	private let timeToLive: TimeInterval = 300
+	private var entry: Entry?
+	private var inFlightRequest: InFlightRequest?
+
+	func data(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		fetch: @escaping @Sendable () async throws -> MapDataSet
+	) async throws -> MapDataSet {
+		if let entry, canReuse(entry, for: coordinate, radiusMeters: radiusMeters) {
+			return entry.data
+		}
+
+		if let inFlightRequest,
+		   canReuse(inFlightRequest, for: coordinate, radiusMeters: radiusMeters) {
+			return try await inFlightRequest.task.value
+		}
+
+		let task = Task {
+			try await fetch()
+		}
+		inFlightRequest = InFlightRequest(
+			center: coordinate,
+			radiusMeters: radiusMeters,
+			task: task
+		)
+
+		do {
+			let data = try await task.value
+			entry = Entry(
+				center: coordinate,
+				radiusMeters: radiusMeters,
+				storedAt: Date(),
+				data: data
+			)
+			inFlightRequest = nil
+			return data
+		} catch {
+			inFlightRequest = nil
+			throw error
+		}
+	}
+
+	private func canReuse(
+		_ entry: Entry,
+		for coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance
+	) -> Bool {
+		guard Date().timeIntervalSince(entry.storedAt) <= timeToLive else {
+			return false
+		}
+		return sameArea(
+			center: entry.center,
+			radiusMeters: entry.radiusMeters,
+			as: coordinate,
+			requestedRadius: radiusMeters
+		)
+	}
+
+	private func canReuse(
+		_ request: InFlightRequest,
+		for coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance
+	) -> Bool {
+		sameArea(
+			center: request.center,
+			radiusMeters: request.radiusMeters,
+			as: coordinate,
+			requestedRadius: radiusMeters
+		)
+	}
+
+	private func sameArea(
+		center: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		as coordinate: CLLocationCoordinate2D,
+		requestedRadius: CLLocationDistance
+	) -> Bool {
+		abs(radiusMeters - requestedRadius) < 1
+			&& distanceMeters(from: center, to: coordinate) <= reuseDistanceMeters
+	}
+
+	private func distanceMeters(
+		from start: CLLocationCoordinate2D,
+		to end: CLLocationCoordinate2D
+	) -> CLLocationDistance {
+		CLLocation(latitude: start.latitude, longitude: start.longitude)
+			.distance(from: CLLocation(latitude: end.latitude, longitude: end.longitude))
 	}
 }
 

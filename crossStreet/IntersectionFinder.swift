@@ -14,24 +14,24 @@ struct IntersectionFinder {
 		from context: DeviceContext,
 		in candidates: [IntersectionCandidate]
 	) -> IntersectionCandidate? {
-		let sorted = candidates.sorted {
-			Geo.distanceMeters(from: context.coordinate, to: $0.coordinate)
-				< Geo.distanceMeters(from: context.coordinate, to: $1.coordinate)
-		}
-
 		switch kind {
 		case .nearest:
-			return sorted.first
+			return nearestCandidate(from: context.coordinate, in: candidates)
 		case .upcoming, .scan:
 			guard let heading = context.headingDegrees else {
-				return sorted.first
+				return nearestCandidate(from: context.coordinate, in: candidates)
 			}
-			return sorted.first { candidate in
+			return candidates.reduce(nil) { best, candidate in
 				let bearing = Geo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
-				let delta = abs(Geo.normalizedDegrees(bearing - heading))
-				let smallestDelta = min(delta, 360 - delta)
-				return smallestDelta <= 60
-			} ?? sorted.first
+				guard angleDelta(from: heading, to: bearing) <= 60 else {
+					return best
+				}
+				return nearest(
+					best,
+					or: candidate,
+					from: context.coordinate
+				)
+			} ?? nearestCandidate(from: context.coordinate, in: candidates)
 		}
 	}
 
@@ -44,24 +44,24 @@ struct IntersectionFinder {
 		}
 
 		return candidates
-			.map { candidate in
+			.reduce(nil) { best, candidate in
 				let bearing = Geo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
 				let distance = Geo.distanceMeters(from: context.coordinate, to: candidate.coordinate)
 				let delta = angleDelta(from: heading, to: bearing)
-				return ScanMatch(
+				let match = ScanMatch(
 					candidate: candidate,
 					distanceMeters: distance,
 					bearingDegrees: bearing,
 					angleDelta: delta
 				)
-			}
-			.sorted {
-				if abs($0.angleDelta - $1.angleDelta) > 5 {
-					return $0.angleDelta < $1.angleDelta
+				guard let best else {
+					return match
 				}
-				return $0.distanceMeters < $1.distanceMeters
+				if abs(match.angleDelta - best.angleDelta) > 5 {
+					return match.angleDelta < best.angleDelta ? match : best
+				}
+				return match.distanceMeters < best.distanceMeters ? match : best
 			}
-			.first
 	}
 
 	func angleDelta(
@@ -70,6 +70,28 @@ struct IntersectionFinder {
 	) -> CLLocationDirection {
 		let delta = abs(Geo.normalizedDegrees(bearing - heading))
 		return min(delta, 360 - delta)
+	}
+
+	private func nearestCandidate(
+		from coordinate: CLLocationCoordinate2D,
+		in candidates: [IntersectionCandidate]
+	) -> IntersectionCandidate? {
+		candidates.reduce(nil) { best, candidate in
+			nearest(best, or: candidate, from: coordinate)
+		}
+	}
+
+	private func nearest(
+		_ current: IntersectionCandidate?,
+		or candidate: IntersectionCandidate,
+		from coordinate: CLLocationCoordinate2D
+	) -> IntersectionCandidate {
+		guard let current else {
+			return candidate
+		}
+		let currentDistance = Geo.distanceMeters(from: coordinate, to: current.coordinate)
+		let candidateDistance = Geo.distanceMeters(from: coordinate, to: candidate.coordinate)
+		return candidateDistance < currentDistance ? candidate : current
 	}
 }
 
