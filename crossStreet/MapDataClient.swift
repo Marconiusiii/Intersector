@@ -44,8 +44,19 @@ struct MapDataClient: MapDataFetching {
 			radiusMeters: radiusMeters
 		).data(using: .utf8)
 
-		let (data, _) = try await session.data(for: request)
-		let response = try JSONDecoder().decode(OverpassResponse.self, from: data)
+		let (data, urlResponse) = try await session.data(for: request)
+		guard let httpResponse = urlResponse as? HTTPURLResponse else {
+			throw MapDataError.invalidResponse
+		}
+		guard (200..<300).contains(httpResponse.statusCode) else {
+			throw MapDataError.serverError(httpResponse.statusCode)
+		}
+		let response: OverpassResponse
+		do {
+			response = try JSONDecoder().decode(OverpassResponse.self, from: data)
+		} catch {
+			throw MapDataError.invalidMapData
+		}
 		return IntersectionBuilder().mapData(from: response)
 	}
 
@@ -63,6 +74,36 @@ struct MapDataClient: MapDataFetching {
 		let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&+"))
 		let encoded = body.addingPercentEncoding(withAllowedCharacters: allowed) ?? body
 		return "data=\(encoded)"
+	}
+}
+
+enum MapDataError: LocalizedError {
+	case invalidResponse
+	case serverError(Int)
+	case invalidMapData
+
+	var errorDescription: String? {
+		switch self {
+		case .invalidResponse:
+			"The map server returned an unreadable response."
+		case .serverError(let statusCode):
+			Self.serverErrorDescription(for: statusCode)
+		case .invalidMapData:
+			"The map server returned data Intersector could not read."
+		}
+	}
+
+	private static func serverErrorDescription(for statusCode: Int) -> String {
+		switch statusCode {
+		case 429:
+			"The map server returned error 429, which usually means too many requests."
+		case 502, 503:
+			"The map server returned error \(statusCode), which usually means it is temporarily unavailable."
+		case 504:
+			"The map server returned error 504, which usually means the request timed out."
+		default:
+			"The map server returned error \(statusCode)."
+		}
 	}
 }
 
@@ -159,8 +200,10 @@ actor MapDataCache {
 		as coordinate: CLLocationCoordinate2D,
 		requestedRadius: CLLocationDistance
 	) -> Bool {
-		abs(radiusMeters - requestedRadius) < 1
-			&& distanceMeters(from: center, to: coordinate) <= reuseDistanceMeters
+		let distanceFromCenter = distanceMeters(from: center, to: coordinate)
+		let requestedAreaIsCovered = distanceFromCenter + requestedRadius <= radiusMeters
+		let centersAreClose = distanceFromCenter <= reuseDistanceMeters
+		return requestedAreaIsCovered || (abs(radiusMeters - requestedRadius) < 1 && centersAreClose)
 	}
 
 	private func distanceMeters(
@@ -183,6 +226,45 @@ struct OverpassElement: Decodable {
 	var lon: Double?
 	var nodes: [Int64]?
 	var tags: [String: String]?
+
+	enum CodingKeys: String, CodingKey {
+		case type
+		case id
+		case lat
+		case lon
+		case nodes
+		case tags
+	}
+
+	init(from decoder: Decoder) throws {
+		let container = try decoder.container(keyedBy: CodingKeys.self)
+		type = try container.decode(String.self, forKey: .type)
+		id = try container.decode(Int64.self, forKey: .id)
+		lat = try container.decodeIfPresent(Double.self, forKey: .lat)
+		lon = try container.decodeIfPresent(Double.self, forKey: .lon)
+		nodes = try container.decodeIfPresent([Int64].self, forKey: .nodes)
+		tags = try container.decodeIfPresent([String: FlexibleString].self, forKey: .tags)?
+			.mapValues(\.value)
+	}
+}
+
+private struct FlexibleString: Decodable {
+	var value: String
+
+	init(from decoder: Decoder) throws {
+		let container = try decoder.singleValueContainer()
+		if let string = try? container.decode(String.self) {
+			value = string
+		} else if let int = try? container.decode(Int.self) {
+			value = String(int)
+		} else if let double = try? container.decode(Double.self) {
+			value = String(double)
+		} else if let bool = try? container.decode(Bool.self) {
+			value = String(bool)
+		} else {
+			value = ""
+		}
+	}
 }
 
 struct IntersectionBuilder {

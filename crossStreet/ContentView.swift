@@ -16,10 +16,12 @@ struct ContentView: View {
 	@State private var report: OrientReport?
 	@State private var statusText = "Choose an action."
 	@State private var isLoading = false
+	@State private var isDirectionLoading = false
 	@State private var isShowingSettings = false
 	@State private var isShowingMailComposer = false
 	@State private var hasLoadedInitialReport = false
 	@State private var onboardingLocationProvider = LocationProvider()
+	@State private var directionLocationProvider = LocationProvider()
 	@StateObject private var pointScanner = PointScanController()
 
 	var body: some View {
@@ -53,6 +55,15 @@ struct ContentView: View {
 								await updateReport(.upcoming)
 							}
 							.frame(minHeight: 150)
+							actionButton(
+								"My Direction",
+								systemImage: "safari.fill",
+								accessibilityHint: "Speaks cardinal direction.",
+								isDisabled: isDirectionLoading
+							) {
+								await updateDirection()
+							}
+							.frame(minHeight: 150)
 							pointScanToggle
 								.frame(minHeight: 150)
 						}
@@ -62,7 +73,7 @@ struct ContentView: View {
 					.background(Color.crossBg)
 				} else {
 					let headerHeight = 72.0
-					let sectionHeight = max((proxy.size.height - headerHeight) / 4, 0)
+					let sectionHeight = max((proxy.size.height - headerHeight) / 5, 0)
 					VStack(spacing: 0) {
 						headerView
 							.frame(height: headerHeight)
@@ -74,6 +85,15 @@ struct ContentView: View {
 						.frame(height: sectionHeight)
 						actionButton("Upcoming Intersection", systemImage: "arrow.up.circle.fill") {
 							await updateReport(.upcoming)
+						}
+						.frame(height: sectionHeight)
+						actionButton(
+							"My Direction",
+							systemImage: "safari.fill",
+							accessibilityHint: "Speaks cardinal direction.",
+							isDisabled: isDirectionLoading
+						) {
+							await updateDirection()
 						}
 						.frame(height: sectionHeight)
 						pointScanToggle
@@ -287,6 +307,8 @@ struct ContentView: View {
 	private func actionButton(
 		_ title: String,
 		systemImage: String,
+		accessibilityHint: String? = nil,
+		isDisabled: Bool? = nil,
 		action: @escaping () async -> Void
 	) -> some View {
 		Button {
@@ -306,7 +328,8 @@ struct ContentView: View {
 		.background(Color.crossBtn)
 		.frame(maxWidth: .infinity, maxHeight: .infinity)
 		.contentShape(Rectangle())
-		.disabled(isLoading || pointScanner.isScanning || pointScanner.isPreparing)
+		.disabled(isDisabled ?? (isLoading || pointScanner.isScanning || pointScanner.isPreparing))
+		.accessibilityHint(accessibilityHint ?? "")
 	}
 
 	private func externalLink(title: String, url: String) -> some View {
@@ -356,6 +379,27 @@ struct ContentView: View {
 		}
 
 		isLoading = false
+	}
+
+	private func updateDirection() async {
+		guard !isDirectionLoading else {
+			return
+		}
+		isDirectionLoading = true
+		statusText = "Updating direction."
+
+		do {
+			let heading = try await directionLocationProvider.currentHeading()
+			let text = "Facing \(Geo.compassDirection(heading))."
+			statusText = text
+			VoiceOverAnnouncer.reportUpdated(text)
+		} catch {
+			let text = error.localizedDescription
+			statusText = text
+			VoiceOverAnnouncer.reportUpdated(text)
+		}
+
+		isDirectionLoading = false
 	}
 
 	private func loadInitialReportIfNeeded() {

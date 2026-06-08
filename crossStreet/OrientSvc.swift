@@ -11,6 +11,7 @@ import Foundation
 enum OrientError: LocalizedError {
 	case noIntersections
 	case headingUnavailable
+	case locationUnavailable
 
 	var errorDescription: String? {
 		switch self {
@@ -18,6 +19,8 @@ enum OrientError: LocalizedError {
 			"No nearby mapped intersections were found."
 		case .headingUnavailable:
 			"Direction is not available yet."
+		case .locationUnavailable:
+			"Location is not available yet. Try again."
 		}
 	}
 }
@@ -43,10 +46,7 @@ struct OrientSvc {
 
 	func report(_ kind: ReportKind, prefs: AppPrefs = AppPrefs()) async throws -> OrientReport {
 		let context = try await locationProvider.currentContext()
-		let intersections = try await mapDataClient.intersections(
-			near: context.coordinate,
-			radiusMeters: 450
-		)
+		let intersections = try await intersections(for: kind, from: context)
 
 		guard let match = finder.bestMatch(
 			for: kind,
@@ -75,6 +75,43 @@ struct OrientSvc {
 			toward: nil,
 			conf: confidence(for: kind, heading: context.headingDegrees)
 		)
+	}
+
+	private func intersections(for kind: ReportKind, from context: DeviceContext) async throws -> [IntersectionCandidate] {
+		let fastRadius: CLLocationDistance = 300
+		let fallbackRadius: CLLocationDistance = 450
+		let intersections = try await mapDataClient.intersections(
+			near: context.coordinate,
+			radiusMeters: fastRadius
+		)
+
+		if shouldFetchFallback(for: kind, from: context, intersections: intersections) {
+			return try await mapDataClient.intersections(
+				near: context.coordinate,
+				radiusMeters: fallbackRadius
+			)
+		}
+
+		return intersections
+	}
+
+	private func shouldFetchFallback(
+		for kind: ReportKind,
+		from context: DeviceContext,
+		intersections: [IntersectionCandidate]
+	) -> Bool {
+		guard !intersections.isEmpty else {
+			return true
+		}
+
+		guard kind == .upcoming, let heading = context.headingDegrees else {
+			return false
+		}
+
+		return !intersections.contains { candidate in
+			let bearing = Geo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
+			return finder.angleDelta(from: heading, to: bearing) <= 60
+		}
 	}
 
 	private func relativeDirection(

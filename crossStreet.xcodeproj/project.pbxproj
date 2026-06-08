@@ -186,7 +186,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 82E831992FD62E4300071B9D /* Build configuration list for PBXProject "Intersector" */;
+			buildConfigurationList = 82E831992FD62E4300071B9D /* Build configuration list for PBXProject "crossStreet" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -396,7 +396,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = 4FL3XZDQ9P;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -433,7 +433,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = 4FL3XZDQ9P;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -551,7 +551,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		82E831992FD62E4300071B9D /* Build configuration list for PBXProject "Intersector" */ = {
+		82E831992FD62E4300071B9D /* Build configuration list for PBXProject "crossStreet" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				82E831BD2FD62E4400071B9D /* Debug */,

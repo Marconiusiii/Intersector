@@ -14,8 +14,17 @@ struct NearestIntersectionIntent: AppIntent {
 	static var openAppWhenRun = false
 
 	func perform() async throws -> some IntentResult & ProvidesDialog {
-		let report = try await OrientSvc.shared.report(.nearest)
-		return .result(dialog: IntentDialog(stringLiteral: report.text(with: AppPrefs())))
+		do {
+			let report = try await OrientSvc.shared.report(.nearest)
+			let text = await report.text(with: AppPrefs())
+			return .result(dialog: IntentDialog(stringLiteral: text))
+		} catch {
+			return .result(
+				dialog: IntentDialog(
+					stringLiteral: "I couldn't get your nearest intersection. Make sure Location Services are enabled for Intersector and try again."
+				)
+			)
+		}
 	}
 }
 
@@ -25,8 +34,17 @@ struct UpcomingIntersectionIntent: AppIntent {
 	static var openAppWhenRun = false
 
 	func perform() async throws -> some IntentResult & ProvidesDialog {
-		let report = try await OrientSvc.shared.report(.upcoming)
-		return .result(dialog: IntentDialog(stringLiteral: report.text(with: AppPrefs())))
+		do {
+			let report = try await OrientSvc.shared.report(.upcoming)
+			let text = await report.text(with: AppPrefs())
+			return .result(dialog: IntentDialog(stringLiteral: text))
+		} catch {
+			return .result(
+				dialog: IntentDialog(
+					stringLiteral: "I couldn't get your upcoming intersection. Make sure Location Services are enabled for Intersector and try again."
+				)
+			)
+		}
 	}
 }
 
@@ -40,7 +58,7 @@ struct StartPointScanIntent: AppIntent {
 	static var openAppWhenRun = true
 
 	func perform() async throws -> some IntentResult & ProvidesDialog {
-		UserDefaults.standard.set(true, forKey: LaunchKeys.startPointScan)
+		UserDefaults.standard.set(true, forKey: await LaunchKeys.startPointScan)
 		return .result(dialog: "Opening Intersector with Point and Scan.")
 	}
 }
@@ -52,7 +70,10 @@ struct IntersectorShortcuts: AppShortcutsProvider {
 			phrases: [
 				"Nearest intersection in \(.applicationName)",
 				"Where is the nearest intersection with \(.applicationName)",
-				"What's my nearest intersection with \(.applicationName)"
+				"What's my nearest intersection with \(.applicationName)",
+				"What is my nearest intersection with \(.applicationName)",
+				"What's the nearest intersection with \(.applicationName)",
+				"What intersection am I near with \(.applicationName)"
 			],
 			shortTitle: "Nearest",
 			systemImageName: "location.fill"
@@ -62,7 +83,10 @@ struct IntersectorShortcuts: AppShortcutsProvider {
 			phrases: [
 				"Upcoming intersection in \(.applicationName)",
 				"What intersection is ahead with \(.applicationName)",
-				"What's my opcoming intersection with \(.applicationName)"
+				"What's my upcoming intersection with \(.applicationName)",
+				"What is my upcoming intersection with \(.applicationName)",
+				"What's the next intersection with \(.applicationName)",
+				"What intersection is coming up with \(.applicationName)"
 			],
 			shortTitle: "Upcoming",
 			systemImageName: "arrow.up.circle.fill"
