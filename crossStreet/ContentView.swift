@@ -72,7 +72,7 @@ struct ContentView: View {
 					.frame(width: proxy.size.width, height: proxy.size.height)
 					.background(Color.crossBg)
 				} else {
-					let headerHeight = 72.0
+					let headerHeight = 88.0
 					let sectionHeight = max((proxy.size.height - headerHeight) / 5, 0)
 					VStack(spacing: 0) {
 						headerView
