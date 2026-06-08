@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  crossStreet
+//  Intersector
 //
 //  Created by Marco Salsiccia on 6/7/26.
 //
@@ -116,7 +116,7 @@ struct ContentView: View {
 	}
 
 	private var appTitle: some View {
-		Text("CrossStreet")
+		Text("Intersector")
 			.font(.largeTitle)
 			.fontWeight(.bold)
 			.foregroundStyle(Color.crossText)
@@ -231,7 +231,10 @@ struct ContentView: View {
 							.lineLimit(nil)
 							.fixedSize(horizontal: false, vertical: true)
 					}
-					.accessibilityHint("Opens Mail so you can send feedback about CrossStreet.")
+					.accessibilityHint("Opens Mail so you can send feedback about Intersector.")
+				}
+				Section {
+					externalLink(title: "Privacy Policy", url: "https://marconius.com/csPrivacy/")
 				}
 
 				Section {
@@ -273,7 +276,7 @@ struct ContentView: View {
 			.sheet(isPresented: $isShowingMailComposer) {
 				MailComposerView(
 					recipient: "marco@marconius.com",
-					subject: "CrossStreet Feedback",
+					subject: "Intersector Feedback",
 					body: nil,
 					onFinish: { _ in }
 				)
@@ -305,6 +308,18 @@ struct ContentView: View {
 		.contentShape(Rectangle())
 		.disabled(isLoading || pointScanner.isScanning || pointScanner.isPreparing)
 	}
+
+	private func externalLink(title: String, url: String) -> some View {
+		Link(title, destination: URL(string: url)!)
+			.font(.body)
+			.foregroundStyle(Color.crossAccent)
+			.underline()
+			.accessibilityTouchRegion(minHeight: 60, verticalPadding: 4, alignment: .leading)
+			.accessibilityAddTraits(.isLink)
+			.accessibilityRemoveTraits(.isButton)
+			.accessibilityHint("Opens in external browser")
+	}
+
 
 	private func actionLabel(_ title: String, systemImage: String) -> some View {
 		Label {
@@ -371,11 +386,25 @@ struct ContentView: View {
 	}
 
 	private func openMailFallback() {
-		let subject = "CrossStreet Feedback".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+		let subject = "Intersector Feedback".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
 		guard let mailURL = URL(string: "mailto:marco@marconius.com?subject=\(subject)") else {
 			return
 		}
 		openURL(mailURL)
+	}
+}
+
+extension View {
+	func accessibilityTouchRegion(
+		minHeight: CGFloat,
+		verticalPadding: CGFloat,
+		alignment: Alignment
+	) -> some View {
+		self
+			.padding(.vertical, verticalPadding)
+			.frame(minHeight: minHeight, alignment: alignment)
+			.frame(maxWidth: .infinity, alignment: alignment)
+			.contentShape(Rectangle())
 	}
 }
 

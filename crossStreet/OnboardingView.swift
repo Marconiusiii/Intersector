@@ -17,16 +17,16 @@ struct OnboardingView: View {
 
 	private let pages = [
 		OnboardingPage(
-			title: "Welcome to CrossStreet",
-			body: "CrossStreet helps you identify nearby intersections and orient yourself by street direction. It is built for quick, accessible street context from the app or Siri."
+			title: "Welcome to Intersector",
+			body: "Intersector helps you identify nearby intersections and orient yourself by street direction. It is built for quick, accessible street context from the app or Siri."
 		),
 		OnboardingPage(
 			title: "Use Siri Shortcuts",
-			body: "Try saying: Nearest intersection in CrossStreet. Upcoming intersection in CrossStreet. Start Point and Scan in CrossStreet. You can also set up your own shortcuts using CrossStreet in the Shortcuts app."
+			body: "Try saying: Nearest intersection in Intersector. Upcoming intersection in Intersector. Start Point and Scan in Intersector. You can also set up your own shortcuts using Intersector in the Shortcuts app."
 		),
 		OnboardingPage(
 			title: "Location Permission",
-			body: "CrossStreet needs your location to find the streets and intersections around you. The next step opens the iOS location permission request."
+			body: "Intersector needs your location to find the streets and intersections around you. The next step opens the iOS location permission request."
 		)
 	]
 

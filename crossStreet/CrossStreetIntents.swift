@@ -36,12 +36,12 @@ enum LaunchKeys {
 
 struct StartPointScanIntent: AppIntent {
 	static var title: LocalizedStringResource = "Start Point and Scan"
-	static var description = IntentDescription("Opens CrossStreet and starts live Point and Scan mode.")
+	static var description = IntentDescription("Opens Intersector and starts live Point and Scan mode.")
 	static var openAppWhenRun = true
 
 	func perform() async throws -> some IntentResult & ProvidesDialog {
 		UserDefaults.standard.set(true, forKey: LaunchKeys.startPointScan)
-		return .result(dialog: "Opening CrossStreet with Point and Scan.")
+		return .result(dialog: "Opening Intersector with Point and Scan.")
 	}
 }
 

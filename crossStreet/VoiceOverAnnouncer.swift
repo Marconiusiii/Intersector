@@ -5,14 +5,14 @@
 //  Created by Marco Salsiccia on 6/7/26.
 //
 
-import UIKit
+import Accessibility
+import Foundation
 
 enum VoiceOverAnnouncer {
 	@MainActor
 	static func reportUpdated(_ text: String) {
-		guard UIAccessibility.isVoiceOverRunning else {
-			return
-		}
-		UIAccessibility.post(notification: .announcement, argument: text)
+		var announcement = AttributedString(text)
+		announcement.accessibilitySpeechAnnouncementPriority = .high
+		AccessibilityNotification.Announcement(announcement).post()
 	}
 }

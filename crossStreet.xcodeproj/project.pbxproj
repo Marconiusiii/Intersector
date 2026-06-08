@@ -400,10 +400,10 @@
 				DEVELOPMENT_TEAM = 4FL3XZDQ9P;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = CrossStreet;
+				INFOPLIST_KEY_CFBundleDisplayName = Intersector;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.navigation";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "CrossStreet uses your location to find nearby mapped intersections.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Intersector uses your location to find nearby mapped intersections.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -437,10 +437,10 @@
 				DEVELOPMENT_TEAM = 4FL3XZDQ9P;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = CrossStreet;
+				INFOPLIST_KEY_CFBundleDisplayName = Intersector;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.navigation";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "CrossStreet uses your location to find nearby mapped intersections.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Intersector uses your location to find nearby mapped intersections.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
