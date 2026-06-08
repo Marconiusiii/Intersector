@@ -12,21 +12,21 @@
 			containerPortal = 82E831962FD62E4300071B9D /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 82E8319D2FD62E4300071B9D;
-			remoteInfo = crossStreet;
+			remoteInfo = Intersector;
 		};
 		82E831B62FD62E4400071B9D /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 82E831962FD62E4300071B9D /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 82E8319D2FD62E4300071B9D;
-			remoteInfo = crossStreet;
+			remoteInfo = Intersector;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		82E8319E2FD62E4300071B9D /* crossStreet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = crossStreet.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		82E831AB2FD62E4400071B9D /* crossStreetTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = crossStreetTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		82E831B52FD62E4400071B9D /* crossStreetUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = crossStreetUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		82E8319E2FD62E4300071B9D /* Intersector.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Intersector.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		82E831AB2FD62E4400071B9D /* IntersectorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntersectorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		82E831B52FD62E4400071B9D /* IntersectorUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntersectorUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -85,9 +85,9 @@
 		82E8319F2FD62E4300071B9D /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				82E8319E2FD62E4300071B9D /* crossStreet.app */,
-				82E831AB2FD62E4400071B9D /* crossStreetTests.xctest */,
-				82E831B52FD62E4400071B9D /* crossStreetUITests.xctest */,
+				82E8319E2FD62E4300071B9D /* Intersector.app */,
+				82E831AB2FD62E4400071B9D /* IntersectorTests.xctest */,
+				82E831B52FD62E4400071B9D /* IntersectorUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -95,9 +95,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		82E8319D2FD62E4300071B9D /* crossStreet */ = {
+		82E8319D2FD62E4300071B9D /* Intersector */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 82E831BF2FD62E4400071B9D /* Build configuration list for PBXNativeTarget "crossStreet" */;
+			buildConfigurationList = 82E831BF2FD62E4400071B9D /* Build configuration list for PBXNativeTarget "Intersector" */;
 			buildPhases = (
 				82E8319A2FD62E4300071B9D /* Sources */,
 				82E8319B2FD62E4300071B9D /* Frameworks */,
@@ -110,16 +110,16 @@
 			fileSystemSynchronizedGroups = (
 				82E831A02FD62E4300071B9D /* crossStreet */,
 			);
-			name = crossStreet;
+			name = Intersector;
 			packageProductDependencies = (
 			);
-			productName = crossStreet;
-			productReference = 82E8319E2FD62E4300071B9D /* crossStreet.app */;
+			productName = Intersector;
+			productReference = 82E8319E2FD62E4300071B9D /* Intersector.app */;
 			productType = "com.apple.product-type.application";
 		};
-		82E831AA2FD62E4400071B9D /* crossStreetTests */ = {
+		82E831AA2FD62E4400071B9D /* IntersectorTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 82E831C22FD62E4400071B9D /* Build configuration list for PBXNativeTarget "crossStreetTests" */;
+			buildConfigurationList = 82E831C22FD62E4400071B9D /* Build configuration list for PBXNativeTarget "IntersectorTests" */;
 			buildPhases = (
 				82E831A72FD62E4400071B9D /* Sources */,
 				82E831A82FD62E4400071B9D /* Frameworks */,
@@ -133,16 +133,16 @@
 			fileSystemSynchronizedGroups = (
 				82E831AE2FD62E4400071B9D /* crossStreetTests */,
 			);
-			name = crossStreetTests;
+			name = IntersectorTests;
 			packageProductDependencies = (
 			);
-			productName = crossStreetTests;
-			productReference = 82E831AB2FD62E4400071B9D /* crossStreetTests.xctest */;
+			productName = IntersectorTests;
+			productReference = 82E831AB2FD62E4400071B9D /* IntersectorTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		82E831B42FD62E4400071B9D /* crossStreetUITests */ = {
+		82E831B42FD62E4400071B9D /* IntersectorUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 82E831C52FD62E4400071B9D /* Build configuration list for PBXNativeTarget "crossStreetUITests" */;
+			buildConfigurationList = 82E831C52FD62E4400071B9D /* Build configuration list for PBXNativeTarget "IntersectorUITests" */;
 			buildPhases = (
 				82E831B12FD62E4400071B9D /* Sources */,
 				82E831B22FD62E4400071B9D /* Frameworks */,
@@ -156,11 +156,11 @@
 			fileSystemSynchronizedGroups = (
 				82E831B82FD62E4400071B9D /* crossStreetUITests */,
 			);
-			name = crossStreetUITests;
+			name = IntersectorUITests;
 			packageProductDependencies = (
 			);
-			productName = crossStreetUITests;
-			productReference = 82E831B52FD62E4400071B9D /* crossStreetUITests.xctest */;
+			productName = IntersectorUITests;
+			productReference = 82E831B52FD62E4400071B9D /* IntersectorUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -186,7 +186,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 82E831992FD62E4300071B9D /* Build configuration list for PBXProject "crossStreet" */;
+			buildConfigurationList = 82E831992FD62E4300071B9D /* Build configuration list for PBXProject "Intersector" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -200,9 +200,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				82E8319D2FD62E4300071B9D /* crossStreet */,
-				82E831AA2FD62E4400071B9D /* crossStreetTests */,
-				82E831B42FD62E4400071B9D /* crossStreetUITests */,
+				82E8319D2FD62E4300071B9D /* Intersector */,
+				82E831AA2FD62E4400071B9D /* IntersectorTests */,
+				82E831B42FD62E4400071B9D /* IntersectorUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -258,12 +258,12 @@
 /* Begin PBXTargetDependency section */
 		82E831AD2FD62E4400071B9D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 82E8319D2FD62E4300071B9D /* crossStreet */;
+			target = 82E8319D2FD62E4300071B9D /* Intersector */;
 			targetProxy = 82E831AC2FD62E4400071B9D /* PBXContainerItemProxy */;
 		};
 		82E831B72FD62E4400071B9D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 82E8319D2FD62E4300071B9D /* crossStreet */;
+			target = 82E8319D2FD62E4300071B9D /* Intersector */;
 			targetProxy = 82E831B62FD62E4400071B9D /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -396,7 +396,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = 4FL3XZDQ9P;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -433,7 +433,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = 4FL3XZDQ9P;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -482,7 +482,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/crossStreet.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/crossStreet";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Intersector.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Intersector";
 			};
 			name = Debug;
 		};
@@ -504,7 +504,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/crossStreet.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/crossStreet";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Intersector.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Intersector";
 			};
 			name = Release;
 		};
@@ -524,7 +524,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = crossStreet;
+				TEST_TARGET_NAME = Intersector;
 			};
 			name = Debug;
 		};
@@ -544,14 +544,14 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = crossStreet;
+				TEST_TARGET_NAME = Intersector;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		82E831992FD62E4300071B9D /* Build configuration list for PBXProject "crossStreet" */ = {
+		82E831992FD62E4300071B9D /* Build configuration list for PBXProject "Intersector" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				82E831BD2FD62E4400071B9D /* Debug */,
@@ -560,7 +560,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		82E831BF2FD62E4400071B9D /* Build configuration list for PBXNativeTarget "crossStreet" */ = {
+		82E831BF2FD62E4400071B9D /* Build configuration list for PBXNativeTarget "Intersector" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				82E831C02FD62E4400071B9D /* Debug */,
@@ -569,7 +569,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		82E831C22FD62E4400071B9D /* Build configuration list for PBXNativeTarget "crossStreetTests" */ = {
+		82E831C22FD62E4400071B9D /* Build configuration list for PBXNativeTarget "IntersectorTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				82E831C32FD62E4400071B9D /* Debug */,
@@ -578,7 +578,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		82E831C52FD62E4400071B9D /* Build configuration list for PBXNativeTarget "crossStreetUITests" */ = {
+		82E831C52FD62E4400071B9D /* Build configuration list for PBXNativeTarget "IntersectorUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				82E831C62FD62E4400071B9D /* Debug */,

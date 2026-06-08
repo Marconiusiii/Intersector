@@ -1,15 +1,15 @@
 //
-//  crossStreetTests.swift
-//  crossStreetTests
+//  IntersectorTests.swift
+//  IntersectorTests
 //
 //  Created by Marco Salsiccia on 6/7/26.
 //
 
 import CoreLocation
 import Testing
-@testable import crossStreet
+@testable import Intersector
 
-struct crossStreetTests {
+struct IntersectorTests {
 	@Test func reportTextCanHideArea() async throws {
 		var prefs = AppPrefs()
 		prefs.areaMode = .off

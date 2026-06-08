@@ -1,13 +1,13 @@
 //
-//  crossStreetUITestsLaunchTests.swift
-//  crossStreetUITests
+//  IntersectorUITestsLaunchTests.swift
+//  IntersectorUITests
 //
 //  Created by Marco Salsiccia on 6/7/26.
 //
 
 import XCTest
 
-final class crossStreetUITestsLaunchTests: XCTestCase {
+final class IntersectorUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true

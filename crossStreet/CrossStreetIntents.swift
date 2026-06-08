@@ -1,6 +1,6 @@
 //
-//  CrossStreetIntents.swift
-//  crossStreet
+//  IntersectorIntents.swift
+//  Intersector
 //
 //  Created by Marco Salsiccia on 6/7/26.
 //
@@ -45,13 +45,14 @@ struct StartPointScanIntent: AppIntent {
 	}
 }
 
-struct CrossStreetShortcuts: AppShortcutsProvider {
+struct IntersectorShortcuts: AppShortcutsProvider {
 	static var appShortcuts: [AppShortcut] {
 		AppShortcut(
 			intent: NearestIntersectionIntent(),
 			phrases: [
 				"Nearest intersection in \(.applicationName)",
-				"Where is the nearest intersection with \(.applicationName)"
+				"Where is the nearest intersection with \(.applicationName)",
+				"What's my nearest intersection with \(.applicationName)"
 			],
 			shortTitle: "Nearest",
 			systemImageName: "location.fill"
@@ -60,7 +61,8 @@ struct CrossStreetShortcuts: AppShortcutsProvider {
 			intent: UpcomingIntersectionIntent(),
 			phrases: [
 				"Upcoming intersection in \(.applicationName)",
-				"What intersection is ahead with \(.applicationName)"
+				"What intersection is ahead with \(.applicationName)",
+				"What's my opcoming intersection with \(.applicationName)"
 			],
 			shortTitle: "Upcoming",
 			systemImageName: "arrow.up.circle.fill"

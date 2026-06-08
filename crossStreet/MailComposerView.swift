@@ -1,6 +1,6 @@
 //
 //  MailComposerView.swift
-//  crossStreet
+//  Intersector
 //
 //  Created by Marco Salsiccia on 6/7/26.
 //

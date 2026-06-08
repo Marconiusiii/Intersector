@@ -1,6 +1,6 @@
-# CrossStreet
+# Intersector
 
-CrossStreet is an accessibility-first iOS app for quickly identifying nearby intersections and orienting by street direction. It is designed for fast use from the app itself or through Siri Shortcuts, with VoiceOver announcements and haptic feedback for supported workflows.
+Intersector is an accessibility-first iOS app for quickly identifying nearby intersections and orienting by street direction. It is designed for fast use from the app itself or through Siri Shortcuts, with VoiceOver announcements and haptic feedback for supported workflows.
 
 ## Features
 
@@ -14,23 +14,23 @@ CrossStreet is an accessibility-first iOS app for quickly identifying nearby int
 
 ## Siri Shortcuts
 
-CrossStreet provides App Shortcuts for:
+Intersector provides App Shortcuts for:
 
-- `Nearest intersection in CrossStreet`
-- `Upcoming intersection in CrossStreet`
-- `Start Point and Scan in CrossStreet`
+- `Nearest intersection in Intersector`
+- `Upcoming intersection in Intersector`
+- `Start Point and Scan in Intersector`
 
-You can also create your own shortcut phrases using CrossStreet actions in the Shortcuts app.
+You can also create your own shortcut phrases using Intersector actions in the Shortcuts app.
 
 ## Accessibility
 
-CrossStreet is built around VoiceOver-first use. The main screen uses large full-width action areas, native SwiftUI controls where possible, Dynamic Type-friendly text, and spoken announcements when intersection information updates.
+Intersector is built around VoiceOver-first use. The main screen uses large full-width action areas, native SwiftUI controls where possible, Dynamic Type-friendly text, and spoken announcements when intersection information updates.
 
 Point and Scan is intended as a live orientation feature: when enabled, it monitors heading changes, announces matching intersections, and provides haptic feedback as the phone points closer to an intersection.
 
 ## Map Data
 
-CrossStreet uses OpenStreetMap data through Overpass to find nearby streets and intersections.
+Intersector uses OpenStreetMap data through Overpass to find nearby streets and intersections.
 
 Map data is from OpenStreetMap and is available under the Open Database License. More information is available at:
 
@@ -44,18 +44,18 @@ https://www.openstreetmap.org/copyright
 
 ## Building
 
-Open `crossStreet.xcodeproj` in Xcode, select the `crossStreet` scheme, and build for an iOS device or simulator.
+Open `crossStreet.xcodeproj` in Xcode, select the `Intersector` scheme, and build for an iOS device or simulator.
 
 For a quick command-line compile check:
 
 ```sh
-xcodebuild -project crossStreet.xcodeproj -scheme crossStreet -destination 'generic/platform=iOS Simulator' build
+xcodebuild -project crossStreet.xcodeproj -scheme Intersector -destination 'generic/platform=iOS Simulator' build
 ```
 
 ## Privacy
 
-CrossStreet uses location and heading information to provide intersection context. It does not create accounts, sell personal information, show ads, or intentionally collect analytics. See `privacy.html` for the project privacy policy.
+Intersector uses location and heading information to provide intersection context. It does not create accounts, sell personal information, show ads, or intentionally collect analytics. See `privacy.html` for the project privacy policy.
 
 ## License
 
-CrossStreet is released under the MIT License. See `LICENSE` for details.
+Intersector is released under the MIT License. See `LICENSE` for details.
