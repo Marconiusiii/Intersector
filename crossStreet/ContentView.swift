@@ -23,13 +23,16 @@ struct ContentView: View {
 	@StateObject private var pointScanner = PointScanController()
 
 	var body: some View {
-		if hasCompletedOnboarding {
-			mainView
-		} else {
-			OnboardingView(locationProvider: onboardingLocationProvider) {
-				hasCompletedOnboarding = true
+		Group {
+			if hasCompletedOnboarding {
+				mainView
+			} else {
+				OnboardingView(locationProvider: onboardingLocationProvider) {
+					hasCompletedOnboarding = true
+				}
 			}
 		}
+		.tint(Color.crossAccent)
 	}
 
 	private var mainView: some View {
@@ -109,12 +112,14 @@ struct ContentView: View {
 		.padding(.vertical, 8)
 		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
 		.background(Color.crossBg)
+		.tint(Color.crossAccent)
 	}
 
 	private var appTitle: some View {
 		Text("CrossStreet")
 			.font(.largeTitle)
 			.fontWeight(.bold)
+			.foregroundStyle(Color.crossText)
 			.lineLimit(nil)
 			.fixedSize(horizontal: false, vertical: true)
 			.accessibilityAddTraits(.isHeader)
@@ -125,6 +130,7 @@ struct ContentView: View {
 			isShowingSettings = true
 		}
 		.font(.body)
+		.foregroundStyle(Color.crossText)
 		.lineLimit(nil)
 		.fixedSize(horizontal: false, vertical: true)
 	}
@@ -253,6 +259,9 @@ struct ContentView: View {
 						.foregroundStyle(.secondary)
 				}
 			}
+			.scrollContentBackground(.hidden)
+			.background(Color.crossBg)
+			.tint(Color.crossAccent)
 			.navigationTitle("Settings")
 			.toolbar {
 				ToolbarItem(placement: .confirmationAction) {
@@ -371,11 +380,42 @@ struct ContentView: View {
 }
 
 extension Color {
-	static let crossBg = Color(red: 0.96, green: 0.98, blue: 0.97)
-	static let crossBtn = Color(red: 0.88, green: 0.95, blue: 0.93)
-	static let crossPanel = Color(red: 0.10, green: 0.16, blue: 0.17)
-	static let crossText = Color(red: 0.02, green: 0.04, blue: 0.04)
-	static let crossInv = Color(red: 0.94, green: 1.00, blue: 0.98)
+	static let crossBg = Color(
+		UIColor { traits in
+			traits.userInterfaceStyle == .dark
+				? UIColor(red: 0.02, green: 0.02, blue: 0.02, alpha: 1)
+				: UIColor(red: 0.98, green: 0.98, blue: 0.96, alpha: 1)
+		}
+	)
+	static let crossBtn = Color(
+		UIColor { traits in
+			traits.userInterfaceStyle == .dark
+				? UIColor(red: 0.98, green: 0.75, blue: 0.18, alpha: 1)
+				: UIColor(red: 1.00, green: 0.82, blue: 0.20, alpha: 1)
+		}
+	)
+	static let crossPanel = Color(
+		UIColor { traits in
+			traits.userInterfaceStyle == .dark
+				? UIColor(red: 0.12, green: 0.12, blue: 0.12, alpha: 1)
+				: UIColor(red: 0.18, green: 0.18, blue: 0.17, alpha: 1)
+		}
+	)
+	static let crossText = Color(
+		UIColor { traits in
+			traits.userInterfaceStyle == .dark
+				? UIColor(red: 0.98, green: 0.98, blue: 0.96, alpha: 1)
+				: UIColor(red: 0.02, green: 0.02, blue: 0.02, alpha: 1)
+		}
+	)
+	static let crossInv = Color(red: 0.98, green: 0.98, blue: 0.96)
+	static let crossAccent = Color(
+		UIColor { traits in
+			traits.userInterfaceStyle == .dark
+				? UIColor(red: 1.00, green: 0.80, blue: 0.18, alpha: 1)
+				: UIColor(red: 0.72, green: 0.46, blue: 0.00, alpha: 1)
+		}
+	)
 }
 
 #Preview {
