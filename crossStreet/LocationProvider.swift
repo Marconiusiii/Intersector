@@ -13,17 +13,24 @@ final class LocationProvider: NSObject, LocationProviding {
 	private let manager = CLLocationManager()
 	private var continuation: CheckedContinuation<DeviceContext, Error>?
 	private var locationTimeoutTask: Task<Void, Never>?
+	private var bestActiveLocation: CLLocation?
+	private var latestLocation: CLLocation?
 	private var authorizationContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
 	private var headingContinuation: CheckedContinuation<CLLocationDirection, Error>?
 	private var headingTimeoutTask: Task<Void, Never>?
 	private var latestHeading: CLLocationDirection?
 	private var latestHeadingDate: Date?
 	private var headingContinuations: [UUID: AsyncStream<CLLocationDirection>.Continuation] = [:]
+	private let idealAccuracyMeters: CLLocationAccuracy = 35
+	private let usableAccuracyMeters: CLLocationAccuracy = 85
+	private let recentLocationAge: TimeInterval = 20
+	private let locationTimeoutNanoseconds: UInt64 = 7_000_000_000
 
 	override init() {
 		super.init()
 		manager.delegate = self
-		manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+		manager.desiredAccuracy = kCLLocationAccuracyBest
+		manager.distanceFilter = kCLDistanceFilterNone
 		manager.headingFilter = 5
 	}
 
@@ -46,16 +53,24 @@ final class LocationProvider: NSObject, LocationProviding {
 			throw CLError(.denied)
 		}
 
+		if let location = latestLocation, isRecentEnough(location), isIdeal(location) {
+			return DeviceContext(
+				coordinate: location.coordinate,
+				headingDegrees: latestHeading
+			)
+		}
+
 		return try await withCheckedThrowingContinuation { continuation in
 			self.continuation = continuation
+			bestActiveLocation = nil
 			locationTimeoutTask?.cancel()
 			locationTimeoutTask = Task { [weak self] in
-				try? await Task.sleep(nanoseconds: 4_000_000_000)
+				try? await Task.sleep(nanoseconds: self?.locationTimeoutNanoseconds ?? 7_000_000_000)
 				await MainActor.run {
-					self?.finish(with: .failure(OrientError.locationUnavailable))
+					self?.finishWithBestLocationOrFailure()
 				}
 			}
-			manager.requestLocation()
+			manager.startUpdatingLocation()
 		}
 	}
 
@@ -120,6 +135,8 @@ final class LocationProvider: NSObject, LocationProviding {
 			return
 		}
 		self.continuation = nil
+		bestActiveLocation = nil
+		manager.stopUpdatingLocation()
 		locationTimeoutTask?.cancel()
 		locationTimeoutTask = nil
 		switch result {
@@ -128,6 +145,51 @@ final class LocationProvider: NSObject, LocationProviding {
 		case .failure(let error):
 			continuation.resume(throwing: error)
 		}
+	}
+
+	private func finishWithBestLocationOrFailure() {
+		if let location = bestActiveLocation ?? latestLocation, isUsable(location) {
+			finish(with: .success(context(from: location)))
+		} else {
+			finish(with: .failure(OrientError.locationUnavailable))
+		}
+	}
+
+	private func context(from location: CLLocation) -> DeviceContext {
+		DeviceContext(
+			coordinate: location.coordinate,
+			headingDegrees: latestHeading
+		)
+	}
+
+	private func consider(_ location: CLLocation) {
+		guard location.horizontalAccuracy >= 0 else {
+			return
+		}
+
+		if latestLocation == nil || location.horizontalAccuracy <= latestLocation!.horizontalAccuracy || isRecentEnough(location) {
+			latestLocation = location
+		}
+
+		guard isRecentEnough(location) else {
+			return
+		}
+
+		if bestActiveLocation == nil || location.horizontalAccuracy < bestActiveLocation!.horizontalAccuracy {
+			bestActiveLocation = location
+		}
+	}
+
+	private func isIdeal(_ location: CLLocation) -> Bool {
+		location.horizontalAccuracy <= idealAccuracyMeters
+	}
+
+	private func isUsable(_ location: CLLocation) -> Bool {
+		isRecentEnough(location) && location.horizontalAccuracy <= usableAccuracyMeters
+	}
+
+	private func isRecentEnough(_ location: CLLocation) -> Bool {
+		abs(location.timestamp.timeIntervalSinceNow) <= recentLocationAge
 	}
 
 	private func finishHeading(with result: Result<CLLocationDirection, Error>) {
@@ -161,7 +223,7 @@ extension LocationProvider: CLLocationManagerDelegate {
 		switch manager.authorizationStatus {
 		case .authorizedAlways, .authorizedWhenInUse:
 			if continuation != nil {
-				manager.requestLocation()
+				manager.startUpdatingLocation()
 			}
 		case .denied, .restricted:
 			finish(with: .failure(CLError(.denied)))
@@ -174,19 +236,18 @@ extension LocationProvider: CLLocationManagerDelegate {
 		_ manager: CLLocationManager,
 		didUpdateLocations locations: [CLLocation]
 	) {
-		guard let location = locations.last else {
+		guard !locations.isEmpty else {
 			finish(with: .failure(CLError(.locationUnknown)))
 			return
 		}
 
-		finish(
-			with: .success(
-				DeviceContext(
-					coordinate: location.coordinate,
-					headingDegrees: latestHeading
-				)
-			)
-		)
+		for location in locations {
+			consider(location)
+		}
+
+		if let bestActiveLocation, isIdeal(bestActiveLocation) {
+			finish(with: .success(context(from: bestActiveLocation)))
+		}
 	}
 
 	func locationManager(
@@ -208,6 +269,12 @@ extension LocationProvider: CLLocationManagerDelegate {
 		_ manager: CLLocationManager,
 		didFailWithError error: Error
 	) {
-		finish(with: .failure(error))
+		if (error as? CLError)?.code == .locationUnknown {
+			if let location = bestActiveLocation ?? latestLocation, isUsable(location) {
+				finish(with: .success(context(from: location)))
+			}
+		} else {
+			finish(with: .failure(error))
+		}
 	}
 }

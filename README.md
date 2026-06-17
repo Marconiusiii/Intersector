@@ -52,6 +52,10 @@ For a quick command-line compile check:
 xcodebuild -project crossStreet.xcodeproj -scheme Intersector -destination 'generic/platform=iOS Simulator' build
 ```
 
+## Developer Documentation
+
+For a plain-language guide to how the app code works, see `Documentation/README.md`.
+
 ## Privacy
 
 Intersector uses location and heading information to provide intersection context. It does not create accounts, sell personal information, show ads, or intentionally collect analytics. See `privacy.html` for the project privacy policy.

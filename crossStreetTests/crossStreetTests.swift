@@ -116,6 +116,45 @@ struct IntersectorTests {
 		#expect(second.intersections.first?.id == "fetch-2")
 		#expect(await counter.count == 2)
 	}
+
+	@Test func mapDataCacheKeepsSeveralRecentAreas() async throws {
+		let cache = MapDataCache()
+		let counter = FetchCounter()
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let distant = CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+
+		let first = try await cache.data(near: origin, radiusMeters: 225) {
+			await counter.nextDataSet()
+		}
+		let second = try await cache.data(near: distant, radiusMeters: 225) {
+			await counter.nextDataSet()
+		}
+		let reusedFirst = try await cache.data(near: origin, radiusMeters: 225) {
+			await counter.nextDataSet()
+		}
+
+		#expect(first.intersections.first?.id == "fetch-1")
+		#expect(second.intersections.first?.id == "fetch-2")
+		#expect(reusedFirst.intersections.first?.id == "fetch-1")
+		#expect(await counter.count == 2)
+	}
+
+	@Test func intersectionBuilderIgnoresNonStreetPaths() async throws {
+		let response = OverpassResponse(
+			elements: [
+				OverpassElement(type: "node", id: 1, lat: 37.0, lon: -122.0, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 2, lat: 37.001, lon: -122.0, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 3, lat: 37.0, lon: -122.001, nodes: nil, tags: nil),
+				OverpassElement(type: "way", id: 10, lat: nil, lon: nil, nodes: [1, 2], tags: ["highway": "residential", "name": "Oak Street"]),
+				OverpassElement(type: "way", id: 11, lat: nil, lon: nil, nodes: [3, 1], tags: ["highway": "footway", "name": "Garden Path"])
+			]
+		)
+
+		let data = IntersectionBuilder().mapData(from: response)
+
+		#expect(data.intersections.isEmpty)
+		#expect(data.roads.map(\.name) == ["Oak Street"])
+	}
 }
 
 actor FetchCounter {

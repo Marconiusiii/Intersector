@@ -10,6 +10,9 @@ import Foundation
 
 struct MapDataClient: MapDataFetching {
 	var endpoint = URL(string: "https://overpass-api.de/api/interpreter")!
+	var fallbackEndpoints = [
+		URL(string: "https://overpass.kumi.systems/api/interpreter")!
+	]
 	var session: URLSession = .shared
 	private static let cache = MapDataCache()
 
@@ -36,8 +39,35 @@ struct MapDataClient: MapDataFetching {
 		near coordinate: CLLocationCoordinate2D,
 		radiusMeters: CLLocationDistance
 	) async throws -> MapDataSet {
+		let endpoints = ([endpoint] + fallbackEndpoints).removingDuplicates()
+		var lastError: Error?
+
+		for endpoint in endpoints {
+			do {
+				return try await fetchMapData(
+					from: endpoint,
+					near: coordinate,
+					radiusMeters: radiusMeters
+				)
+			} catch {
+				lastError = error
+				guard isTemporary(error), endpoint != endpoints.last else {
+					throw error
+				}
+			}
+		}
+
+		throw lastError ?? MapDataError.invalidResponse
+	}
+
+	private func fetchMapData(
+		from endpoint: URL,
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance
+	) async throws -> MapDataSet {
 		var request = URLRequest(url: endpoint)
 		request.httpMethod = "POST"
+		request.timeoutInterval = 10
 		request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
 		request.httpBody = query(
 			near: coordinate,
@@ -60,6 +90,28 @@ struct MapDataClient: MapDataFetching {
 		return IntersectionBuilder().mapData(from: response)
 	}
 
+	private func isTemporary(_ error: Error) -> Bool {
+		if let mapError = error as? MapDataError {
+			switch mapError {
+			case .serverError(let statusCode):
+				return [429, 500, 502, 503, 504].contains(statusCode)
+			case .invalidResponse, .invalidMapData:
+				return false
+			}
+		}
+
+		if let urlError = error as? URLError {
+			switch urlError.code {
+			case .timedOut, .cannotFindHost, .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .dnsLookupFailed:
+				return true
+			default:
+				return false
+			}
+		}
+
+		return false
+	}
+
 	private func query(
 		near coordinate: CLLocationCoordinate2D,
 		radiusMeters: CLLocationDistance
@@ -67,13 +119,20 @@ struct MapDataClient: MapDataFetching {
 		let radius = Int(radiusMeters.rounded())
 		let body = """
 		[out:json][timeout:8];
-		way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"]["highway"!~"^(motorway|motorway_link|trunk|trunk_link)$"]["name"];
+		way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"~"^(primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|unclassified|residential|living_street|pedestrian|road)$"]["name"];
 		(._;>;);
 		out body;
 		"""
 		let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&+"))
 		let encoded = body.addingPercentEncoding(withAllowedCharacters: allowed) ?? body
 		return "data=\(encoded)"
+	}
+}
+
+private extension Array where Element: Hashable {
+	func removingDuplicates() -> [Element] {
+		var seen = Set<Element>()
+		return filter { seen.insert($0).inserted }
 	}
 }
 
@@ -121,9 +180,11 @@ actor MapDataCache {
 		var task: Task<MapDataSet, Error>
 	}
 
-	private let reuseDistanceMeters: CLLocationDistance = 100
+	private let reuseDistanceMeters: CLLocationDistance = 150
 	private let timeToLive: TimeInterval = 300
-	private var entry: Entry?
+	private let staleTimeToLive: TimeInterval = 900
+	private let maxEntries = 4
+	private var entries: [Entry] = []
 	private var inFlightRequest: InFlightRequest?
 
 	func data(
@@ -131,7 +192,7 @@ actor MapDataCache {
 		radiusMeters: CLLocationDistance,
 		fetch: @escaping @Sendable () async throws -> MapDataSet
 	) async throws -> MapDataSet {
-		if let entry, canReuse(entry, for: coordinate, radiusMeters: radiusMeters) {
+		if let entry = entries.first(where: { canReuse($0, for: coordinate, radiusMeters: radiusMeters) }) {
 			return entry.data
 		}
 
@@ -151,17 +212,37 @@ actor MapDataCache {
 
 		do {
 			let data = try await task.value
-			entry = Entry(
-				center: coordinate,
-				radiusMeters: radiusMeters,
-				storedAt: Date(),
-				data: data
+			store(
+				Entry(
+					center: coordinate,
+					radiusMeters: radiusMeters,
+					storedAt: Date(),
+					data: data
+				)
 			)
 			inFlightRequest = nil
 			return data
 		} catch {
 			inFlightRequest = nil
+			if let entry = entries.first(where: { canReuseStale($0, for: coordinate, radiusMeters: radiusMeters) }) {
+				return entry.data
+			}
 			throw error
+		}
+	}
+
+	private func store(_ entry: Entry) {
+		entries.removeAll {
+			sameArea(
+				center: $0.center,
+				radiusMeters: $0.radiusMeters,
+				as: entry.center,
+				requestedRadius: entry.radiusMeters
+			)
+		}
+		entries.insert(entry, at: 0)
+		if entries.count > maxEntries {
+			entries.removeLast(entries.count - maxEntries)
 		}
 	}
 
@@ -176,6 +257,22 @@ actor MapDataCache {
 		return sameArea(
 			center: entry.center,
 			radiusMeters: entry.radiusMeters,
+			as: coordinate,
+			requestedRadius: radiusMeters
+		)
+	}
+
+	private func canReuseStale(
+		_ entry: Entry,
+		for coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance
+	) -> Bool {
+		guard Date().timeIntervalSince(entry.storedAt) <= staleTimeToLive else {
+			return false
+		}
+		return sameArea(
+			center: entry.center,
+			radiusMeters: max(entry.radiusMeters, radiusMeters),
 			as: coordinate,
 			requestedRadius: radiusMeters
 		)
@@ -234,6 +331,22 @@ struct OverpassElement: Decodable {
 		case lon
 		case nodes
 		case tags
+	}
+
+	init(
+		type: String,
+		id: Int64,
+		lat: Double?,
+		lon: Double?,
+		nodes: [Int64]?,
+		tags: [String: String]?
+	) {
+		self.type = type
+		self.id = id
+		self.lat = lat
+		self.lon = lon
+		self.nodes = nodes
+		self.tags = tags
 	}
 
 	init(from decoder: Decoder) throws {
@@ -324,6 +437,18 @@ struct IntersectionBuilder {
 		guard let highway = tags?["highway"] else {
 			return false
 		}
-		return !["motorway", "motorway_link", "trunk", "trunk_link"].contains(highway)
+		return [
+			"primary",
+			"primary_link",
+			"secondary",
+			"secondary_link",
+			"tertiary",
+			"tertiary_link",
+			"unclassified",
+			"residential",
+			"living_street",
+			"pedestrian",
+			"road"
+		].contains(highway)
 	}
 }

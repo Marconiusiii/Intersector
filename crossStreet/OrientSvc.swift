@@ -78,8 +78,8 @@ struct OrientSvc {
 	}
 
 	private func intersections(for kind: ReportKind, from context: DeviceContext) async throws -> [IntersectionCandidate] {
-		let fastRadius: CLLocationDistance = 300
-		let fallbackRadius: CLLocationDistance = 450
+		let fastRadius: CLLocationDistance = 225
+		let fallbackRadius: CLLocationDistance = 375
 		let intersections = try await mapDataClient.intersections(
 			near: context.coordinate,
 			radiusMeters: fastRadius

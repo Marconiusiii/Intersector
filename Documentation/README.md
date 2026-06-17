@@ -1,0 +1,793 @@
+# Intersector Code Guide
+
+This guide explains how Intersector is built. It is written as a plain-language code tour, so you can connect the app behavior to the Swift files that make it work.
+
+The main idea to keep in mind is this:
+
+1. The UI asks for a piece of orientation information.
+2. The app gets location and sometimes heading data.
+3. The app fetches nearby street data.
+4. The app turns that map data into intersection candidates.
+5. The app chooses the best candidate for the requested action.
+6. The app turns that result into text and updates the screen.
+
+## Project Map
+
+These are the most important files:
+
+- `crossStreetApp.swift`
+  Starts the app and registers App Shortcuts.
+
+- `ContentView.swift`
+  Builds the main screen, settings sheet, action buttons, and current status text.
+
+- `OnboardingView.swift`
+  Shows the first-run onboarding flow and requests location permission.
+
+- `AppPrefs.swift`
+  Defines app settings such as neighborhood context, detail level, and haptic feedback.
+
+- `LocationProvider.swift`
+  Wraps CoreLocation so the rest of the app can ask for location and heading data with async functions.
+
+- `OrientSvc.swift`
+  Coordinates the main intersection report flow.
+
+- `MapDataClient.swift`
+  Talks to Overpass, decodes OpenStreetMap data, builds map models, and caches results.
+
+- `IntersectionFinder.swift`
+  Chooses the nearest, upcoming, or pointed-at intersection from a list of candidates.
+
+- `OrientationReport.swift`
+  Defines the app's report models and converts a report into readable text.
+
+- `PointScanController.swift`
+  Runs Point and Scan mode, including warmup state, heading updates, cooldowns, haptics, and announcements.
+
+- `CrossStreetIntents.swift`
+  Defines Siri and Shortcuts actions using App Intents.
+
+- `VoiceOverAnnouncer.swift`
+  Sends system accessibility announcements when the current information changes.
+
+- `HapticFeedback.swift`
+  Centralizes haptic feedback calls.
+
+- `MailComposerView.swift`
+  Wraps the UIKit mail composer so SwiftUI can present it.
+
+## How The App Starts
+
+The app starts in `crossStreetApp.swift`.
+
+`IntersectorApp` is marked with `@main`, which tells Swift that this is the app entry point. Its `body` creates a `WindowGroup` and puts `ContentView()` inside it.
+
+The app initializer calls:
+
+```swift
+IntersectorShortcuts.updateAppShortcutParameters()
+```
+
+That tells the system to refresh the App Shortcut phrases defined in `CrossStreetIntents.swift`.
+
+The useful pattern here is:
+
+- Put app-level setup in the `App` type.
+- Put screen-level behavior in views or view models.
+- Keep the entry point small.
+
+## Main Screen Structure
+
+The main screen lives in `ContentView.swift`.
+
+`ContentView` decides whether to show onboarding or the main app:
+
+```swift
+if hasCompletedOnboarding {
+	mainView
+} else {
+	OnboardingView(...)
+}
+```
+
+The value comes from:
+
+```swift
+@AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+```
+
+`@AppStorage` connects a Swift property to `UserDefaults`. It is useful for small persisted settings such as whether onboarding has completed.
+
+The main screen has these parts:
+
+1. Header
+2. Current Info area
+3. Nearest Intersection button
+4. Upcoming Intersection button
+5. My Direction button
+6. Point and Scan toggle
+
+The view switches layout based on Dynamic Type size:
+
+- For accessibility text sizes, it uses a vertical `ScrollView`.
+- For standard text sizes, it divides the screen into fixed-height bands.
+
+That pattern keeps the same features available while giving large text more room.
+
+## State In ContentView
+
+`ContentView` uses SwiftUI state properties to drive what the user sees:
+
+```swift
+@State private var prefs = AppPrefs()
+@State private var report: OrientReport?
+@State private var statusText = "Choose an action."
+@State private var isLoading = false
+@State private var isDirectionLoading = false
+@State private var isShowingSettings = false
+@StateObject private var pointScanner = PointScanController()
+```
+
+Important patterns:
+
+- `@State` stores simple view-owned values.
+- `@StateObject` owns a reference-type object that should live as long as the view lives.
+- Changing a `@State` or `@StateObject` published value causes SwiftUI to redraw the parts of the view that depend on it.
+
+`statusText` is the main piece of screen text for results and errors. When it changes, the Current Info area updates.
+
+## What Happens When Nearest Intersection Is Pressed
+
+The Nearest Intersection button calls:
+
+```swift
+await updateReport(.nearest)
+```
+
+`updateReport(_:)` does this:
+
+1. Checks `isLoading` so two reports do not run at the same time.
+2. Sets loading state.
+3. Changes `statusText` to an updating message.
+4. Calls `OrientSvc.shared.report(kind, prefs: prefs)`.
+5. Stores the returned `OrientReport`.
+6. Turns the report into text.
+7. Updates `statusText`.
+8. Sends an announcement through `VoiceOverAnnouncer`.
+9. Clears loading state.
+
+The code path is:
+
+```text
+ContentView
+-> OrientSvc
+-> LocationProvider
+-> MapDataClient
+-> IntersectionFinder
+-> OrientationReport
+-> ContentView statusText
+```
+
+This is a good app architecture pattern: the button does not know how map data works. The button asks a service for a report.
+
+## What Happens When Upcoming Intersection Is Pressed
+
+The Upcoming Intersection button also calls `updateReport(_:)`, but with:
+
+```swift
+.upcoming
+```
+
+The shared service code is mostly the same, but the matching rule changes in `IntersectionFinder`.
+
+For nearest, the app picks the closest candidate.
+
+For upcoming, the app tries to use heading data. It looks for intersections within 60 degrees of the direction the device is facing. If it cannot find one in that forward window, it falls back to the nearest candidate.
+
+The useful pattern here is that `ReportKind` changes behavior without duplicating the whole lookup flow.
+
+## The Report Service
+
+`OrientSvc.swift` is the coordinator for the main report flow.
+
+Its main method is:
+
+```swift
+func report(_ kind: ReportKind, prefs: AppPrefs = AppPrefs()) async throws -> OrientReport
+```
+
+It does the high-level work in order:
+
+1. Ask `LocationProvider` for a `DeviceContext`.
+2. Ask `MapDataClient` for nearby intersections.
+3. Ask `IntersectionFinder` for the best match.
+4. Calculate distance and bearing.
+5. Convert bearing plus heading into a relative direction.
+6. Build an `OrientReport`.
+
+`DeviceContext` is defined in `OrientationReport.swift`:
+
+```swift
+struct DeviceContext: Equatable {
+	var coordinate: CLLocationCoordinate2D
+	var headingDegrees: CLLocationDirection?
+}
+```
+
+It keeps the user's coordinate and optional heading together. This is cleaner than passing latitude, longitude, and heading as separate loose values through the app.
+
+## Protocols For Replaceable Services
+
+`OrientSvc.swift` defines two protocols:
+
+```swift
+protocol LocationProviding {
+	func currentContext() async throws -> DeviceContext
+}
+
+protocol MapDataFetching {
+	func intersections(near coordinate: CLLocationCoordinate2D, radiusMeters: CLLocationDistance) async throws -> [IntersectionCandidate]
+	func mapData(near coordinate: CLLocationCoordinate2D, radiusMeters: CLLocationDistance) async throws -> MapDataSet
+}
+```
+
+Protocols define what a service can do without locking the app to one concrete implementation.
+
+This matters because:
+
+- `OrientSvc` can use the real `LocationProvider` in the app.
+- Tests can provide fake location or map data if needed.
+- The code is easier to reason about because each dependency has a small contract.
+
+This is a common engineering pattern called dependency injection. In plain language, it means a type receives the helpers it needs instead of creating every helper internally.
+
+## LocationProvider
+
+`LocationProvider.swift` wraps `CLLocationManager`.
+
+CoreLocation is delegate-based. That means iOS calls methods such as `locationManager(_:didUpdateLocations:)` when new data arrives.
+
+The rest of this app uses async functions. `LocationProvider` is the bridge between those styles.
+
+The main method is:
+
+```swift
+func currentContext() async throws -> DeviceContext
+```
+
+It:
+
+1. Starts heading updates if heading is available.
+2. Checks location authorization.
+3. Reuses a recent accurate location if it has one.
+4. Starts active location updates.
+5. Waits for a good enough location.
+6. Times out after a short window.
+7. Returns the best usable location if ideal accuracy was not reached.
+
+The key idea is that the app does not accept the first location blindly. It keeps track of:
+
+- `latestLocation`
+- `bestActiveLocation`
+- ideal accuracy
+- usable accuracy
+- recent location age
+- timeout
+
+That gives the app a balance between speed and accuracy.
+
+## Continuations
+
+`LocationProvider` uses continuations:
+
+```swift
+CheckedContinuation<DeviceContext, Error>
+```
+
+A continuation is Swift's way of turning callback-style code into async code.
+
+In plain language:
+
+1. The async function starts.
+2. It stores a continuation.
+3. It starts CoreLocation.
+4. Later, CoreLocation calls a delegate method.
+5. The delegate method resumes the continuation with either success or failure.
+6. The original async function continues.
+
+This lets the rest of the app write:
+
+```swift
+let context = try await locationProvider.currentContext()
+```
+
+instead of manually handling CoreLocation delegates everywhere.
+
+## Stopping Location Updates
+
+When `LocationProvider` finishes a request, it calls:
+
+```swift
+manager.stopUpdatingLocation()
+```
+
+That matters because location updates can continue until stopped. Good app code starts expensive system work only when needed and stops it when the task is done.
+
+Heading updates are handled similarly. Point and Scan keeps heading updates active while scanning. Other one-shot heading requests stop when they are finished if no stream still needs them.
+
+## MapDataClient
+
+`MapDataClient.swift` fetches OpenStreetMap data through Overpass.
+
+The app asks for map data near a coordinate:
+
+```swift
+func mapData(near coordinate: CLLocationCoordinate2D, radiusMeters: CLLocationDistance) async throws -> MapDataSet
+```
+
+The flow is:
+
+1. Ask `MapDataCache` if usable data already exists.
+2. If cached data is available, return it.
+3. If another matching request is already running, wait for it.
+4. Otherwise, make a POST request to Overpass.
+5. Decode the JSON.
+6. Build app-specific map models.
+7. Store the result in cache.
+
+## The Overpass Query
+
+The query asks for named street-like ways around the current coordinate:
+
+```text
+way(around:radius,lat,lon)["highway"~"..."]["name"];
+(._;>;);
+out body;
+```
+
+Important pieces:
+
+- `way` means OpenStreetMap road or path-like line data.
+- `around` limits the query to a circle around the device.
+- `highway` is the OpenStreetMap tag used for many road and path types.
+- `name` means the app only asks for named ways.
+- `(._;>;);` also asks for the nodes that make up those ways.
+
+OpenStreetMap ways are made from nodes. A way might be a street, and each node is a point along that street. Intersections are found by looking for nodes shared by two or more named ways.
+
+## JSON Decoding
+
+Overpass returns JSON. The app decodes it into:
+
+```swift
+struct OverpassResponse: Decodable {
+	var elements: [OverpassElement]
+}
+```
+
+Each `OverpassElement` can be a node or a way.
+
+The custom decoder handles tag values that may come back as different primitive types. It uses `FlexibleString` so the app can still treat tag values as strings.
+
+That is a practical defensive coding pattern for external data. Even if the API usually returns one shape, the app avoids breaking when a value comes back as an integer, double, or boolean.
+
+## Building Intersections From Map Data
+
+`IntersectionBuilder` turns raw Overpass elements into `MapDataSet`.
+
+It builds:
+
+- A dictionary of node IDs to coordinates.
+- A dictionary of node IDs to street names.
+- A list of `MapRoad` values.
+- A list of `IntersectionCandidate` values.
+
+The important rule is:
+
+```swift
+guard names.count >= 2
+```
+
+If a node belongs to two or more named roads, the app treats that node as an intersection candidate.
+
+The final candidate has:
+
+- an ID
+- the road names
+- the coordinate
+
+## MapDataSet
+
+`MapDataSet` stores both:
+
+- `intersections`
+- `roads`
+
+The normal nearest and upcoming buttons mostly use `intersections`.
+
+Point and Scan also needs `roads`, because it first finds the road closest to the current coordinate and then filters intersections to that road.
+
+That method is:
+
+```swift
+currentStreetIntersections(from:)
+```
+
+It finds the nearest road by comparing the user's coordinate to each road's coordinates. Then it keeps only intersections whose names include that road name.
+
+## MapDataCache
+
+`MapDataCache` is an `actor`.
+
+Actors protect their stored state from being changed by multiple tasks at the same time. That is useful for a cache because several app actions could ask for map data close together.
+
+The cache stores:
+
+- recent successful map results
+- a currently running request
+
+It can:
+
+- reuse fresh nearby data
+- let matching callers share one in-flight request
+- return stale nearby data if a fresh network request fails
+
+This avoids unnecessary network calls and reduces how often a temporary map server problem becomes a visible app error.
+
+## Endpoint Fallback
+
+`MapDataClient` has one primary endpoint and one fallback endpoint.
+
+If the primary endpoint fails with a temporary network or server problem, the client tries the fallback endpoint.
+
+Temporary errors include examples like:
+
+- timeout
+- connection loss
+- too many requests
+- temporary server unavailable
+- gateway timeout
+
+Invalid map data is not treated as temporary. If the app cannot decode the response, retrying the same query on another endpoint may not fix it, so that error is allowed to surface.
+
+## IntersectionFinder
+
+`IntersectionFinder.swift` is pure matching logic. It does not know about SwiftUI, network requests, or CoreLocation permissions.
+
+For nearest:
+
+```swift
+nearestCandidate(from:in:)
+```
+
+It compares the distance from the device coordinate to each candidate and picks the smallest.
+
+For upcoming:
+
+1. Get the bearing from the device to each candidate.
+2. Compare that bearing to the device heading.
+3. Keep candidates within a 60-degree forward window.
+4. Pick the nearest of those.
+5. Fall back to nearest if no forward candidate exists.
+
+For scan:
+
+1. Compare the phone heading to each candidate bearing.
+2. Prefer the smallest angle difference.
+3. If angle differences are close, prefer the nearer candidate.
+
+This is a good example of keeping an algorithm isolated. You can test this file without launching the app or fetching map data.
+
+## Geo Helpers
+
+`Geo` lives in `OrientSvc.swift`.
+
+It provides shared math and formatting:
+
+- `distanceMeters`
+- `bearingDegrees`
+- `normalizedDegrees`
+- `compassDirection`
+- `spokenDistance`
+
+The app uses meters internally because CoreLocation works in meters. It formats spoken distances in feet or miles for output.
+
+The bearing math returns a compass degree from one coordinate to another. The app then turns that into a word such as north, northeast, or west.
+
+## OrientationReport
+
+`OrientationReport.swift` defines the output model.
+
+`OrientReport` stores structured result data:
+
+- report kind
+- intersection name
+- distance
+- relative direction
+- street
+- compass heading
+- area
+- toward
+- confidence
+
+Then `text(with:)` turns the structured data into a sentence.
+
+That separation is useful. The app can keep logic structured internally while still producing readable text at the end.
+
+## ReportKind
+
+`ReportKind` is an enum:
+
+```swift
+enum ReportKind {
+	case nearest
+	case upcoming
+	case scan
+}
+```
+
+Enums are useful when a value can only be one of a small set of known cases.
+
+Here, `ReportKind` lets the app pass one clear value through the system instead of passing strings such as `"nearest"` or `"upcoming"`.
+
+That makes the compiler help you. If a new case is added later, Swift can point out places where the code needs to handle it.
+
+## Point And Scan
+
+`PointScanController.swift` is an `ObservableObject`.
+
+It publishes:
+
+```swift
+@Published private(set) var isPreparing = false
+@Published private(set) var isScanning = false
+```
+
+`ContentView` observes those values through `@StateObject`. When they change, the Point and Scan toggle state updates.
+
+Starting Point and Scan does this:
+
+1. Set preparing state.
+2. Update the status text to loading.
+3. Start preparation haptics if enabled.
+4. Get the current location.
+5. Fetch map data around that location.
+6. Find intersections on the current street.
+7. Set ready/scanning state.
+8. Start listening to heading updates.
+
+While scanning, each heading update is checked against nearby intersections. When the phone points close enough to an intersection, the controller builds a scan report, updates the screen, sends haptics if enabled, and announces the result.
+
+## Long-Running Tasks
+
+Point and Scan uses a stored task:
+
+```swift
+private var scanTask: Task<Void, Never>?
+```
+
+That task stays alive while scanning is active. When scanning stops, the task is cancelled.
+
+This is a common Swift concurrency pattern:
+
+- Store the task when work should continue over time.
+- Cancel the task when the feature turns off.
+- Check cancellation inside loops.
+
+## AsyncStream For Heading Updates
+
+`LocationProvider.headingUpdates()` returns:
+
+```swift
+AsyncStream<CLLocationDirection>
+```
+
+An `AsyncStream` lets code use a `for await` loop for values that arrive over time.
+
+Point and Scan uses:
+
+```swift
+for await heading in locationProvider.headingUpdates()
+```
+
+That reads naturally: for every heading update, run the scan matching logic.
+
+This is cleaner than making the scan controller itself a CoreLocation delegate.
+
+## Cooldowns
+
+Point and Scan stores:
+
+```swift
+private var spokenCooldowns: [String: Date] = [:]
+```
+
+That keeps track of when each intersection was last announced.
+
+Before announcing again, it checks whether enough time has passed. This prevents the same intersection from being repeated too quickly while the phone remains pointed in the same direction.
+
+The pattern is simple and useful:
+
+- Use a dictionary keyed by stable ID.
+- Store the last event time.
+- Compare the current time to that stored time.
+
+## Haptics
+
+`HapticFeedback.swift` centralizes haptic calls.
+
+Point and Scan uses haptics in two ways:
+
+- preparation pulses while the mode is loading
+- scan feedback when pointing near a candidate
+
+Keeping haptic calls in one helper keeps platform-specific feedback code out of the matching logic.
+
+## VoiceOverAnnouncer
+
+The app uses `VoiceOverAnnouncer` when it needs the system to speak updated status text.
+
+The important design is that the app updates visible text and sends the same text as an announcement.
+
+That keeps the visible state and spoken state aligned.
+
+## Settings
+
+Settings are built inside a SwiftUI `Form` in `ContentView.swift`.
+
+The settings use native SwiftUI controls:
+
+- `Picker`
+- `Toggle`
+- `Button`
+- `Link`
+
+`AppPrefs` holds the settings:
+
+```swift
+struct AppPrefs {
+	var areaMode = AreaMode.near
+	var detail = DetailLev.standard
+	var haptics = true
+}
+```
+
+`AreaMode` and `DetailLev` are enums. Each enum provides a `label` for display in the UI.
+
+This keeps display strings near the setting values they describe.
+
+## Onboarding
+
+`OnboardingView.swift` shows a small sequence of pages.
+
+It stores the current page:
+
+```swift
+@State private var page = 0
+```
+
+The page content is stored in an array of `OnboardingPage` values.
+
+When the user reaches the final page, onboarding calls:
+
+```swift
+locationProvider.requestWhenInUseAuthorization()
+```
+
+Then it calls `onComplete()`, which lets `ContentView` set `hasCompletedOnboarding` to true.
+
+This is a useful parent-child view pattern:
+
+- The child view owns the onboarding screen.
+- The parent view owns whether onboarding is complete.
+- The child reports completion through a closure.
+
+## Siri And Shortcuts
+
+`CrossStreetIntents.swift` defines App Intents.
+
+Each intent is a struct that conforms to `AppIntent`.
+
+For example:
+
+```swift
+struct NearestIntersectionIntent: AppIntent
+```
+
+The intent's `perform()` method calls the same shared service as the app UI:
+
+```swift
+let report = try await OrientSvc.shared.report(.nearest)
+```
+
+That is the important architecture choice. Siri does not have a separate intersection engine. It reuses the same app logic.
+
+`IntersectorShortcuts` defines default shortcut phrases. Those phrases include `.applicationName`, which lets the system insert the app name.
+
+## Error Text
+
+Errors are represented with Swift error types.
+
+`OrientError` handles app-level errors:
+
+- no intersections
+- heading unavailable
+- location unavailable
+
+`MapDataError` handles map server and parsing errors:
+
+- invalid response
+- server error
+- invalid map data
+
+Both conform to `LocalizedError`, which lets each error provide user-facing text through `errorDescription`.
+
+In `ContentView`, the catch block uses:
+
+```swift
+error.localizedDescription
+```
+
+That means the specific error type controls the explanation, and the UI code does not need a large switch statement for every possible failure.
+
+## Tests
+
+The tests live in `crossStreetTests/crossStreetTests.swift`.
+
+They currently cover:
+
+- report text behavior
+- upcoming intersection matching
+- Point and Scan current-street filtering
+- map cache reuse
+- map cache behavior for distant results
+- map cache behavior across several recent areas
+- filtering non-street paths from intersection building
+
+These tests focus on pure logic and data behavior. That is usually faster and more stable than testing everything through the UI.
+
+The useful testing pattern is:
+
+- Test algorithms directly when possible.
+- Test model formatting directly.
+- Test cache behavior without launching the app.
+- Use UI tests only when the UI behavior itself is what you need to verify.
+
+## Build Commands
+
+The current scheme is `Intersector`.
+
+For a normal compile check:
+
+```sh
+xcodebuild -project crossStreet.xcodeproj -scheme Intersector -destination 'generic/platform=iOS Simulator' build
+```
+
+For the simulator test suite on the available iPhone 16 simulator:
+
+```sh
+xcodebuild -project crossStreet.xcodeproj -scheme Intersector -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.0' test
+```
+
+For logic-only changes, a build plus focused unit tests is usually enough. Full simulator UI tests are more useful when changing launch behavior, visible UI flow, or interactions that need the app to run.
+
+## Engineering Practices Worth Learning From This App
+
+This app uses several patterns that are common in production Swift apps:
+
+- Small models for app data.
+- Enums for known option sets.
+- Protocols for replaceable services.
+- Async functions for work that takes time.
+- Continuations to bridge delegate APIs into async code.
+- Actors for shared mutable state such as caches.
+- Observable objects for longer-running feature controllers.
+- SwiftUI state for screen updates.
+- Native controls for standard interface behavior.
+- Isolated algorithm files that are easy to test.
+- Shared service logic reused by both UI and App Intents.
+
+The larger lesson is separation of responsibility. Each file has a job. The UI asks for results, services gather data, model types hold data, finder types choose matches, and report types format output.
+
+That separation makes the code easier to change because most edits stay close to one responsibility.
