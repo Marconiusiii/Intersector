@@ -18,26 +18,30 @@ struct MapDataClient: MapDataFetching {
 
 	func intersections(
 		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions = MapDetailOptions()
 	) async throws -> [IntersectionCandidate] {
-		try await mapData(near: coordinate, radiusMeters: radiusMeters).intersections
+		try await mapData(near: coordinate, radiusMeters: radiusMeters, options: options).intersections
 	}
 
 	func mapData(
 		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions = MapDetailOptions()
 	) async throws -> MapDataSet {
 		try await Self.cache.data(
 			near: coordinate,
-			radiusMeters: radiusMeters
+			radiusMeters: radiusMeters,
+			options: options
 		) {
-			try await fetchMapData(near: coordinate, radiusMeters: radiusMeters)
+			try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: options)
 		}
 	}
 
 	private func fetchMapData(
 		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
 	) async throws -> MapDataSet {
 		let endpoints = ([endpoint] + fallbackEndpoints).removingDuplicates()
 		var lastError: Error?
@@ -47,7 +51,8 @@ struct MapDataClient: MapDataFetching {
 				return try await fetchMapData(
 					from: endpoint,
 					near: coordinate,
-					radiusMeters: radiusMeters
+					radiusMeters: radiusMeters,
+					options: options
 				)
 			} catch {
 				lastError = error
@@ -63,7 +68,8 @@ struct MapDataClient: MapDataFetching {
 	private func fetchMapData(
 		from endpoint: URL,
 		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
 	) async throws -> MapDataSet {
 		var request = URLRequest(url: endpoint)
 		request.httpMethod = "POST"
@@ -71,7 +77,8 @@ struct MapDataClient: MapDataFetching {
 		request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
 		request.httpBody = query(
 			near: coordinate,
-			radiusMeters: radiusMeters
+			radiusMeters: radiusMeters,
+			options: options
 		).data(using: .utf8)
 
 		let (data, urlResponse) = try await session.data(for: request)
@@ -87,7 +94,7 @@ struct MapDataClient: MapDataFetching {
 		} catch {
 			throw MapDataError.invalidMapData
 		}
-		return IntersectionBuilder().mapData(from: response)
+		return IntersectionBuilder().mapData(from: response, options: options)
 	}
 
 	private func isTemporary(_ error: Error) -> Bool {
@@ -114,12 +121,42 @@ struct MapDataClient: MapDataFetching {
 
 	private func query(
 		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
 	) -> String {
 		let radius = Int(radiusMeters.rounded())
+		var highwayTypes = [
+			"primary",
+			"primary_link",
+			"secondary",
+			"secondary_link",
+			"tertiary",
+			"tertiary_link",
+			"unclassified",
+			"residential",
+			"living_street",
+			"pedestrian",
+			"road"
+		]
+		if options.includeWalkingPaths {
+			highwayTypes += [
+				"footway",
+				"path",
+				"steps",
+				"bridleway"
+			]
+		}
+		let highwayPattern = highwayTypes.joined(separator: "|")
+		let crossingQueries = options.includeCrossings ? """
+		  node(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"="crossing"];
+		  node(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["crossing"];
+		""" : ""
 		let body = """
 		[out:json][timeout:8];
-		way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"~"^(primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|unclassified|residential|living_street|pedestrian|road)$"]["name"];
+		(
+		  way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"~"^(\(highwayPattern))$"]["name"];
+		\(crossingQueries)
+		);
 		(._;>;);
 		out body;
 		"""
@@ -170,6 +207,7 @@ actor MapDataCache {
 	private struct Entry {
 		var center: CLLocationCoordinate2D
 		var radiusMeters: CLLocationDistance
+		var options: MapDetailOptions
 		var storedAt: Date
 		var data: MapDataSet
 	}
@@ -177,6 +215,7 @@ actor MapDataCache {
 	private struct InFlightRequest {
 		var center: CLLocationCoordinate2D
 		var radiusMeters: CLLocationDistance
+		var options: MapDetailOptions
 		var task: Task<MapDataSet, Error>
 	}
 
@@ -190,14 +229,15 @@ actor MapDataCache {
 	func data(
 		near coordinate: CLLocationCoordinate2D,
 		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions = MapDetailOptions(),
 		fetch: @escaping @Sendable () async throws -> MapDataSet
 	) async throws -> MapDataSet {
-		if let entry = entries.first(where: { canReuse($0, for: coordinate, radiusMeters: radiusMeters) }) {
+		if let entry = entries.first(where: { canReuse($0, for: coordinate, radiusMeters: radiusMeters, options: options) }) {
 			return entry.data
 		}
 
 		if let inFlightRequest,
-		   canReuse(inFlightRequest, for: coordinate, radiusMeters: radiusMeters) {
+		   canReuse(inFlightRequest, for: coordinate, radiusMeters: radiusMeters, options: options) {
 			return try await inFlightRequest.task.value
 		}
 
@@ -207,6 +247,7 @@ actor MapDataCache {
 		inFlightRequest = InFlightRequest(
 			center: coordinate,
 			radiusMeters: radiusMeters,
+			options: options,
 			task: task
 		)
 
@@ -216,6 +257,7 @@ actor MapDataCache {
 				Entry(
 					center: coordinate,
 					radiusMeters: radiusMeters,
+					options: options,
 					storedAt: Date(),
 					data: data
 				)
@@ -224,7 +266,7 @@ actor MapDataCache {
 			return data
 		} catch {
 			inFlightRequest = nil
-			if let entry = entries.first(where: { canReuseStale($0, for: coordinate, radiusMeters: radiusMeters) }) {
+			if let entry = entries.first(where: { canReuseStale($0, for: coordinate, radiusMeters: radiusMeters, options: options) }) {
 				return entry.data
 			}
 			throw error
@@ -233,7 +275,7 @@ actor MapDataCache {
 
 	private func store(_ entry: Entry) {
 		entries.removeAll {
-			sameArea(
+			$0.options == entry.options && sameArea(
 				center: $0.center,
 				radiusMeters: $0.radiusMeters,
 				as: entry.center,
@@ -249,8 +291,12 @@ actor MapDataCache {
 	private func canReuse(
 		_ entry: Entry,
 		for coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
 	) -> Bool {
+		guard entry.options == options else {
+			return false
+		}
 		guard Date().timeIntervalSince(entry.storedAt) <= timeToLive else {
 			return false
 		}
@@ -265,8 +311,12 @@ actor MapDataCache {
 	private func canReuseStale(
 		_ entry: Entry,
 		for coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
 	) -> Bool {
+		guard entry.options == options else {
+			return false
+		}
 		guard Date().timeIntervalSince(entry.storedAt) <= staleTimeToLive else {
 			return false
 		}
@@ -281,9 +331,13 @@ actor MapDataCache {
 	private func canReuse(
 		_ request: InFlightRequest,
 		for coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
 	) -> Bool {
-		sameArea(
+		guard request.options == options else {
+			return false
+		}
+		return sameArea(
 			center: request.center,
 			radiusMeters: request.radiusMeters,
 			as: coordinate,
@@ -381,11 +435,17 @@ private struct FlexibleString: Decodable {
 }
 
 struct IntersectionBuilder {
-	func candidates(from response: OverpassResponse) -> [IntersectionCandidate] {
-		mapData(from: response).intersections
+	func candidates(
+		from response: OverpassResponse,
+		options: MapDetailOptions = MapDetailOptions()
+	) -> [IntersectionCandidate] {
+		mapData(from: response, options: options).intersections
 	}
 
-	func mapData(from response: OverpassResponse) -> MapDataSet {
+	func mapData(
+		from response: OverpassResponse,
+		options: MapDetailOptions = MapDetailOptions()
+	) -> MapDataSet {
 		let nodes = Dictionary(
 			uniqueKeysWithValues: response.elements.compactMap { element -> (Int64, CLLocationCoordinate2D)? in
 				guard element.type == "node", let lat = element.lat, let lon = element.lon else {
@@ -401,7 +461,7 @@ struct IntersectionBuilder {
 			guard
 				let name = way.tags?["name"],
 				let wayNodes = way.nodes,
-				isWalkableRoad(way.tags)
+				isAllowedWay(way.tags, options: options)
 			else {
 				continue
 			}
@@ -418,7 +478,7 @@ struct IntersectionBuilder {
 			)
 		}
 
-		let intersections = namesByNode.compactMap { entry -> IntersectionCandidate? in
+		var intersections = namesByNode.compactMap { entry -> IntersectionCandidate? in
 			let (nodeID, names) = entry
 			guard names.count >= 2, let coordinate = nodes[nodeID] else {
 				return nil
@@ -430,14 +490,36 @@ struct IntersectionBuilder {
 			)
 		}
 
+		if options.includeCrossings {
+			let crossingCandidates = response.elements.compactMap { element -> IntersectionCandidate? in
+				guard
+					element.type == "node",
+					isCrossing(element.tags),
+					let coordinate = nodes[element.id],
+					let roadNames = namesByNode[element.id]?.sorted(),
+					roadNames.count == 1,
+					let roadName = roadNames.first
+				else {
+					return nil
+				}
+
+				return IntersectionCandidate(
+					id: "crossing-\(element.id)",
+					names: ["Crossing on \(roadName)"],
+					coordinate: coordinate
+				)
+			}
+			intersections.append(contentsOf: crossingCandidates)
+		}
+
 		return MapDataSet(intersections: intersections, roads: roads)
 	}
 
-	private func isWalkableRoad(_ tags: [String: String]?) -> Bool {
+	private func isAllowedWay(_ tags: [String: String]?, options: MapDetailOptions) -> Bool {
 		guard let highway = tags?["highway"] else {
 			return false
 		}
-		return [
+		let streetHighways = [
 			"primary",
 			"primary_link",
 			"secondary",
@@ -449,6 +531,24 @@ struct IntersectionBuilder {
 			"living_street",
 			"pedestrian",
 			"road"
+		]
+		if streetHighways.contains(highway) {
+			return true
+		}
+
+		guard options.includeWalkingPaths else {
+			return false
+		}
+
+		return [
+			"footway",
+			"path",
+			"steps",
+			"bridleway"
 		].contains(highway)
+	}
+
+	private func isCrossing(_ tags: [String: String]?) -> Bool {
+		tags?["highway"] == "crossing" || tags?["crossing"] != nil || tags?["crossing_ref"] != nil
 	}
 }

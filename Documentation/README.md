@@ -9,7 +9,8 @@ The main idea to keep in mind is this:
 3. The app fetches nearby street data.
 4. The app turns that map data into intersection candidates.
 5. The app chooses the best candidate for the requested action.
-6. The app turns that result into text and updates the screen.
+6. The app optionally looks up nearby neighborhood context.
+7. The app turns that result into text and updates the screen.
 
 ## Project Map
 
@@ -25,7 +26,7 @@ These are the most important files:
   Shows the first-run onboarding flow and requests location permission.
 
 - `AppPrefs.swift`
-  Defines app settings such as neighborhood context, detail level, and haptic feedback.
+  Defines app settings such as neighborhood context, map detail, measurement unit, direction style, detail level, and haptic feedback.
 
 - `LocationProvider.swift`
   Wraps CoreLocation so the rest of the app can ask for location and heading data with async functions.
@@ -35,6 +36,9 @@ These are the most important files:
 
 - `MapDataClient.swift`
   Talks to Overpass, decodes OpenStreetMap data, builds map models, and caches results.
+
+- `NeighborhoodProvider.swift`
+  Looks up nearby named places from OpenStreetMap so report text can include neighborhood context.
 
 - `IntersectionFinder.swift`
   Chooses the nearest, upcoming, or pointed-at intersection from a list of candidates.
@@ -108,19 +112,22 @@ The main screen has these parts:
 5. My Direction button
 6. Point and Scan toggle
 
-The view switches layout based on Dynamic Type size:
+The main screen uses a vertical `ScrollView` for all text sizes.
 
-- For accessibility text sizes, it uses a vertical `ScrollView`.
-- For standard text sizes, it divides the screen into fixed-height bands.
+Each major row has a scaled minimum height. The minimum height gives the row enough tappable space at normal text sizes, while still allowing the row to grow when Dynamic Type is larger.
 
-That pattern keeps the same features available while giving large text more room.
+This avoids a common SwiftUI problem: if you force large text into a fixed-height row, the text can look cut off or overlap nearby controls. Letting the content grow is usually the better accessibility-first layout pattern.
 
 ## State In ContentView
 
 `ContentView` uses SwiftUI state properties to drive what the user sees:
 
 ```swift
-@State private var prefs = AppPrefs()
+@AppStorage("areaMode") private var areaModeRaw = AreaMode.near.rawValue
+@AppStorage("measurementUnit") private var measurementUnitRaw = MeasurementUnit.feet.rawValue
+@AppStorage("directionStyle") private var directionStyleRaw = DirectionStyle.words.rawValue
+@AppStorage("includeCrossings") private var includeCrossings = false
+@AppStorage("includeWalkingPaths") private var includeWalkingPaths = false
 @State private var report: OrientReport?
 @State private var statusText = "Choose an action."
 @State private var isLoading = false
@@ -131,9 +138,12 @@ That pattern keeps the same features available while giving large text more room
 
 Important patterns:
 
+- `@AppStorage` stores simple settings in user defaults so they persist across app launches.
 - `@State` stores simple view-owned values.
 - `@StateObject` owns a reference-type object that should live as long as the view lives.
-- Changing a `@State` or `@StateObject` published value causes SwiftUI to redraw the parts of the view that depend on it.
+- Changing `@AppStorage`, `@State`, or `@StateObject` values causes SwiftUI to redraw the parts of the view that depend on them.
+
+`ContentView` builds an `AppPrefs` value from the stored setting values when it needs to call the report service. That includes map detail settings, so the lookup code can tell whether crossings or walking paths should be included.
 
 `statusText` is the main piece of screen text for results and errors. When it changes, the Current Info area updates.
 
@@ -165,6 +175,7 @@ ContentView
 -> LocationProvider
 -> MapDataClient
 -> IntersectionFinder
+-> NeighborhoodProvider
 -> OrientationReport
 -> ContentView statusText
 ```
@@ -204,7 +215,10 @@ It does the high-level work in order:
 3. Ask `IntersectionFinder` for the best match.
 4. Calculate distance and bearing.
 5. Convert bearing plus heading into a relative direction.
-6. Build an `OrientReport`.
+6. Ask for neighborhood context if the Settings value needs it.
+7. Build an `OrientReport`.
+
+The report service passes the current map detail settings into `MapDataClient`. This matters because changing map detail changes what the app considers a candidate. For example, a named footpath should not appear in results unless the Walking Paths setting is turned on.
 
 `DeviceContext` is defined in `OrientationReport.swift`:
 
@@ -227,8 +241,20 @@ protocol LocationProviding {
 }
 
 protocol MapDataFetching {
-	func intersections(near coordinate: CLLocationCoordinate2D, radiusMeters: CLLocationDistance) async throws -> [IntersectionCandidate]
-	func mapData(near coordinate: CLLocationCoordinate2D, radiusMeters: CLLocationDistance) async throws -> MapDataSet
+	func intersections(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> [IntersectionCandidate]
+	func mapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> MapDataSet
+}
+
+protocol NeighborhoodProviding {
+	func neighborhoods(near coordinate: CLLocationCoordinate2D, radiusMeters: CLLocationDistance) async throws -> [NeighborhoodCandidate]
 }
 ```
 
@@ -241,6 +267,73 @@ This matters because:
 - The code is easier to reason about because each dependency has a small contract.
 
 This is a common engineering pattern called dependency injection. In plain language, it means a type receives the helpers it needs instead of creating every helper internally.
+
+## NeighborhoodProvider
+
+`NeighborhoodProvider.swift` powers the Neighborhood context setting.
+
+The Settings control is stored in:
+
+```swift
+AppPrefs.areaMode
+```
+
+The values are:
+
+- `off`
+- `near`
+- `toward`
+
+When the value is `off`, `OrientSvc` skips neighborhood lookup entirely.
+
+When the value is `near` or `toward`, `OrientSvc` asks `NeighborhoodProvider` for named place data near the current coordinate. The neighborhood lookup is best-effort. If it fails, the app still returns the intersection report without neighborhood text.
+
+That is an important engineering choice: neighborhood text improves the report, but it is not allowed to break the main result.
+
+## Neighborhood Data
+
+Neighborhood data comes from OpenStreetMap through Overpass, but it is queried separately from street intersection data.
+
+`NeighborhoodProvider` asks for named place data such as:
+
+- `place=neighbourhood`
+- `place=quarter`
+- `place=suburb`
+- `place=locality`
+- `boundary=place`
+- selected administrative boundaries
+
+The provider returns app-specific `NeighborhoodCandidate` values. Each candidate has:
+
+- an ID
+- a name
+- a coordinate
+- a kind
+
+The kind has a priority. More specific place types, such as neighbourhood, are preferred over broader or less specific types.
+
+## NeighborhoodResolver
+
+`NeighborhoodResolver` chooses which neighborhood text should be used.
+
+For `Nearby only`, it picks the best nearby candidate.
+
+For `Nearby and toward`, it still finds the nearby candidate, but it also uses heading to find a candidate in the direction the device is facing.
+
+The resulting values are stored in:
+
+```swift
+NeighborhoodContext(area: area, toward: toward)
+```
+
+Then `OrientSvc` copies those values into the final `OrientReport`.
+
+`OrientationReport.text(with:)` already knows how to handle them:
+
+- Nearby mode can produce text like `in Mission District`.
+- Toward mode can produce text like `toward North Beach`.
+
+This is a useful example of building a feature in layers. The report model and Settings control already existed, so the new work only had to provide real data for those fields.
 
 ## LocationProvider
 
@@ -323,7 +416,11 @@ Heading updates are handled similarly. Point and Scan keeps heading updates acti
 The app asks for map data near a coordinate:
 
 ```swift
-func mapData(near coordinate: CLLocationCoordinate2D, radiusMeters: CLLocationDistance) async throws -> MapDataSet
+func mapData(
+	near coordinate: CLLocationCoordinate2D,
+	radiusMeters: CLLocationDistance,
+	options: MapDetailOptions
+) async throws -> MapDataSet
 ```
 
 The flow is:
@@ -336,9 +433,11 @@ The flow is:
 6. Build app-specific map models.
 7. Store the result in cache.
 
+The cache stores the map detail options with each result. That keeps the app from reusing a simpler cached result after the user turns on extra map detail.
+
 ## The Overpass Query
 
-The query asks for named street-like ways around the current coordinate:
+The query asks for named street-like ways around the current coordinate. It can also ask for extra map details when the matching setting is turned on.
 
 ```text
 way(around:radius,lat,lon)["highway"~"..."]["name"];
@@ -353,6 +452,8 @@ Important pieces:
 - `highway` is the OpenStreetMap tag used for many road and path types.
 - `name` means the app only asks for named ways.
 - `(._;>;);` also asks for the nodes that make up those ways.
+
+Standard street data is always included. Named walking paths are included only when Walking Paths is turned on. Crossing nodes are included only when Crossings is turned on.
 
 OpenStreetMap ways are made from nodes. A way might be a street, and each node is a point along that street. Intersections are found by looking for nodes shared by two or more named ways.
 
@@ -396,6 +497,8 @@ The final candidate has:
 - an ID
 - the road names
 - the coordinate
+
+When crossings are enabled, a crossing node on one named road can also become a candidate. The app names that candidate with copy like `Crossing on Oak Street`.
 
 ## MapDataSet
 
@@ -505,13 +608,20 @@ The bearing math returns a compass degree from one coordinate to another. The ap
 - intersection name
 - distance
 - relative direction
+- relative direction in degrees
 - street
 - compass heading
 - area
 - toward
 - confidence
 
-Then `text(with:)` turns the structured data into a sentence.
+Then `text(with:)` turns the structured data into one short sentence, plus a confidence sentence if needed.
+
+For example:
+
+```text
+Nearest: Oak Street and Pine Street, about 80 feet ahead in Downtown.
+```
 
 That separation is useful. The app can keep logic structured internally while still producing readable text at the end.
 
@@ -632,6 +742,8 @@ The important design is that the app updates visible text and sends the same tex
 
 That keeps the visible state and spoken state aligned.
 
+Report announcements use the default announcement priority. The app does not move VoiceOver focus away from the button that triggered the report, so users can keep pressing the same action button if they want repeated updates.
+
 ## Settings
 
 Settings are built inside a SwiftUI `Form` in `ContentView.swift`.
@@ -649,13 +761,26 @@ The settings use native SwiftUI controls:
 struct AppPrefs {
 	var areaMode = AreaMode.near
 	var detail = DetailLev.standard
+	var measurementUnit = MeasurementUnit.feet
+	var directionStyle = DirectionStyle.words
+	var mapDetails = MapDetailOptions()
 	var haptics = true
 }
 ```
 
-`AreaMode` and `DetailLev` are enums. Each enum provides a `label` for display in the UI.
+`AreaMode`, `DetailLev`, `MeasurementUnit`, and `DirectionStyle` are enums. Each enum provides a `label` for display in the UI.
+
+Measurement unit controls whether report distances use feet or meters.
+
+Map detail controls whether extra OpenStreetMap details are included in the lookup. Crossings can add mapped crossing points on a named road. Walking Paths can include named paths such as footways when they intersect with streets or other named paths.
+
+Direction style controls whether report directions use word directions, such as `ahead and right`, or clock-face directions, such as `at 2 o'clock`. Clock-face directions treat the direction the phone is pointing as 12 o'clock.
+
+Verbosity controls whether extra neighborhood context is included in report text. Brief keeps the report to intersection, distance, and direction. Standard can add neighborhood context, such as `in SoMa` or `toward Civic Center`, when that data is available.
 
 This keeps display strings near the setting values they describe.
+
+The Settings view also uses `@AccessibilityFocusState` for its setting controls. When a user changes a setting, the binding saves the new value and marks that same control as the accessibility focus target. That helps VoiceOver stay on the control that changed instead of jumping to the sheet's Done button after SwiftUI redraws the form.
 
 ## Onboarding
 

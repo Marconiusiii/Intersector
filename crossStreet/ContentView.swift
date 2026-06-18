@@ -8,11 +8,30 @@
 import MessageUI
 import SwiftUI
 
+private enum SettingsFocusTarget: Hashable {
+	case neighborhood
+	case crossings
+	case walkingPaths
+	case measurementUnit
+	case direction
+	case verbosity
+	case haptics
+}
+
 struct ContentView: View {
 	@AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+	@AppStorage("areaMode") private var areaModeRaw = AreaMode.near.rawValue
+	@AppStorage("detailLevel") private var detailRaw = DetailLev.standard.rawValue
+	@AppStorage("measurementUnit") private var measurementUnitRaw = MeasurementUnit.feet.rawValue
+	@AppStorage("directionStyle") private var directionStyleRaw = DirectionStyle.words.rawValue
+	@AppStorage("includeCrossings") private var includeCrossings = false
+	@AppStorage("includeWalkingPaths") private var includeWalkingPaths = false
+	@AppStorage("hapticsEnabled") private var hapticsEnabled = true
 	@Environment(\.dynamicTypeSize) private var dynamicTypeSize
 	@Environment(\.openURL) private var openURL
-	@State private var prefs = AppPrefs()
+	@ScaledMetric(relativeTo: .largeTitle) private var headerMinHeight: CGFloat = 88
+	@ScaledMetric(relativeTo: .body) private var statusMinHeight: CGFloat = 128
+	@ScaledMetric(relativeTo: .title2) private var actionMinHeight: CGFloat = 120
 	@State private var report: OrientReport?
 	@State private var statusText = "Choose an action."
 	@State private var isLoading = false
@@ -23,6 +42,21 @@ struct ContentView: View {
 	@State private var onboardingLocationProvider = LocationProvider()
 	@State private var directionLocationProvider = LocationProvider()
 	@StateObject private var pointScanner = PointScanController()
+	@AccessibilityFocusState private var settingsFocusTarget: SettingsFocusTarget?
+
+	private var prefs: AppPrefs {
+		AppPrefs(
+			areaMode: AreaMode(rawValue: areaModeRaw) ?? .near,
+			detail: DetailLev(rawValue: detailRaw) ?? .standard,
+			measurementUnit: MeasurementUnit(rawValue: measurementUnitRaw) ?? .feet,
+			directionStyle: DirectionStyle(rawValue: directionStyleRaw) ?? .words,
+			mapDetails: MapDetailOptions(
+				includeCrossings: includeCrossings,
+				includeWalkingPaths: includeWalkingPaths
+			),
+			haptics: hapticsEnabled
+		)
+	}
 
 	var body: some View {
 		Group {
@@ -39,70 +73,35 @@ struct ContentView: View {
 
 	private var mainView: some View {
 		NavigationStack {
-			GeometryReader { proxy in
-				if dynamicTypeSize.isAccessibilitySize {
-					ScrollView {
-						VStack(spacing: 0) {
-							headerView
-								.frame(minHeight: 112)
-							statusView
-								.frame(minHeight: 180)
-							actionButton("Nearest Intersection", systemImage: "location.fill") {
-								await updateReport(.nearest)
-							}
-							.frame(minHeight: 150)
-							actionButton("Upcoming Intersection", systemImage: "arrow.up.circle.fill") {
-								await updateReport(.upcoming)
-							}
-							.frame(minHeight: 150)
-							actionButton(
-								"My Direction",
-								systemImage: "safari.fill",
-								accessibilityHint: "Speaks cardinal direction.",
-								isDisabled: isDirectionLoading
-							) {
-								await updateDirection()
-							}
-							.frame(minHeight: 150)
-							pointScanToggle
-								.frame(minHeight: 150)
-						}
-						.frame(maxWidth: .infinity)
+			ScrollView {
+				VStack(spacing: 0) {
+					headerView
+						.frame(minHeight: headerMinHeight)
+					statusView
+						.frame(minHeight: statusMinHeight)
+					actionButton("Nearest Intersection", systemImage: "location.fill") {
+						await updateReport(.nearest)
 					}
-					.frame(width: proxy.size.width, height: proxy.size.height)
-					.background(Color.crossBg)
-				} else {
-					let headerHeight = 88.0
-					let sectionHeight = max((proxy.size.height - headerHeight) / 5, 0)
-					VStack(spacing: 0) {
-						headerView
-							.frame(height: headerHeight)
-						statusView
-							.frame(height: sectionHeight)
-						actionButton("Nearest Intersection", systemImage: "location.fill") {
-							await updateReport(.nearest)
-						}
-						.frame(height: sectionHeight)
-						actionButton("Upcoming Intersection", systemImage: "arrow.up.circle.fill") {
-							await updateReport(.upcoming)
-						}
-						.frame(height: sectionHeight)
-						actionButton(
-							"My Direction",
-							systemImage: "safari.fill",
-							accessibilityHint: "Speaks cardinal direction.",
-							isDisabled: isDirectionLoading
-						) {
-							await updateDirection()
-						}
-						.frame(height: sectionHeight)
-						pointScanToggle
-							.frame(height: sectionHeight)
+					.frame(minHeight: actionMinHeight)
+					actionButton("Upcoming Intersection", systemImage: "arrow.up.circle.fill") {
+						await updateReport(.upcoming)
 					}
-					.frame(width: proxy.size.width, height: proxy.size.height)
-					.background(Color.crossBg)
+					.frame(minHeight: actionMinHeight)
+					actionButton(
+						"My Direction",
+						systemImage: "safari.fill",
+						accessibilityHint: "Speaks cardinal direction.",
+						isDisabled: isDirectionLoading
+					) {
+						await updateDirection()
+					}
+					.frame(minHeight: actionMinHeight)
+					pointScanToggle
+						.frame(minHeight: actionMinHeight)
 				}
+				.frame(maxWidth: .infinity)
 			}
+			.background(Color.crossBg)
 			.navigationBarTitleDisplayMode(.inline)
 			.toolbar(.hidden, for: .navigationBar)
 			.sheet(isPresented: $isShowingSettings) {
@@ -215,29 +214,130 @@ struct ContentView: View {
 		.disabled(isLoading)
 	}
 
+	private var areaModeBinding: Binding<AreaMode> {
+		Binding {
+			prefs.areaMode
+		} set: { areaMode in
+			areaModeRaw = areaMode.rawValue
+			settingsFocusTarget = .neighborhood
+		}
+	}
+
+	private var detailBinding: Binding<DetailLev> {
+		Binding {
+			prefs.detail
+		} set: { detail in
+			detailRaw = detail.rawValue
+			settingsFocusTarget = .verbosity
+		}
+	}
+
+	private var measurementUnitBinding: Binding<MeasurementUnit> {
+		Binding {
+			prefs.measurementUnit
+		} set: { measurementUnit in
+			measurementUnitRaw = measurementUnit.rawValue
+			settingsFocusTarget = .measurementUnit
+		}
+	}
+
+	private var directionStyleBinding: Binding<DirectionStyle> {
+		Binding {
+			prefs.directionStyle
+		} set: { directionStyle in
+			directionStyleRaw = directionStyle.rawValue
+			settingsFocusTarget = .direction
+		}
+	}
+
+	private var hapticsBinding: Binding<Bool> {
+		Binding {
+			hapticsEnabled
+		} set: { isEnabled in
+			hapticsEnabled = isEnabled
+			settingsFocusTarget = .haptics
+		}
+	}
+
+	private var crossingsBinding: Binding<Bool> {
+		Binding {
+			includeCrossings
+		} set: { isEnabled in
+			includeCrossings = isEnabled
+			settingsFocusTarget = .crossings
+		}
+	}
+
+	private var walkingPathsBinding: Binding<Bool> {
+		Binding {
+			includeWalkingPaths
+		} set: { isEnabled in
+			includeWalkingPaths = isEnabled
+			settingsFocusTarget = .walkingPaths
+		}
+	}
+
 	private var settingsView: some View {
 		NavigationStack {
 			Form {
-				Picker("Neighborhood context", selection: $prefs.areaMode) {
+				Picker("Neighborhood context", selection: areaModeBinding) {
 					ForEach(AreaMode.allCases) { mode in
 						Text(mode.label).tag(mode)
 					}
 				}
 				.pickerStyle(.menu)
+				.accessibilityFocused($settingsFocusTarget, equals: .neighborhood)
+
+				Section {
+					Toggle("Include crossings", isOn: crossingsBinding)
+						.accessibilityFocused($settingsFocusTarget, equals: .crossings)
+					Toggle("Include walking paths", isOn: walkingPathsBinding)
+						.accessibilityFocused($settingsFocusTarget, equals: .walkingPaths)
+				} header: {
+					Text("Map Detail")
+				}
+
+				Section {
+					Text("Measurement Unit")
+						.font(.headline)
+						.accessibilityAddTraits(.isHeader)
+					Picker("Measurement Unit", selection: measurementUnitBinding) {
+						ForEach(MeasurementUnit.allCases) { item in
+							Text(item.label).tag(item)
+						}
+					}
+					.pickerStyle(.segmented)
+					.accessibilityFocused($settingsFocusTarget, equals: .measurementUnit)
+				}
+
+				Section {
+					Text("Direction")
+						.font(.headline)
+						.accessibilityAddTraits(.isHeader)
+					Picker("Direction", selection: directionStyleBinding) {
+						ForEach(DirectionStyle.allCases) { item in
+							Text(item.label).tag(item)
+						}
+					}
+					.pickerStyle(.segmented)
+					.accessibilityFocused($settingsFocusTarget, equals: .direction)
+				}
 
 				Section {
 					Text("Verbosity")
 						.font(.headline)
 						.accessibilityAddTraits(.isHeader)
-					Picker("Verbosity", selection: $prefs.detail) {
+					Picker("Verbosity", selection: detailBinding) {
 						ForEach(DetailLev.allCases) { item in
 							Text(item.label).tag(item)
 						}
 					}
 					.pickerStyle(.segmented)
+					.accessibilityFocused($settingsFocusTarget, equals: .verbosity)
 				}
 
-				Toggle("Haptic scan feedback", isOn: $prefs.haptics)
+				Toggle("Haptic scan feedback", isOn: hapticsBinding)
+					.accessibilityFocused($settingsFocusTarget, equals: .haptics)
 
 				Section {
 					Button {
@@ -247,7 +347,7 @@ struct ContentView: View {
 							openMailFallback()
 						}
 					} label: {
-						Text("Send Feedback")
+						Text("Send Intersector Feedback")
 							.lineLimit(nil)
 							.fixedSize(horizontal: false, vertical: true)
 					}

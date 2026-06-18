@@ -60,7 +60,8 @@ final class PointScanController: ObservableObject {
 				let initialContext = try await locationProvider.currentContext()
 				let mapData = try await mapDataClient.mapData(
 					near: initialContext.coordinate,
-					radiusMeters: 450
+					radiusMeters: 450,
+					options: prefs.mapDetails
 				)
 				let intersections = mapData.currentStreetIntersections(
 					from: initialContext.coordinate
@@ -158,8 +159,9 @@ final class PointScanController: ObservableObject {
 		let report = OrientReport(
 			kind: .scan,
 			cross: match.candidate.title,
-			dist: Geo.spokenDistance(match.distanceMeters),
-			relDir: "where the phone is pointing",
+			dist: Geo.spokenDistance(match.distanceMeters, unit: prefs.measurementUnit),
+			relDir: nil,
+			relDegrees: nil,
 			street: match.candidate.names.first,
 			head: Geo.compassDirection(match.bearingDegrees),
 			area: nil,

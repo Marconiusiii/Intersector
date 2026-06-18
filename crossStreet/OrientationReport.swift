@@ -13,6 +13,7 @@ struct OrientReport: Equatable {
 	var cross: String
 	var dist: String
 	var relDir: String?
+	var relDegrees: CLLocationDirection?
 	var street: String?
 	var head: String?
 	var area: String?
@@ -20,36 +21,37 @@ struct OrientReport: Equatable {
 	var conf: ConfLev
 
 	func text(with prefs: AppPrefs) -> String {
-		var parts = [leadText]
-		parts.append("\(cross), about \(dist)")
-		if let relDir {
-			parts.append(relDir)
-		}
-		if prefs.detail == .standard, let street, let head {
-			parts.append("appears \(head) along \(street)")
+		var text = "\(leadText): \(cross), about \(dist)"
+		if let direction = directionText(with: prefs) {
+			text += " \(direction)"
 		}
 		if let area = areaText(prefs) {
-			parts.append(area)
+			text += " \(area)"
 		}
+		text += "."
 		if conf != .high {
-			parts.append(conf.text)
+			text += " \(conf.text)."
 		}
-		return parts.joined(separator: ". ") + "."
+		return text
 	}
 
 	private var leadText: String {
 		switch kind {
 		case .nearest:
-			"Nearest intersection"
+			"Nearest"
 		case .upcoming:
-			"Upcoming intersection"
+			"Upcoming"
 		case .scan:
-			"Pointed intersection"
+			"Pointed"
 		}
 	}
 
 	private func areaText(_ prefs: AppPrefs) -> String? {
-		switch prefs.areaMode {
+		guard prefs.detail == .standard else {
+			return nil
+		}
+
+		return switch prefs.areaMode {
 		case .off:
 			nil
 		case .near:
@@ -61,6 +63,20 @@ struct OrientReport: Equatable {
 				area.map { "in \($0)" }
 			}
 		}
+	}
+
+	private func directionText(with prefs: AppPrefs) -> String? {
+		switch prefs.directionStyle {
+		case .words:
+			relDir
+		case .clockFace:
+			relDegrees.map { Self.clockFaceDirection(from: $0) }
+		}
+	}
+
+	private static func clockFaceDirection(from degrees: CLLocationDirection) -> String {
+		let hour = Int((Geo.normalizedDegrees(degrees) + 15) / 30) % 12
+		return "at \(hour == 0 ? 12 : hour) o'clock"
 	}
 }
 

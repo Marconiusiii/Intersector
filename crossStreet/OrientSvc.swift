@@ -30,23 +30,38 @@ protocol LocationProviding {
 }
 
 protocol MapDataFetching {
-	func intersections(near coordinate: CLLocationCoordinate2D, radiusMeters: CLLocationDistance) async throws -> [IntersectionCandidate]
-	func mapData(near coordinate: CLLocationCoordinate2D, radiusMeters: CLLocationDistance) async throws -> MapDataSet
+	func intersections(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> [IntersectionCandidate]
+	func mapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> MapDataSet
+}
+
+protocol NeighborhoodProviding {
+	func neighborhoods(near coordinate: CLLocationCoordinate2D, radiusMeters: CLLocationDistance) async throws -> [NeighborhoodCandidate]
 }
 
 struct OrientSvc {
 	var locationProvider: LocationProviding
 	var mapDataClient: MapDataFetching
+	var neighborhoodProvider: NeighborhoodProviding
 	var finder = IntersectionFinder()
+	var neighborhoodResolver = NeighborhoodResolver()
 
 	static let shared = OrientSvc(
 		locationProvider: LocationProvider(),
-		mapDataClient: MapDataClient()
+		mapDataClient: MapDataClient(),
+		neighborhoodProvider: NeighborhoodProvider()
 	)
 
 	func report(_ kind: ReportKind, prefs: AppPrefs = AppPrefs()) async throws -> OrientReport {
 		let context = try await locationProvider.currentContext()
-		let intersections = try await intersections(for: kind, from: context)
+		let intersections = try await intersections(for: kind, from: context, prefs: prefs)
 
 		guard let match = finder.bestMatch(
 			for: kind,
@@ -58,41 +73,80 @@ struct OrientSvc {
 
 		let distance = Geo.distanceMeters(from: context.coordinate, to: match.coordinate)
 		let bearing = Geo.bearingDegrees(from: context.coordinate, to: match.coordinate)
+		let relDegrees = relativeDegrees(
+			bearing: bearing,
+			heading: context.headingDegrees
+		)
 		let relDir = relativeDirection(
 			bearing: bearing,
 			heading: context.headingDegrees,
 			kind: kind
 		)
+		let neighborhoodContext = await neighborhoodContext(
+			for: prefs.areaMode,
+			from: context
+		)
 
 		return OrientReport(
 			kind: kind,
 			cross: match.title,
-			dist: Geo.spokenDistance(distance),
+			dist: Geo.spokenDistance(distance, unit: prefs.measurementUnit),
 			relDir: relDir,
+			relDegrees: relDegrees,
 			street: match.names.first,
 			head: Geo.compassDirection(bearing),
-			area: nil,
-			toward: nil,
+			area: neighborhoodContext.area,
+			toward: neighborhoodContext.toward,
 			conf: confidence(for: kind, heading: context.headingDegrees)
 		)
 	}
 
-	private func intersections(for kind: ReportKind, from context: DeviceContext) async throws -> [IntersectionCandidate] {
+	private func intersections(
+		for kind: ReportKind,
+		from context: DeviceContext,
+		prefs: AppPrefs
+	) async throws -> [IntersectionCandidate] {
 		let fastRadius: CLLocationDistance = 225
 		let fallbackRadius: CLLocationDistance = 375
 		let intersections = try await mapDataClient.intersections(
 			near: context.coordinate,
-			radiusMeters: fastRadius
+			radiusMeters: fastRadius,
+			options: prefs.mapDetails
 		)
 
 		if shouldFetchFallback(for: kind, from: context, intersections: intersections) {
 			return try await mapDataClient.intersections(
 				near: context.coordinate,
-				radiusMeters: fallbackRadius
+				radiusMeters: fallbackRadius,
+				options: prefs.mapDetails
 			)
 		}
 
 		return intersections
+	}
+
+	private func neighborhoodContext(
+		for mode: AreaMode,
+		from context: DeviceContext
+	) async -> NeighborhoodContext {
+		guard mode != .off else {
+			return NeighborhoodContext(area: nil, toward: nil)
+		}
+
+		do {
+			let neighborhoods = try await neighborhoodProvider.neighborhoods(
+				near: context.coordinate,
+				radiusMeters: 1_500
+			)
+			return neighborhoodResolver.context(
+				from: neighborhoods,
+				origin: context.coordinate,
+				heading: context.headingDegrees,
+				mode: mode
+			)
+		} catch {
+			return NeighborhoodContext(area: nil, toward: nil)
+		}
 	}
 
 	private func shouldFetchFallback(
@@ -122,9 +176,9 @@ struct OrientSvc {
 		guard let heading else {
 			return kind == .nearest ? Geo.compassDirection(bearing) : nil
 		}
-		let delta = Geo.normalizedDegrees(bearing - heading)
+		let degrees = Geo.normalizedDegrees(bearing - heading)
 
-		switch delta {
+		switch degrees {
 		case 337.5...360, 0..<22.5:
 			return "ahead"
 		case 22.5..<67.5:
@@ -142,6 +196,16 @@ struct OrientSvc {
 		default:
 			return "ahead and left"
 		}
+	}
+
+	private func relativeDegrees(
+		bearing: CLLocationDirection,
+		heading: CLLocationDirection?
+	) -> CLLocationDirection? {
+		guard let heading else {
+			return nil
+		}
+		return Geo.normalizedDegrees(bearing - heading)
 	}
 
 	private func confidence(for kind: ReportKind, heading: CLLocationDirection?) -> ConfLev {
@@ -191,7 +255,16 @@ enum Geo {
 		return names[index]
 	}
 
-	static func spokenDistance(_ meters: CLLocationDistance) -> String {
+	static func spokenDistance(_ meters: CLLocationDistance, unit: MeasurementUnit = .feet) -> String {
+		switch unit {
+		case .feet:
+			spokenFeetDistance(meters)
+		case .meters:
+			spokenMeterDistance(meters)
+		}
+	}
+
+	private static func spokenFeetDistance(_ meters: CLLocationDistance) -> String {
 		let feet = meters * 3.28084
 		if feet < 500 {
 			let rounded = (feet / 10).rounded() * 10
@@ -199,5 +272,14 @@ enum Geo {
 		}
 		let miles = feet / 5280
 		return String(format: "%.1f miles", miles)
+	}
+
+	private static func spokenMeterDistance(_ meters: CLLocationDistance) -> String {
+		if meters < 1_000 {
+			let rounded = (meters / 5).rounded() * 5
+			return "\(Int(rounded)) meters"
+		}
+		let kilometers = meters / 1_000
+		return String(format: "%.1f kilometers", kilometers)
 	}
 }

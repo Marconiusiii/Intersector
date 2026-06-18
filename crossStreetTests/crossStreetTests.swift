@@ -18,6 +18,7 @@ struct IntersectorTests {
 			cross: "Oak Street and Pine Street",
 			dist: "80 feet",
 			relDir: "ahead",
+			relDegrees: 0,
 			street: "Oak Street",
 			head: "north",
 			area: "Downtown",
@@ -27,9 +28,103 @@ struct IntersectorTests {
 
 		let text = report.text(with: prefs)
 
-		#expect(text.contains("Nearest intersection"))
+		#expect(text.contains("Nearest:"))
 		#expect(text.contains("Oak Street and Pine Street"))
+		#expect(text.contains("80 feet ahead"))
+		#expect(!text.contains("On Oak Street"))
+		#expect(!text.contains("appears"))
 		#expect(!text.contains("Downtown"))
+	}
+
+	@Test func reportTextUsesClockFaceDirection() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .toward
+		prefs.directionStyle = .clockFace
+		let report = OrientReport(
+			kind: .upcoming,
+			cross: "Mission Street and 6th Street",
+			dist: "140 feet",
+			relDir: "ahead and right",
+			relDegrees: 45,
+			street: "Mission Street",
+			head: "northeast",
+			area: nil,
+			toward: "Civic Center",
+			conf: .high
+		)
+
+		let text = report.text(with: prefs)
+
+		#expect(text == "Upcoming: Mission Street and 6th Street, about 140 feet at 2 o'clock toward Civic Center.")
+	}
+
+	@Test func briefVerbosityOmitsNeighborhoodContext() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .toward
+		prefs.detail = .brief
+		let report = OrientReport(
+			kind: .upcoming,
+			cross: "Mission Street and 6th Street",
+			dist: "140 feet",
+			relDir: "ahead and right",
+			relDegrees: 45,
+			street: "Mission Street",
+			head: "northeast",
+			area: "SoMa",
+			toward: "Civic Center",
+			conf: .high
+		)
+
+		let text = report.text(with: prefs)
+
+		#expect(text == "Upcoming: Mission Street and 6th Street, about 140 feet ahead and right.")
+	}
+
+	@Test func standardVerbosityIncludesNeighborhoodContext() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .toward
+		prefs.detail = .standard
+		let report = OrientReport(
+			kind: .upcoming,
+			cross: "Mission Street and 6th Street",
+			dist: "140 feet",
+			relDir: "ahead and right",
+			relDegrees: 45,
+			street: "Mission Street",
+			head: "northeast",
+			area: "SoMa",
+			toward: "Civic Center",
+			conf: .high
+		)
+
+		let text = report.text(with: prefs)
+
+		#expect(text == "Upcoming: Mission Street and 6th Street, about 140 feet ahead and right toward Civic Center.")
+	}
+
+	@Test func distanceTextCanUseMeters() async throws {
+		#expect(Geo.spokenDistance(42, unit: .meters) == "40 meters")
+		#expect(Geo.spokenDistance(1_200, unit: .meters) == "1.2 kilometers")
+	}
+
+	@Test func pointedReportOmitsRedundantDirectionText() async throws {
+		let report = OrientReport(
+			kind: .scan,
+			cross: "Valencia Street and 16th Street",
+			dist: "220 feet",
+			relDir: nil,
+			relDegrees: nil,
+			street: "Valencia Street",
+			head: "north",
+			area: nil,
+			toward: nil,
+			conf: .high
+		)
+
+		let text = report.text(with: AppPrefs())
+
+		#expect(text == "Pointed: Valencia Street and 16th Street, about 220 feet.")
+		#expect(!text.localizedCaseInsensitiveContains("where the phone is pointing"))
 	}
 
 	@Test func upcomingPrefersCandidateAhead() async throws {
@@ -139,6 +234,27 @@ struct IntersectorTests {
 		#expect(await counter.count == 2)
 	}
 
+	@Test func mapDataCacheSeparatesMapDetailOptions() async throws {
+		let cache = MapDataCache()
+		let counter = FetchCounter()
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+
+		let first = try await cache.data(near: origin, radiusMeters: 450, options: MapDetailOptions()) {
+			await counter.nextDataSet()
+		}
+		let second = try await cache.data(
+			near: origin,
+			radiusMeters: 450,
+			options: MapDetailOptions(includeCrossings: true)
+		) {
+			await counter.nextDataSet()
+		}
+
+		#expect(first.intersections.first?.id == "fetch-1")
+		#expect(second.intersections.first?.id == "fetch-2")
+		#expect(await counter.count == 2)
+	}
+
 	@Test func intersectionBuilderIgnoresNonStreetPaths() async throws {
 		let response = OverpassResponse(
 			elements: [
@@ -154,6 +270,171 @@ struct IntersectorTests {
 
 		#expect(data.intersections.isEmpty)
 		#expect(data.roads.map(\.name) == ["Oak Street"])
+	}
+
+	@Test func intersectionBuilderIncludesWalkingPathsWhenEnabled() async throws {
+		let response = OverpassResponse(
+			elements: [
+				OverpassElement(type: "node", id: 1, lat: 37.0, lon: -122.0, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 2, lat: 37.001, lon: -122.0, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 3, lat: 37.0, lon: -122.001, nodes: nil, tags: nil),
+				OverpassElement(type: "way", id: 10, lat: nil, lon: nil, nodes: [1, 2], tags: ["highway": "residential", "name": "Oak Street"]),
+				OverpassElement(type: "way", id: 11, lat: nil, lon: nil, nodes: [3, 1], tags: ["highway": "footway", "name": "Garden Path"])
+			]
+		)
+		let options = MapDetailOptions(includeWalkingPaths: true)
+
+		let data = IntersectionBuilder().mapData(from: response, options: options)
+
+		#expect(data.intersections.map(\.title) == ["Garden Path and Oak Street"])
+		#expect(data.roads.map(\.name) == ["Oak Street", "Garden Path"])
+	}
+
+	@Test func intersectionBuilderIgnoresCrossingsByDefault() async throws {
+		let response = OverpassResponse(
+			elements: [
+				OverpassElement(type: "node", id: 1, lat: 37.0, lon: -122.0, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 2, lat: 37.001, lon: -122.0, nodes: nil, tags: ["highway": "crossing"]),
+				OverpassElement(type: "node", id: 3, lat: 37.002, lon: -122.0, nodes: nil, tags: nil),
+				OverpassElement(type: "way", id: 10, lat: nil, lon: nil, nodes: [1, 2, 3], tags: ["highway": "residential", "name": "Oak Street"])
+			]
+		)
+
+		let data = IntersectionBuilder().mapData(from: response)
+
+		#expect(data.intersections.isEmpty)
+	}
+
+	@Test func intersectionBuilderIncludesCrossingsWhenEnabled() async throws {
+		let response = OverpassResponse(
+			elements: [
+				OverpassElement(type: "node", id: 1, lat: 37.0, lon: -122.0, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 2, lat: 37.001, lon: -122.0, nodes: nil, tags: ["highway": "crossing"]),
+				OverpassElement(type: "node", id: 3, lat: 37.002, lon: -122.0, nodes: nil, tags: nil),
+				OverpassElement(type: "way", id: 10, lat: nil, lon: nil, nodes: [1, 2, 3], tags: ["highway": "residential", "name": "Oak Street"])
+			]
+		)
+		let options = MapDetailOptions(includeCrossings: true)
+
+		let data = IntersectionBuilder().mapData(from: response, options: options)
+
+		#expect(data.intersections.map(\.title) == ["Crossing on Oak Street"])
+	}
+
+	@Test func areaModeOffSkipsNeighborhoodLookup() async throws {
+		let neighborhoodProvider = FakeNeighborhoodProvider(candidates: [
+			NeighborhoodCandidate(
+				id: "mission",
+				name: "Mission District",
+				coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0),
+				kind: .neighbourhood
+			)
+		])
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(
+					coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0),
+					headingDegrees: nil
+				)
+			),
+			mapDataClient: FakeMapDataClient(),
+			neighborhoodProvider: neighborhoodProvider
+		)
+
+		let report = try await service.report(.nearest, prefs: prefs)
+
+		#expect(report.area == nil)
+		#expect(report.toward == nil)
+		#expect(await neighborhoodProvider.requestCount == 0)
+	}
+
+	@Test func areaModeNearAddsNeighborhoodText() async throws {
+		let neighborhoodProvider = FakeNeighborhoodProvider(candidates: [
+			NeighborhoodCandidate(
+				id: "mission",
+				name: "Mission District",
+				coordinate: CLLocationCoordinate2D(latitude: 37.0001, longitude: -122.0),
+				kind: .neighbourhood
+			)
+		])
+		var prefs = AppPrefs()
+		prefs.areaMode = .near
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(
+					coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0),
+					headingDegrees: nil
+				)
+			),
+			mapDataClient: FakeMapDataClient(),
+			neighborhoodProvider: neighborhoodProvider
+		)
+
+		let report = try await service.report(.nearest, prefs: prefs)
+		let text = report.text(with: prefs)
+
+		#expect(report.area == "Mission District")
+		#expect(text.contains("in Mission District"))
+		#expect(await neighborhoodProvider.requestCount == 1)
+	}
+
+	@Test func areaModeTowardUsesHeadingAwareNeighborhood() async throws {
+		let neighborhoodProvider = FakeNeighborhoodProvider(candidates: [
+			NeighborhoodCandidate(
+				id: "mission",
+				name: "Mission District",
+				coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.001),
+				kind: .neighbourhood
+			),
+			NeighborhoodCandidate(
+				id: "north-beach",
+				name: "North Beach",
+				coordinate: CLLocationCoordinate2D(latitude: 37.01, longitude: -122.0),
+				kind: .neighbourhood
+			)
+		])
+		var prefs = AppPrefs()
+		prefs.areaMode = .toward
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(
+					coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0),
+					headingDegrees: 0
+				)
+			),
+			mapDataClient: FakeMapDataClient(),
+			neighborhoodProvider: neighborhoodProvider
+		)
+
+		let report = try await service.report(.nearest, prefs: prefs)
+		let text = report.text(with: prefs)
+
+		#expect(report.area == "Mission District")
+		#expect(report.toward == "North Beach")
+		#expect(text.contains("toward North Beach"))
+	}
+
+	@Test func neighborhoodFailureDoesNotFailIntersectionReport() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .near
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(
+					coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0),
+					headingDegrees: nil
+				)
+			),
+			mapDataClient: FakeMapDataClient(),
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+
+		let report = try await service.report(.nearest, prefs: prefs)
+
+		#expect(report.cross == "Oak Street and Pine Street")
+		#expect(report.area == nil)
+		#expect(report.toward == nil)
 	}
 }
 
@@ -173,5 +454,74 @@ actor FetchCounter {
 			],
 			roads: []
 		)
+	}
+}
+
+struct FakeLocationProvider: LocationProviding {
+	var context: DeviceContext
+
+	func currentContext() async throws -> DeviceContext {
+		context
+	}
+}
+
+struct FakeMapDataClient: MapDataFetching {
+	func intersections(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> [IntersectionCandidate] {
+		[
+			IntersectionCandidate(
+				id: "oak-pine",
+				names: ["Oak Street", "Pine Street"],
+				coordinate: CLLocationCoordinate2D(latitude: 37.0001, longitude: -122.0)
+			)
+		]
+	}
+
+	func mapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> MapDataSet {
+		MapDataSet(
+			intersections: try await intersections(
+				near: coordinate,
+				radiusMeters: radiusMeters,
+				options: options
+			),
+			roads: []
+		)
+	}
+}
+
+actor FakeNeighborhoodProvider: NeighborhoodProviding {
+	private var count = 0
+	private let candidates: [NeighborhoodCandidate]
+
+	var requestCount: Int {
+		count
+	}
+
+	init(candidates: [NeighborhoodCandidate]) {
+		self.candidates = candidates
+	}
+
+	func neighborhoods(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance
+	) async throws -> [NeighborhoodCandidate] {
+		count += 1
+		return candidates
+	}
+}
+
+struct FailingNeighborhoodProvider: NeighborhoodProviding {
+	func neighborhoods(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance
+	) async throws -> [NeighborhoodCandidate] {
+		throw MapDataError.invalidResponse
 	}
 }
