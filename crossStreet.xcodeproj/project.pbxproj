@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A1B2C3D42FE0000000000014 /* Intersector Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = A1B2C3D42FE0000000000002 /* Intersector Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		82E831AC2FD62E4400071B9D /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,12 +25,34 @@
 			remoteGlobalIDString = 82E8319D2FD62E4300071B9D;
 			remoteInfo = Intersector;
 		};
+		A1B2C3D42FE0000000000015 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 82E831962FD62E4300071B9D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1B2C3D42FE0000000000001;
+			remoteInfo = "Intersector Watch App";
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A1B2C3D42FE0000000000017 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				A1B2C3D42FE0000000000014 /* Intersector Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		82E8319E2FD62E4300071B9D /* Intersector.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Intersector.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		82E831AB2FD62E4400071B9D /* IntersectorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntersectorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		82E831B52FD62E4400071B9D /* IntersectorUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntersectorUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B2C3D42FE0000000000002 /* Intersector Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Intersector Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -43,6 +69,11 @@
 		82E831B82FD62E4400071B9D /* crossStreetUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = crossStreetUITests;
+			sourceTree = "<group>";
+		};
+		A1B2C3D42FE0000000000003 /* IntersectorWatch */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = IntersectorWatch;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -69,6 +100,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1B2C3D42FE0000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -76,6 +114,7 @@
 			isa = PBXGroup;
 			children = (
 				82E831A02FD62E4300071B9D /* crossStreet */,
+				A1B2C3D42FE0000000000003 /* IntersectorWatch */,
 				82E831AE2FD62E4400071B9D /* crossStreetTests */,
 				82E831B82FD62E4400071B9D /* crossStreetUITests */,
 				82E8319F2FD62E4300071B9D /* Products */,
@@ -86,6 +125,7 @@
 			isa = PBXGroup;
 			children = (
 				82E8319E2FD62E4300071B9D /* Intersector.app */,
+				A1B2C3D42FE0000000000002 /* Intersector Watch App.app */,
 				82E831AB2FD62E4400071B9D /* IntersectorTests.xctest */,
 				82E831B52FD62E4400071B9D /* IntersectorUITests.xctest */,
 			);
@@ -102,10 +142,12 @@
 				82E8319A2FD62E4300071B9D /* Sources */,
 				82E8319B2FD62E4300071B9D /* Frameworks */,
 				82E8319C2FD62E4300071B9D /* Resources */,
+				A1B2C3D42FE0000000000017 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A1B2C3D42FE0000000000016 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				82E831A02FD62E4300071B9D /* crossStreet */,
@@ -163,6 +205,28 @@
 			productReference = 82E831B52FD62E4400071B9D /* IntersectorUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		A1B2C3D42FE0000000000001 /* Intersector Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1B2C3D42FE0000000000012 /* Build configuration list for PBXNativeTarget "Intersector Watch App" */;
+			buildPhases = (
+				A1B2C3D42FE0000000000006 /* Sources */,
+				A1B2C3D42FE0000000000004 /* Frameworks */,
+				A1B2C3D42FE0000000000005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A1B2C3D42FE0000000000003 /* IntersectorWatch */,
+			);
+			name = "Intersector Watch App";
+			packageProductDependencies = (
+			);
+			productName = "Intersector Watch App";
+			productReference = A1B2C3D42FE0000000000002 /* Intersector Watch App.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -184,6 +248,9 @@
 						CreatedOnToolsVersion = 26.5;
 						TestTargetID = 82E8319D2FD62E4300071B9D;
 					};
+					A1B2C3D42FE0000000000001 = {
+						CreatedOnToolsVersion = 26.5;
+					};
 				};
 			};
 			buildConfigurationList = 82E831992FD62E4300071B9D /* Build configuration list for PBXProject "crossStreet" */;
@@ -201,6 +268,7 @@
 			projectRoot = "";
 			targets = (
 				82E8319D2FD62E4300071B9D /* Intersector */,
+				A1B2C3D42FE0000000000001 /* Intersector Watch App */,
 				82E831AA2FD62E4400071B9D /* IntersectorTests */,
 				82E831B42FD62E4400071B9D /* IntersectorUITests */,
 			);
@@ -223,6 +291,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		82E831B32FD62E4400071B9D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1B2C3D42FE0000000000005 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -253,6 +328,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1B2C3D42FE0000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -265,6 +347,11 @@
 			isa = PBXTargetDependency;
 			target = 82E8319D2FD62E4300071B9D /* Intersector */;
 			targetProxy = 82E831B62FD62E4400071B9D /* PBXContainerItemProxy */;
+		};
+		A1B2C3D42FE0000000000016 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1B2C3D42FE0000000000001 /* Intersector Watch App */;
+			targetProxy = A1B2C3D42FE0000000000015 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -396,7 +483,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 4FL3XZDQ9P;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -433,7 +520,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 4FL3XZDQ9P;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -548,6 +635,70 @@
 			};
 			name = Release;
 		};
+		A1B2C3D42FE0000000000011 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4FL3XZDQ9P;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Intersector;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Intersector uses your location to find nearby mapped intersections.";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.marconius.crossStreet;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marconius.crossStreet.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		A1B2C3D42FE0000000000013 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4FL3XZDQ9P;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Intersector;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Intersector uses your location to find nearby mapped intersections.";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.marconius.crossStreet;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marconius.crossStreet.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -583,6 +734,15 @@
 			buildConfigurations = (
 				82E831C62FD62E4400071B9D /* Debug */,
 				82E831C72FD62E4400071B9D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1B2C3D42FE0000000000012 /* Build configuration list for PBXNativeTarget "Intersector Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B2C3D42FE0000000000011 /* Debug */,
+				A1B2C3D42FE0000000000013 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

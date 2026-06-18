@@ -52,6 +52,9 @@ These are the most important files:
 - `CrossStreetIntents.swift`
   Defines Siri and Shortcuts actions using App Intents.
 
+- `IntersectorWatch/`
+  Contains the Apple Watch companion app target. The first watch pass provides one-shot Nearest and Upcoming reports through a small watch UI and watch App Intents.
+
 - `VoiceOverAnnouncer.swift`
   Sends system accessibility announcements when the current information changes.
 
@@ -786,13 +789,15 @@ The Settings view also uses `@AccessibilityFocusState` for its setting controls.
 
 `OnboardingView.swift` shows a small sequence of pages.
 
-It stores the current page:
+The onboarding pages are shown with a `NavigationStack`.
 
 ```swift
-@State private var page = 0
+@State private var path: [Int] = []
 ```
 
 The page content is stored in an array of `OnboardingPage` values.
+
+When the user presses Next, the app pushes the next onboarding page onto the navigation path. That makes each onboarding step a real incoming screen instead of rewriting the title and body inside the same view. This structure gives VoiceOver a better native screen transition to work with when moving from one page heading to the next.
 
 When the user reaches the final page, onboarding calls:
 
@@ -807,6 +812,26 @@ This is a useful parent-child view pattern:
 - The child view owns the onboarding screen.
 - The parent view owns whether onboarding is complete.
 - The child reports completion through a closure.
+
+The onboarding flow also includes an Apple Watch support page. It tells users that the watch app is included and that they can install it from the Watch app on iPhone if it does not appear automatically.
+
+## Apple Watch Companion App
+
+The `IntersectorWatch` folder contains the first Apple Watch companion app pass.
+
+The watch app has:
+
+- a simple SwiftUI screen
+- a Nearest button
+- an Upcoming button
+- visible result text
+- watch App Intents for Siri and Shortcuts
+
+The watch App Intents return dialog text so Siri on Apple Watch has a spoken result to use.
+
+Point and Scan is not part of the first watch pass. It is a continuous heading-driven mode, while the first watch target is focused on short one-shot reports that make sense through Siri.
+
+The watch target is embedded in the main Intersector iOS app target. That lets the watch app build along with the iOS app for TestFlight and App Store distribution.
 
 ## Siri And Shortcuts
 
