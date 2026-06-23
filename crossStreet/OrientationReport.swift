@@ -15,13 +15,23 @@ struct OrientReport: Equatable {
 	var relDir: String?
 	var relDegrees: CLLocationDirection?
 	var street: String?
+	var crossStreet: String? = nil
 	var head: String?
 	var area: String?
 	var toward: String?
 	var conf: ConfLev
 
 	func text(with prefs: AppPrefs) -> String {
-		var text = "\(leadText): \(cross), about \(dist)"
+		var text: String
+		if
+			prefs.intersectionWording == .streetContext,
+			let street,
+			let crossStreet
+		{
+			text = "\(leadText): On \(street), \(crossStreet) is about \(dist)"
+		} else {
+			text = "\(leadText): \(cross), about \(dist)"
+		}
 		if let direction = directionText(with: prefs) {
 			text += " \(direction)"
 		}
@@ -29,9 +39,6 @@ struct OrientReport: Equatable {
 			text += " \(area)"
 		}
 		text += "."
-		if conf != .high {
-			text += " \(conf.text)."
-		}
 		return text
 	}
 
@@ -101,17 +108,6 @@ enum ConfLev {
 	case high
 	case medium
 	case low
-
-	var text: String {
-		switch self {
-		case .high:
-			""
-		case .medium:
-			"Direction is an estimate"
-		case .low:
-			"Direction is uncertain"
-		}
-	}
 }
 
 struct DeviceContext: Equatable {
@@ -152,6 +148,19 @@ struct MapDataSet: Equatable {
 			}
 	}
 
+	func nearestRoadName(
+		to coordinate: CLLocationCoordinate2D,
+		matching roadNames: [String]
+	) -> String? {
+		let allowedNames = Set(roadNames)
+		return roads
+			.filter { allowedNames.contains($0.name) }
+			.min {
+				$0.minimumDistance(to: coordinate) < $1.minimumDistance(to: coordinate)
+			}?
+			.name
+	}
+
 	private func nearestRoad(to coordinate: CLLocationCoordinate2D) -> MapRoad? {
 		roads.min {
 			$0.minimumDistance(to: coordinate) < $1.minimumDistance(to: coordinate)
@@ -161,9 +170,48 @@ struct MapDataSet: Equatable {
 
 extension MapRoad {
 	func minimumDistance(to coordinate: CLLocationCoordinate2D) -> CLLocationDistance {
-		coordinates
-			.map { Geo.distanceMeters(from: coordinate, to: $0) }
+		guard coordinates.count > 1 else {
+			return coordinates.first.map {
+				Geo.distanceMeters(from: coordinate, to: $0)
+			} ?? .greatestFiniteMagnitude
+		}
+
+		return zip(coordinates, coordinates.dropFirst())
+			.map { start, end in
+				Self.distance(
+					from: coordinate,
+					toSegmentFrom: start,
+					to: end
+				)
+			}
 			.min() ?? .greatestFiniteMagnitude
+	}
+
+	private static func distance(
+		from coordinate: CLLocationCoordinate2D,
+		toSegmentFrom start: CLLocationCoordinate2D,
+		to end: CLLocationCoordinate2D
+	) -> CLLocationDistance {
+		let earthRadius = 6_371_000.0
+		let latitudeScale = Double.pi / 180
+		let longitudeScale = latitudeScale * cos(coordinate.latitude * latitudeScale)
+		let startX = (start.longitude - coordinate.longitude) * longitudeScale * earthRadius
+		let startY = (start.latitude - coordinate.latitude) * latitudeScale * earthRadius
+		let endX = (end.longitude - coordinate.longitude) * longitudeScale * earthRadius
+		let endY = (end.latitude - coordinate.latitude) * latitudeScale * earthRadius
+		let segmentX = endX - startX
+		let segmentY = endY - startY
+		let segmentLengthSquared = segmentX * segmentX + segmentY * segmentY
+
+		guard segmentLengthSquared > 0 else {
+			return hypot(startX, startY)
+		}
+
+		let projection = -(startX * segmentX + startY * segmentY) / segmentLengthSquared
+		let clampedProjection = min(1, max(0, projection))
+		let closestX = startX + clampedProjection * segmentX
+		let closestY = startY + clampedProjection * segmentY
+		return hypot(closestX, closestY)
 	}
 }
 

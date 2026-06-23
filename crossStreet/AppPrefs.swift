@@ -12,6 +12,7 @@ struct AppPrefs {
 	var detail = DetailLev.standard
 	var measurementUnit = MeasurementUnit.feet
 	var directionStyle = DirectionStyle.words
+	var intersectionWording = IntersectionWording.direct
 	var mapDetails = MapDetailOptions()
 	var haptics = true
 
@@ -20,6 +21,7 @@ struct AppPrefs {
 		detail: DetailLev = .standard,
 		measurementUnit: MeasurementUnit = .feet,
 		directionStyle: DirectionStyle = .words,
+		intersectionWording: IntersectionWording = .direct,
 		mapDetails: MapDetailOptions = MapDetailOptions(),
 		haptics: Bool = true
 	) {
@@ -27,6 +29,7 @@ struct AppPrefs {
 		self.detail = detail
 		self.measurementUnit = measurementUnit
 		self.directionStyle = directionStyle
+		self.intersectionWording = intersectionWording
 		self.mapDetails = mapDetails
 		self.haptics = haptics
 	}
@@ -118,6 +121,22 @@ enum DirectionStyle: String, CaseIterable, Identifiable {
 			"Words"
 		case .clockFace:
 			"Clock Face"
+		}
+	}
+}
+
+enum IntersectionWording: String, CaseIterable, Identifiable {
+	case direct
+	case streetContext
+
+	var id: String { rawValue }
+
+	var label: String {
+		switch self {
+		case .direct:
+			"Direct"
+		case .streetContext:
+			"Street Context"
 		}
 	}
 }

@@ -14,6 +14,7 @@ private enum SettingsFocusTarget: Hashable {
 	case walkingPaths
 	case measurementUnit
 	case direction
+	case intersectionWording
 	case verbosity
 	case haptics
 }
@@ -24,6 +25,7 @@ struct ContentView: View {
 	@AppStorage("detailLevel") private var detailRaw = DetailLev.standard.rawValue
 	@AppStorage("measurementUnit") private var measurementUnitRaw = MeasurementUnit.feet.rawValue
 	@AppStorage("directionStyle") private var directionStyleRaw = DirectionStyle.words.rawValue
+	@AppStorage("intersectionWording") private var intersectionWordingRaw = IntersectionWording.direct.rawValue
 	@AppStorage("includeCrossings") private var includeCrossings = false
 	@AppStorage("includeWalkingPaths") private var includeWalkingPaths = false
 	@AppStorage("hapticsEnabled") private var hapticsEnabled = true
@@ -50,6 +52,7 @@ struct ContentView: View {
 			detail: DetailLev(rawValue: detailRaw) ?? .standard,
 			measurementUnit: MeasurementUnit(rawValue: measurementUnitRaw) ?? .feet,
 			directionStyle: DirectionStyle(rawValue: directionStyleRaw) ?? .words,
+			intersectionWording: IntersectionWording(rawValue: intersectionWordingRaw) ?? .direct,
 			mapDetails: MapDetailOptions(
 				includeCrossings: includeCrossings,
 				includeWalkingPaths: includeWalkingPaths
@@ -250,6 +253,24 @@ struct ContentView: View {
 		}
 	}
 
+	private var intersectionWordingBinding: Binding<IntersectionWording> {
+		Binding {
+			prefs.intersectionWording
+		} set: { wording in
+			intersectionWordingRaw = wording.rawValue
+			settingsFocusTarget = .intersectionWording
+		}
+	}
+
+	private var intersectionWordingDescription: String {
+		switch prefs.intersectionWording {
+		case .direct:
+			"Names both streets at the intersection."
+		case .streetContext:
+			"Names the current street first, then the cross street."
+		}
+	}
+
 	private var hapticsBinding: Binding<Bool> {
 		Binding {
 			hapticsEnabled
@@ -280,6 +301,12 @@ struct ContentView: View {
 	private var settingsView: some View {
 		NavigationStack {
 			Form {
+				Text("Intersection directions and distances are estimates based on your location, device heading, and available map data. Accuracy can vary with GPS and compass conditions.")
+					.font(.footnote)
+					.foregroundStyle(.secondary)
+					.lineLimit(nil)
+					.fixedSize(horizontal: false, vertical: true)
+
 				Picker("Neighborhood context", selection: areaModeBinding) {
 					ForEach(AreaMode.allCases) { mode in
 						Text(mode.label).tag(mode)
@@ -295,6 +322,23 @@ struct ContentView: View {
 						.accessibilityFocused($settingsFocusTarget, equals: .walkingPaths)
 				} header: {
 					Text("Map Detail")
+				}
+
+				Section {
+					Picker("Intersection wording", selection: intersectionWordingBinding) {
+						ForEach(IntersectionWording.allCases) { item in
+							Text(item.label).tag(item)
+						}
+					}
+					.pickerStyle(.segmented)
+					.accessibilityFocused($settingsFocusTarget, equals: .intersectionWording)
+					Text(intersectionWordingDescription)
+						.font(.footnote)
+						.foregroundStyle(.secondary)
+						.lineLimit(nil)
+						.fixedSize(horizontal: false, vertical: true)
+				} header: {
+					Text("Intersection Wording")
 				}
 
 				Section {
@@ -352,12 +396,9 @@ struct ContentView: View {
 							.fixedSize(horizontal: false, vertical: true)
 					}
 					.accessibilityHint("Opens Mail so you can send feedback about Intersector.")
-				}
-				Section {
-					externalLink(title: "Privacy Policy", url: "https://marconius.com/csPrivacy/")
-				}
 
-				Section {
+					externalLink(title: "Privacy Policy", url: "https://marconius.com/csPrivacy/")
+
 					DisclosureGroup("Acknowledgements") {
 						VStack(alignment: .leading, spacing: 8) {
 							Text("Map data from OpenStreetMap, available under the Open Database License.")
@@ -370,9 +411,7 @@ struct ContentView: View {
 						}
 						.font(.footnote)
 					}
-				}
 
-				Section {
 					Text(appFooterText)
 						.font(.footnote)
 						.multilineTextAlignment(.center)
@@ -380,6 +419,8 @@ struct ContentView: View {
 						.fixedSize(horizontal: false, vertical: true)
 						.frame(maxWidth: .infinity, alignment: .center)
 						.foregroundStyle(.secondary)
+				} header: {
+					Text("About Intersector")
 				}
 			}
 			.scrollContentBackground(.hidden)

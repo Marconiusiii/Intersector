@@ -58,6 +58,70 @@ struct IntersectorTests {
 		#expect(text == "Upcoming: Mission Street and 6th Street, about 140 feet at 2 o'clock toward Civic Center.")
 	}
 
+	@Test func streetContextNamesCurrentStreetBeforeCrossStreet() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.intersectionWording = .streetContext
+		let report = OrientReport(
+			kind: .upcoming,
+			cross: "E 20th Avenue and Main Street",
+			dist: "140 feet",
+			relDir: "ahead",
+			relDegrees: 0,
+			street: "E 20th Avenue",
+			crossStreet: "Main Street",
+			head: "north",
+			area: nil,
+			toward: nil,
+			conf: .high
+		)
+
+		#expect(report.text(with: prefs) == "Upcoming: On E 20th Avenue, Main Street is about 140 feet ahead.")
+	}
+
+	@Test func streetContextFallsBackToDirectWordingWithoutCurrentStreet() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.intersectionWording = .streetContext
+		let report = OrientReport(
+			kind: .nearest,
+			cross: "E 20th Avenue and Main Street",
+			dist: "80 feet",
+			relDir: "left",
+			relDegrees: 270,
+			street: nil,
+			head: "west",
+			area: nil,
+			toward: nil,
+			conf: .high
+		)
+
+		#expect(report.text(with: prefs) == "Nearest: E 20th Avenue and Main Street, about 80 feet left.")
+	}
+
+	@Test func reportTextOmitsDynamicConfidenceWording() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		let report = OrientReport(
+			kind: .upcoming,
+			cross: "Oak Street and Pine Street",
+			dist: "100 feet",
+			relDir: "ahead",
+			relDegrees: 0,
+			street: "Oak Street",
+			head: "north",
+			area: nil,
+			toward: nil,
+			conf: .medium
+		)
+
+		let text = report.text(with: prefs)
+
+		#expect(text == "Upcoming: Oak Street and Pine Street, about 100 feet ahead.")
+		#expect(!text.localizedCaseInsensitiveContains("estimate"))
+		#expect(!text.localizedCaseInsensitiveContains("uncertain"))
+	}
+
 	@Test func briefVerbosityOmitsNeighborhoodContext() async throws {
 		var prefs = AppPrefs()
 		prefs.areaMode = .toward
@@ -125,6 +189,61 @@ struct IntersectorTests {
 
 		#expect(text == "Pointed: Valencia Street and 16th Street, about 220 feet.")
 		#expect(!text.localizedCaseInsensitiveContains("where the phone is pointing"))
+	}
+
+	@Test func currentStreetMatchingIgnoresUnrelatedCloserRoad() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapData = MapDataSet(
+			intersections: [],
+			roads: [
+				MapRoad(
+					id: "oak",
+					name: "Oak Street",
+					nodeIDs: [1, 2],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 37.0, longitude: -122.001),
+						CLLocationCoordinate2D(latitude: 37.0, longitude: -121.999)
+					]
+				),
+				MapRoad(
+					id: "pine",
+					name: "Pine Street",
+					nodeIDs: [3, 4],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 37.0005, longitude: -122.0005),
+						CLLocationCoordinate2D(latitude: 37.0005, longitude: -121.9995)
+					]
+				),
+				MapRoad(
+					id: "service",
+					name: "Service Road",
+					nodeIDs: [5],
+					coordinates: [origin]
+				)
+			]
+		)
+
+		let street = mapData.nearestRoadName(
+			to: origin,
+			matching: ["Oak Street", "Pine Street"]
+		)
+
+		#expect(street == "Oak Street")
+	}
+
+	@Test func roadDistanceUsesFullSegmentBetweenNodes() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let road = MapRoad(
+			id: "oak",
+			name: "Oak Street",
+			nodeIDs: [1, 2],
+			coordinates: [
+				CLLocationCoordinate2D(latitude: 37.0, longitude: -122.001),
+				CLLocationCoordinate2D(latitude: 37.0, longitude: -121.999)
+			]
+		)
+
+		#expect(road.minimumDistance(to: origin) < 1)
 	}
 
 	@Test func upcomingPrefersCandidateAhead() async throws {

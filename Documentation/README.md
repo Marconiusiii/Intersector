@@ -26,7 +26,7 @@ These are the most important files:
   Shows the first-run onboarding flow and requests location permission.
 
 - `AppPrefs.swift`
-  Defines app settings such as neighborhood context, map detail, measurement unit, direction style, detail level, and haptic feedback.
+  Defines app settings such as neighborhood context, map detail, intersection wording, measurement unit, direction style, detail level, and haptic feedback.
 
 - `LocationProvider.swift`
   Wraps CoreLocation so the rest of the app can ask for location and heading data with async functions.
@@ -129,6 +129,7 @@ This avoids a common SwiftUI problem: if you force large text into a fixed-heigh
 @AppStorage("areaMode") private var areaModeRaw = AreaMode.near.rawValue
 @AppStorage("measurementUnit") private var measurementUnitRaw = MeasurementUnit.feet.rawValue
 @AppStorage("directionStyle") private var directionStyleRaw = DirectionStyle.words.rawValue
+@AppStorage("intersectionWording") private var intersectionWordingRaw = IntersectionWording.direct.rawValue
 @AppStorage("includeCrossings") private var includeCrossings = false
 @AppStorage("includeWalkingPaths") private var includeWalkingPaths = false
 @State private var report: OrientReport?
@@ -214,12 +215,13 @@ func report(_ kind: ReportKind, prefs: AppPrefs = AppPrefs()) async throws -> Or
 It does the high-level work in order:
 
 1. Ask `LocationProvider` for a `DeviceContext`.
-2. Ask `MapDataClient` for nearby intersections.
+2. Ask `MapDataClient` for nearby intersections and road geometry.
 3. Ask `IntersectionFinder` for the best match.
 4. Calculate distance and bearing.
 5. Convert bearing plus heading into a relative direction.
 6. Ask for neighborhood context if the Settings value needs it.
-7. Build an `OrientReport`.
+7. Match the nearest road to the selected intersection when street-context wording is available.
+8. Build an `OrientReport`.
 
 The report service passes the current map detail settings into `MapDataClient`. This matters because changing map detail changes what the app considers a candidate. For example, a named footpath should not appear in results unless the Walking Paths setting is turned on.
 
@@ -520,7 +522,9 @@ That method is:
 currentStreetIntersections(from:)
 ```
 
-It finds the nearest road by comparing the user's coordinate to each road's coordinates. Then it keeps only intersections whose names include that road name.
+It finds the nearest road by measuring from the user's coordinate to the full line segments between road nodes. Then it keeps only intersections whose names include that road name.
+
+For Street Context wording, the same distance calculation is limited to the roads that form the selected intersection. A nearby unrelated road therefore cannot force the report back to Direct wording.
 
 ## MapDataCache
 
@@ -616,9 +620,9 @@ The bearing math returns a compass degree from one coordinate to another. The ap
 - compass heading
 - area
 - toward
-- confidence
+- internal confidence level
 
-Then `text(with:)` turns the structured data into one short sentence, plus a confidence sentence if needed.
+Then `text(with:)` turns the structured data into one short sentence. It does not append a confidence sentence to each report, which keeps repeated announcements concise.
 
 For example:
 
@@ -751,6 +755,8 @@ Report announcements use the default announcement priority. The app does not mov
 
 Settings are built inside a SwiftUI `Form` in `ContentView.swift`.
 
+The first item explains that intersection directions and distances are estimates based on location, device heading, and available map data. Keeping this information in Settings avoids repeating confidence wording in every visible and spoken report.
+
 The settings use native SwiftUI controls:
 
 - `Picker`
@@ -766,12 +772,15 @@ struct AppPrefs {
 	var detail = DetailLev.standard
 	var measurementUnit = MeasurementUnit.feet
 	var directionStyle = DirectionStyle.words
+	var intersectionWording = IntersectionWording.direct
 	var mapDetails = MapDetailOptions()
 	var haptics = true
 }
 ```
 
-`AreaMode`, `DetailLev`, `MeasurementUnit`, and `DirectionStyle` are enums. Each enum provides a `label` for display in the UI.
+`AreaMode`, `DetailLev`, `MeasurementUnit`, `DirectionStyle`, and `IntersectionWording` are enums. Each enum provides a `label` for display in the UI.
+
+Intersection wording uses a segmented control. Direct wording names both roads as an intersection. Street Context first names the road nearest the device, then identifies the other road. For example: `Upcoming: On E 20th Avenue, Main Street is about 140 feet ahead.` A short description below the control changes with the selection. If the nearest road cannot be matched confidently to the selected intersection, the report uses Direct wording instead.
 
 Measurement unit controls whether report distances use feet or meters.
 
@@ -784,6 +793,8 @@ Verbosity controls whether extra neighborhood context is included in report text
 This keeps display strings near the setting values they describe.
 
 The Settings view also uses `@AccessibilityFocusState` for its setting controls. When a user changes a setting, the binding saves the new value and marks that same control as the accessibility focus target. That helps VoiceOver stay on the control that changed instead of jumping to the sheet's Done button after SwiftUI redraws the form.
+
+The feedback button, privacy policy, acknowledgements, and app information are grouped in a native Form section headed `About Intersector`.
 
 ## Onboarding
 

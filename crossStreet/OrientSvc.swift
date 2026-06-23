@@ -61,12 +61,12 @@ struct OrientSvc {
 
 	func report(_ kind: ReportKind, prefs: AppPrefs = AppPrefs()) async throws -> OrientReport {
 		let context = try await locationProvider.currentContext()
-		let intersections = try await intersections(for: kind, from: context, prefs: prefs)
+		let mapData = try await mapData(for: kind, from: context, prefs: prefs)
 
 		guard let match = finder.bestMatch(
 			for: kind,
 			from: context,
-			in: intersections
+			in: mapData.intersections
 		) else {
 			throw OrientError.noIntersections
 		}
@@ -86,6 +86,14 @@ struct OrientSvc {
 			for: prefs.areaMode,
 			from: context
 		)
+		let currentStreet = mapData.nearestRoadName(
+			to: context.coordinate,
+			matching: match.names
+		)
+		let crossStreet = currentStreet.flatMap { roadName in
+			let otherNames = match.names.filter { $0 != roadName }
+			return otherNames.isEmpty ? nil : otherNames.joined(separator: " and ")
+		}
 
 		return OrientReport(
 			kind: kind,
@@ -93,7 +101,8 @@ struct OrientSvc {
 			dist: Geo.spokenDistance(distance, unit: prefs.measurementUnit),
 			relDir: relDir,
 			relDegrees: relDegrees,
-			street: match.names.first,
+			street: currentStreet,
+			crossStreet: crossStreet,
 			head: Geo.compassDirection(bearing),
 			area: neighborhoodContext.area,
 			toward: neighborhoodContext.toward,
@@ -101,28 +110,28 @@ struct OrientSvc {
 		)
 	}
 
-	private func intersections(
+	private func mapData(
 		for kind: ReportKind,
 		from context: DeviceContext,
 		prefs: AppPrefs
-	) async throws -> [IntersectionCandidate] {
+	) async throws -> MapDataSet {
 		let fastRadius: CLLocationDistance = 225
 		let fallbackRadius: CLLocationDistance = 375
-		let intersections = try await mapDataClient.intersections(
+		let mapData = try await mapDataClient.mapData(
 			near: context.coordinate,
 			radiusMeters: fastRadius,
 			options: prefs.mapDetails
 		)
 
-		if shouldFetchFallback(for: kind, from: context, intersections: intersections) {
-			return try await mapDataClient.intersections(
+		if shouldFetchFallback(for: kind, from: context, intersections: mapData.intersections) {
+			return try await mapDataClient.mapData(
 				near: context.coordinate,
 				radiusMeters: fallbackRadius,
 				options: prefs.mapDetails
 			)
 		}
 
-		return intersections
+		return mapData
 	}
 
 	private func neighborhoodContext(
