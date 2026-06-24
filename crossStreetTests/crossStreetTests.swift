@@ -32,6 +32,26 @@ struct IntersectorTests {
 		#expect(report.text(with: prefs) == "Amsterdam Avenue and West 94th Street.")
 	}
 
+	@Test func minimalVerbosityNamesCurrentStreetFirst() async throws {
+		var prefs = AppPrefs()
+		prefs.detail = .minimal
+		let report = OrientReport(
+			kind: .nearest,
+			cross: "Main Street and Oak Avenue",
+			dist: "80 feet",
+			relDir: "left",
+			relDegrees: 270,
+			street: "Oak Avenue",
+			crossStreet: "Main Street",
+			head: "west",
+			area: nil,
+			toward: nil,
+			conf: .high
+		)
+
+		#expect(report.text(with: prefs) == "Oak Avenue and Main Street.")
+	}
+
 	@Test @MainActor func savedPreferencesLoadSiriSettings() async throws {
 		let suiteName = "IntersectorTests.\(UUID().uuidString)"
 		let defaults = try #require(UserDefaults(suiteName: suiteName))
@@ -340,7 +360,34 @@ struct IntersectorTests {
 		)
 		#expect(
 			position.text(with: minimalPrefs) ==
-				"Amsterdam Avenue, West 93rd Street, West 94th Street, West 95th Street."
+				"Amsterdam Avenue and West 93rd Street, West 94th Street, West 95th Street."
+		)
+	}
+
+	@Test func minimalSpokenIntersectionsKeepsUnrelatedIntersectionsComplete() async throws {
+		var prefs = AppPrefs()
+		prefs.detail = .minimal
+		let position = StreetPositionContext(
+			streetName: "Foothill Boulevard",
+			boundaries: [
+				IntersectionCandidate(
+					id: "first",
+					names: ["Foothill Boulevard", "Frazier Avenue"],
+					coordinate: CLLocationCoordinate2D(latitude: 34.0, longitude: -118.0)
+				),
+				IntersectionCandidate(
+					id: "second",
+					names: ["Stanley Avenue", "Talbot Avenue"],
+					coordinate: CLLocationCoordinate2D(latitude: 34.001, longitude: -118.0)
+				)
+			],
+			following: nil,
+			isOnStreet: true
+		)
+
+		#expect(
+			position.text(with: prefs) ==
+				"Foothill Boulevard and Frazier Avenue, Stanley Avenue and Talbot Avenue."
 		)
 	}
 
@@ -431,6 +478,82 @@ struct IntersectorTests {
 		)
 
 		#expect(match?.id == "north")
+	}
+
+	@Test func rankedUpcomingExcludesCloserIntersectionBehindPhone() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let context = DeviceContext(coordinate: origin, headingDegrees: 0)
+		let candidates = [
+			IntersectionCandidate(
+				id: "behind",
+				names: ["Oak Street", "Behind Street"],
+				coordinate: CLLocationCoordinate2D(latitude: 36.9995, longitude: -122.0)
+			),
+			IntersectionCandidate(
+				id: "second-ahead",
+				names: ["Oak Street", "Second Street"],
+				coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+			),
+			IntersectionCandidate(
+				id: "first-ahead",
+				names: ["Oak Street", "First Street"],
+				coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+			)
+		]
+
+		let ranked = IntersectionFinder().rankedUpcoming(from: context, in: candidates)
+
+		#expect(ranked.map(\.id) == ["first-ahead", "second-ahead"])
+	}
+
+	@Test func multipleUpcomingIntersectionsFollowPhoneHeading() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapData = MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: "behind",
+					names: ["Oak Street", "Behind Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 36.9995, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "first-ahead",
+					names: ["Oak Street", "First Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "second-ahead",
+					names: ["Oak Street", "Second Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+				)
+			],
+			roads: [
+				MapRoad(
+					id: "oak",
+					name: "Oak Street",
+					nodeIDs: [1, 2],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 36.995, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 37.005, longitude: -122.0)
+					]
+				)
+			]
+		)
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(coordinate: origin, headingDegrees: 0)
+			),
+			mapDataClient: StaticMapDataClient(data: mapData),
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.detail = .minimal
+		prefs.spokenIntersectionCount = .two
+
+		let text = try await service.spokenText(.upcoming, prefs: prefs)
+
+		#expect(text == "Oak Street and First Street, Second Street.")
+		#expect(!text.contains("Behind Street"))
 	}
 
 	@Test func rankedNearestReturnsRequestedDistanceOrder() async throws {
@@ -863,6 +986,26 @@ struct FakeMapDataClient: MapDataFetching {
 			),
 			roads: []
 		)
+	}
+}
+
+struct StaticMapDataClient: MapDataFetching {
+	var data: MapDataSet
+
+	func intersections(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> [IntersectionCandidate] {
+		data.intersections
+	}
+
+	func mapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> MapDataSet {
+		data
 	}
 }
 

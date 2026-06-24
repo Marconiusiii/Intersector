@@ -70,6 +70,20 @@ struct IntersectionFinder {
 		}
 	}
 
+	func rankedUpcoming(
+		from context: DeviceContext,
+		in candidates: [IntersectionCandidate]
+	) -> [IntersectionCandidate] {
+		guard let heading = context.headingDegrees else {
+			return []
+		}
+		let forwardCandidates = candidates.filter { candidate in
+			let bearing = Geo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
+			return angleDelta(from: heading, to: bearing) <= 60
+		}
+		return rankedNearest(from: context.coordinate, in: forwardCandidates)
+	}
+
 	func scanMatch(
 		from context: DeviceContext,
 		in candidates: [IntersectionCandidate]

@@ -221,7 +221,7 @@ It does the high-level work in order:
 5. Convert bearing plus heading into a relative direction.
 6. Ask for neighborhood context if the Settings value needs it.
 7. Match the nearest road to the selected intersection when street-context wording is available.
-8. Build an `OrientReport`, or build multi-intersection street context when the Spoken Intersections setting requests it.
+8. Build an `OrientReport`, or build an ordered report list when the Spoken Intersections setting requests multiple results.
 
 The report service passes the current map detail settings into `MapDataClient`. This matters because changing map detail changes what the app considers a candidate. For example, a named footpath should not appear in results unless the Walking Paths setting is turned on.
 
@@ -530,9 +530,7 @@ It finds the nearest road by measuring from the user's coordinate to the full li
 
 For Street Context wording, the same distance calculation is limited to the roads that form the selected intersection. A nearby unrelated road therefore cannot force the report back to Direct wording.
 
-For Spoken Intersections values 2 and 3, the app uses the nearest road segment as a local direction reference. It projects same-street intersections along that road direction, selects the nearest result on each side, and only then uses the word `between`. Value 3 adds the following result on the dependable forward side. Accurate movement course is preferred while walking; otherwise the device heading is used. If neither is available, the app returns the two-intersection context without guessing.
-
-The distance from the user to the road also controls the opening word. A location close to the street uses `On`. A location farther inside an area such as a park uses `Along` so the app does not claim the user is physically on the road.
+For Spoken Intersections values 2 and 3, Nearest Intersection ranks mapped candidates by distance. Upcoming Intersection first filters candidates to a 120-degree forward-facing cone centered on the phone heading, then ranks those candidates from closest to farthest. A closer intersection behind the phone is therefore excluded from an Upcoming result. If a heading is unavailable, Upcoming falls back to one nearest result instead of guessing a forward direction.
 
 ## MapDataCache
 
@@ -799,9 +797,11 @@ Walking Paths remains off by default. The Settings explanation makes clear that 
 
 Direction style controls whether report directions use word directions, such as `ahead and right`, or clock-face directions, such as `at 2 o'clock`. Clock-face directions treat the direction the phone is pointing as 12 o'clock.
 
-Verbosity has three levels. Minimal returns intersection names only and overrides distance, direction, neighborhood, confidence, and Intersection Wording additions. Brief adds distance and direction. Standard can also add neighborhood context, such as `in SoMa` or `toward Civic Center`, when that data is available.
+Verbosity has three levels. Minimal returns intersection names only and overrides distance, direction, neighborhood, confidence, and Intersection Wording additions. When several results share the same street, Minimal names that street in the first intersection and then lists the remaining cross streets, such as `Amsterdam Avenue and West 93rd Street, West 94th Street`. When the results do not share a street, each intersection remains complete, such as `Foothill Boulevard and Frazier Avenue, Stanley Avenue and Talbot Avenue`. Brief adds distance and direction. Standard can also add neighborhood context, such as `in SoMa` or `toward Civic Center`, when that data is available.
 
-Spoken Intersections is a segmented control with values 1, 2, and 3. Value 1 keeps the existing single-intersection result. Value 2 speaks intersections on either side of the user's position along the same street. Value 3 also speaks the following intersection on the dependable forward side. The explanatory text below the control changes with the selected value.
+Spoken Intersections is a segmented control with values 1, 2, and 3. The selected number controls how many results the app requests. Nearest orders multiple results by distance. Upcoming uses the phone heading and orders only forward-facing results from closest to farthest. The visible segment labels remain numeric, while VoiceOver receives the complete labels `One intersection`, `Two intersections`, and `Three intersections`. The explanatory text for values 2 and 3 states exactly how many results Nearest and Upcoming will speak.
+
+Settings groups use native `Section` headers. This gives Measurement Unit, Direction, Verbosity, and the other setting groups consistent Form spacing, Dynamic Type behavior, and heading navigation without separate heading-like rows.
 
 This keeps display strings near the setting values they describe.
 

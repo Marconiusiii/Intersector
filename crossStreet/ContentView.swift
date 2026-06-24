@@ -296,11 +296,22 @@ struct ContentView: View {
 	private var spokenIntersectionCountDescription: String {
 		switch prefs.spokenIntersectionCount {
 		case .one:
-			"Speaks one nearby intersection."
+			"Speaks one intersection."
 		case .two:
-			"Speaks the intersections on either side of your position."
+			"Nearest speaks the two closest intersections. Upcoming speaks the first two intersections ahead."
 		case .three:
-			"Also speaks the following intersection in the direction you are facing."
+			"Nearest speaks the three closest intersections. Upcoming speaks the first three intersections ahead."
+		}
+	}
+
+	private func spokenIntersectionAccessibilityLabel(_ count: SpokenIntersectionCount) -> String {
+		switch count {
+		case .one:
+			"One intersection"
+		case .two:
+			"Two intersections"
+		case .three:
+			"Three intersections"
 		}
 	}
 
@@ -382,7 +393,9 @@ struct ContentView: View {
 				Section {
 					Picker("Spoken Intersections", selection: spokenIntersectionCountBinding) {
 						ForEach(SpokenIntersectionCount.allCases) { count in
-							Text(count.label).tag(count)
+							Text(count.label)
+								.accessibilityLabel(spokenIntersectionAccessibilityLabel(count))
+								.tag(count)
 						}
 					}
 					.pickerStyle(.segmented)
@@ -397,9 +410,6 @@ struct ContentView: View {
 				}
 
 				Section {
-					Text("Measurement Unit")
-						.font(.headline)
-						.accessibilityAddTraits(.isHeader)
 					Picker("Measurement Unit", selection: measurementUnitBinding) {
 						ForEach(MeasurementUnit.allCases) { item in
 							Text(item.label).tag(item)
@@ -407,12 +417,11 @@ struct ContentView: View {
 					}
 					.pickerStyle(.segmented)
 					.accessibilityFocused($settingsFocusTarget, equals: .measurementUnit)
+				} header: {
+					Text("Measurement Unit")
 				}
 
 				Section {
-					Text("Direction")
-						.font(.headline)
-						.accessibilityAddTraits(.isHeader)
 					Picker("Direction", selection: directionStyleBinding) {
 						ForEach(DirectionStyle.allCases) { item in
 							Text(item.label).tag(item)
@@ -420,12 +429,11 @@ struct ContentView: View {
 					}
 					.pickerStyle(.segmented)
 					.accessibilityFocused($settingsFocusTarget, equals: .direction)
+				} header: {
+					Text("Direction")
 				}
 
 				Section {
-					Text("Verbosity")
-						.font(.headline)
-						.accessibilityAddTraits(.isHeader)
 					Picker("Verbosity", selection: detailBinding) {
 						ForEach(DetailLev.allCases) { item in
 							Text(item.label).tag(item)
@@ -438,6 +446,8 @@ struct ContentView: View {
 						.foregroundStyle(.secondary)
 						.lineLimit(nil)
 						.fixedSize(horizontal: false, vertical: true)
+				} header: {
+					Text("Verbosity")
 				}
 
 				Toggle("Haptic scan feedback", isOn: hapticsBinding)

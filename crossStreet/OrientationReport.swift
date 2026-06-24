@@ -22,8 +22,18 @@ struct OrientReport: Equatable {
 	var conf: ConfLev
 
 	func text(with prefs: AppPrefs) -> String {
+		text(with: prefs, includeLead: true)
+	}
+
+	func text(with prefs: AppPrefs, includeLead: Bool) -> String {
 		if prefs.detail == .minimal {
-			return cross.hasSuffix(".") ? cross : "\(cross)."
+			let minimalText: String
+			if let street, let crossStreet {
+				minimalText = "\(street) and \(crossStreet)"
+			} else {
+				minimalText = cross
+			}
+			return minimalText.hasSuffix(".") ? minimalText : "\(minimalText)."
 		}
 
 		var text: String
@@ -32,9 +42,12 @@ struct OrientReport: Equatable {
 			let street,
 			let crossStreet
 		{
-			text = "\(leadText): On \(street), \(crossStreet) is about \(dist)"
+			text = "On \(street), \(crossStreet) is about \(dist)"
 		} else {
-			text = "\(leadText): \(cross), about \(dist)"
+			text = "\(cross), about \(dist)"
+		}
+		if includeLead {
+			text = "\(leadText): \(text)"
 		}
 		if let direction = directionText(with: prefs) {
 			text += " \(direction)"
@@ -88,6 +101,39 @@ struct OrientReport: Equatable {
 	private static func clockFaceDirection(from degrees: CLLocationDirection) -> String {
 		let hour = Int((Geo.normalizedDegrees(degrees) + 15) / 30) % 12
 		return "at \(hour == 0 ? 12 : hour) o'clock"
+	}
+}
+
+struct IntersectionReportList: Equatable {
+	var reports: [OrientReport]
+
+	func text(with prefs: AppPrefs) -> String {
+		guard let first = reports.first else {
+			return ""
+		}
+		if prefs.detail == .minimal {
+			let sharedStreet = first.street.flatMap { streetName in
+				reports.allSatisfy { $0.street == streetName && $0.crossStreet != nil }
+					? streetName
+					: nil
+			}
+			let labels: [String]
+			if let sharedStreet {
+				labels = reports.enumerated().map { index, report in
+					guard let crossStreet = report.crossStreet else {
+						return report.cross
+					}
+					return index == 0 ? "\(sharedStreet) and \(crossStreet)" : crossStreet
+				}
+			} else {
+				labels = reports.map(\.cross)
+			}
+			return labels.joined(separator: ", ") + "."
+		}
+
+		return reports.enumerated().map { index, report in
+			report.text(with: prefs, includeLead: index == 0)
+		}.joined(separator: " ")
 	}
 }
 
@@ -169,10 +215,15 @@ struct StreetPositionContext: Equatable {
 
 	func text(with prefs: AppPrefs) -> String {
 		if prefs.detail == .minimal {
-			var labels = [streetName]
-			labels += boundaries.map { $0.contextLabel(on: streetName, minimal: true) }
-			if let following {
-				labels.append(following.contextLabel(on: streetName, minimal: true))
+			let candidates = boundaries + [following].compactMap { $0 }
+			let allShareStreet = candidates.allSatisfy { $0.names.contains(streetName) }
+			let labels: [String]
+			if allShareStreet, let first = candidates.first {
+				labels = [first.title] + candidates.dropFirst().map {
+					$0.contextLabel(on: streetName, minimal: true)
+				}
+			} else {
+				labels = candidates.map(\.title)
 			}
 			return labels.joined(separator: ", ") + "."
 		}

@@ -89,22 +89,44 @@ struct OrientSvc {
 		}
 
 		let context = try await locationProvider.currentContext()
-		let mapData = try await mapDataForStreetPosition(from: context, prefs: prefs)
-		if let position = mapData.streetPosition(
+		let requestedCount = prefs.spokenIntersectionCount.rawValue
+		let minimumCandidateCount = kind == .upcoming && context.headingDegrees == nil
+			? 1
+			: requestedCount
+		let mapData = try await mapData(
+			for: kind,
 			from: context,
-			count: prefs.spokenIntersectionCount
-		) {
-			return position.text(with: prefs)
-		}
-
-		let fallback = try await makeReport(
-			kind,
-			rank: 1,
-			context: context,
-			mapData: mapData,
+			minimumCandidateCount: minimumCandidateCount,
 			prefs: prefs
 		)
-		return fallback.text(with: prefs)
+		let ranked: [IntersectionCandidate]
+		switch kind {
+		case .nearest:
+			ranked = finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
+		case .upcoming, .scan:
+			if context.headingDegrees == nil {
+				ranked = finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
+			} else {
+				ranked = finder.rankedUpcoming(from: context, in: mapData.intersections)
+			}
+		}
+		let resultCount = kind == .upcoming && context.headingDegrees == nil ? 1 : requestedCount
+		let matches = Array(ranked.prefix(resultCount))
+		guard !matches.isEmpty else {
+			throw OrientError.noIntersections
+		}
+		let neighborhoodContext = await neighborhoodContext(for: prefs.areaMode, from: context)
+		let reports = matches.map { match in
+			makeReport(
+				kind,
+				match: match,
+				context: context,
+				mapData: mapData,
+				prefs: prefs,
+				neighborhoodContext: neighborhoodContext
+			)
+		}
+		return IntersectionReportList(reports: reports).text(with: prefs)
 	}
 
 	private func makeReport(
@@ -114,7 +136,6 @@ struct OrientSvc {
 		mapData: MapDataSet,
 		prefs: AppPrefs
 	) async throws -> OrientReport {
-
 		let match = if kind == .nearest {
 			finder.nearest(
 				rank: rank,
@@ -124,11 +145,28 @@ struct OrientSvc {
 		} else {
 			finder.bestMatch(for: kind, from: context, in: mapData.intersections)
 		}
-
 		guard let match else {
 			throw OrientError.noIntersections
 		}
+		let neighborhoodContext = await neighborhoodContext(for: prefs.areaMode, from: context)
+		return makeReport(
+			kind,
+			match: match,
+			context: context,
+			mapData: mapData,
+			prefs: prefs,
+			neighborhoodContext: neighborhoodContext
+		)
+	}
 
+	private func makeReport(
+		_ kind: ReportKind,
+		match: IntersectionCandidate,
+		context: DeviceContext,
+		mapData: MapDataSet,
+		prefs: AppPrefs,
+		neighborhoodContext: NeighborhoodContext
+	) -> OrientReport {
 		let distance = Geo.distanceMeters(from: context.coordinate, to: match.coordinate)
 		let bearing = Geo.bearingDegrees(from: context.coordinate, to: match.coordinate)
 		let relDegrees = relativeDegrees(
@@ -139,10 +177,6 @@ struct OrientSvc {
 			bearing: bearing,
 			heading: context.headingDegrees,
 			kind: kind
-		)
-		let neighborhoodContext = await neighborhoodContext(
-			for: prefs.areaMode,
-			from: context
 		)
 		let currentStreet = mapData.nearestRoadName(
 			to: context.coordinate,
@@ -169,34 +203,6 @@ struct OrientSvc {
 			toward: neighborhoodContext.toward,
 			conf: confidence(for: kind, heading: context.headingDegrees)
 		)
-	}
-
-	private func mapDataForStreetPosition(
-		from context: DeviceContext,
-		prefs: AppPrefs
-	) async throws -> MapDataSet {
-		let radii: [CLLocationDistance] = [225, 375, 750, 1_200]
-		var latestData = MapDataSet(intersections: [], roads: [])
-
-		for radius in radii {
-			latestData = try await mapDataClient.mapData(
-				near: context.coordinate,
-				radiusMeters: radius,
-				options: prefs.mapDetails
-			)
-			if let position = latestData.streetPosition(
-				from: context,
-				count: prefs.spokenIntersectionCount
-			) {
-				let needsFollowing = prefs.spokenIntersectionCount == .three &&
-					context.dependableTravelDirection != nil
-				if !needsFollowing || position.following != nil {
-					return latestData
-				}
-			}
-		}
-
-		return latestData
 	}
 
 	private func mapData(
@@ -240,7 +246,10 @@ struct OrientSvc {
 				in: intersections
 			).count >= minimumCandidateCount
 		}
-		return !shouldFetchFallback(for: kind, from: context, intersections: intersections)
+		guard context.headingDegrees != nil else {
+			return !intersections.isEmpty
+		}
+		return finder.rankedUpcoming(from: context, in: intersections).count >= minimumCandidateCount
 	}
 
 	private func neighborhoodContext(
@@ -264,25 +273,6 @@ struct OrientSvc {
 			)
 		} catch {
 			return NeighborhoodContext(area: nil, toward: nil)
-		}
-	}
-
-	private func shouldFetchFallback(
-		for kind: ReportKind,
-		from context: DeviceContext,
-		intersections: [IntersectionCandidate]
-	) -> Bool {
-		guard !intersections.isEmpty else {
-			return true
-		}
-
-		guard kind == .upcoming, let heading = context.headingDegrees else {
-			return false
-		}
-
-		return !intersections.contains { candidate in
-			let bearing = Geo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
-			return finder.angleDelta(from: heading, to: bearing) <= 60
 		}
 	}
 
