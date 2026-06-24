@@ -130,9 +130,9 @@ This avoids a common SwiftUI problem: if you force large text into a fixed-heigh
 @AppStorage("measurementUnit") private var measurementUnitRaw = MeasurementUnit.feet.rawValue
 @AppStorage("directionStyle") private var directionStyleRaw = DirectionStyle.words.rawValue
 @AppStorage("intersectionWording") private var intersectionWordingRaw = IntersectionWording.direct.rawValue
+@AppStorage("spokenIntersectionCount") private var spokenIntersectionCountRaw = SpokenIntersectionCount.one.rawValue
 @AppStorage("includeCrossings") private var includeCrossings = false
 @AppStorage("includeWalkingPaths") private var includeWalkingPaths = false
-@State private var report: OrientReport?
 @State private var statusText = "Choose an action."
 @State private var isLoading = false
 @State private var isDirectionLoading = false
@@ -215,13 +215,13 @@ func report(_ kind: ReportKind, prefs: AppPrefs = AppPrefs()) async throws -> Or
 It does the high-level work in order:
 
 1. Ask `LocationProvider` for a `DeviceContext`.
-2. Ask `MapDataClient` for nearby intersections and road geometry.
+2. Ask `MapDataClient` for nearby intersections and road geometry, expanding the radius only when more results are required.
 3. Ask `IntersectionFinder` for the best match.
 4. Calculate distance and bearing.
 5. Convert bearing plus heading into a relative direction.
 6. Ask for neighborhood context if the Settings value needs it.
 7. Match the nearest road to the selected intersection when street-context wording is available.
-8. Build an `OrientReport`.
+8. Build an `OrientReport`, or build multi-intersection street context when the Spoken Intersections setting requests it.
 
 The report service passes the current map detail settings into `MapDataClient`. This matters because changing map detail changes what the app considers a candidate. For example, a named footpath should not appear in results unless the Walking Paths setting is turned on.
 
@@ -231,6 +231,10 @@ The report service passes the current map detail settings into `MapDataClient`. 
 struct DeviceContext: Equatable {
 	var coordinate: CLLocationCoordinate2D
 	var headingDegrees: CLLocationDirection?
+	var courseDegrees: CLLocationDirection?
+	var courseAccuracy: CLLocationDirection?
+	var speedMetersPerSecond: CLLocationSpeed?
+	var horizontalAccuracy: CLLocationAccuracy?
 }
 ```
 
@@ -503,7 +507,7 @@ The final candidate has:
 - the road names
 - the coordinate
 
-When crossings are enabled, a crossing node on one named road can also become a candidate. The app names that candidate with copy like `Crossing on Oak Street`.
+When crossings are enabled, a crossing node on one named road can also become a candidate. The app names that candidate with copy like `Crossing on Oak Street`. Crossing nodes within 30 meters of a true street intersection are suppressed so they do not create nearly identical ranked results.
 
 ## MapDataSet
 
@@ -522,9 +526,13 @@ That method is:
 currentStreetIntersections(from:)
 ```
 
-It finds the nearest road by measuring from the user's coordinate to the full line segments between road nodes. Then it keeps only intersections whose names include that road name.
+It finds the nearest road by measuring from the user's coordinate to the full line segments between road nodes. Then it keeps only intersections whose road associations include that road name.
 
 For Street Context wording, the same distance calculation is limited to the roads that form the selected intersection. A nearby unrelated road therefore cannot force the report back to Direct wording.
+
+For Spoken Intersections values 2 and 3, the app uses the nearest road segment as a local direction reference. It projects same-street intersections along that road direction, selects the nearest result on each side, and only then uses the word `between`. Value 3 adds the following result on the dependable forward side. Accurate movement course is preferred while walking; otherwise the device heading is used. If neither is available, the app returns the two-intersection context without guessing.
+
+The distance from the user to the road also controls the opening word. A location close to the street uses `On`. A location farther inside an area such as a park uses `Along` so the app does not claim the user is physically on the road.
 
 ## MapDataCache
 
@@ -773,12 +781,13 @@ struct AppPrefs {
 	var measurementUnit = MeasurementUnit.feet
 	var directionStyle = DirectionStyle.words
 	var intersectionWording = IntersectionWording.direct
+	var spokenIntersectionCount = SpokenIntersectionCount.one
 	var mapDetails = MapDetailOptions()
 	var haptics = true
 }
 ```
 
-`AreaMode`, `DetailLev`, `MeasurementUnit`, `DirectionStyle`, and `IntersectionWording` are enums. Each enum provides a `label` for display in the UI.
+`AreaMode`, `DetailLev`, `MeasurementUnit`, `DirectionStyle`, `IntersectionWording`, and `SpokenIntersectionCount` are enums. Each enum provides a value or label for the native Settings controls.
 
 Intersection wording uses a segmented control. Direct wording names both roads as an intersection. Street Context first names the road nearest the device, then identifies the other road. For example: `Upcoming: On E 20th Avenue, Main Street is about 140 feet ahead.` A short description below the control changes with the selection. If the nearest road cannot be matched confidently to the selected intersection, the report uses Direct wording instead.
 
@@ -786,15 +795,21 @@ Measurement unit controls whether report distances use feet or meters.
 
 Map detail controls whether extra OpenStreetMap details are included in the lookup. Crossings can add mapped crossing points on a named road. Walking Paths can include named paths such as footways when they intersect with streets or other named paths.
 
+Walking Paths remains off by default. The Settings explanation makes clear that leaving it off keeps results focused on the street grid.
+
 Direction style controls whether report directions use word directions, such as `ahead and right`, or clock-face directions, such as `at 2 o'clock`. Clock-face directions treat the direction the phone is pointing as 12 o'clock.
 
-Verbosity controls whether extra neighborhood context is included in report text. Brief keeps the report to intersection, distance, and direction. Standard can add neighborhood context, such as `in SoMa` or `toward Civic Center`, when that data is available.
+Verbosity has three levels. Minimal returns intersection names only and overrides distance, direction, neighborhood, confidence, and Intersection Wording additions. Brief adds distance and direction. Standard can also add neighborhood context, such as `in SoMa` or `toward Civic Center`, when that data is available.
+
+Spoken Intersections is a segmented control with values 1, 2, and 3. Value 1 keeps the existing single-intersection result. Value 2 speaks intersections on either side of the user's position along the same street. Value 3 also speaks the following intersection on the dependable forward side. The explanatory text below the control changes with the selected value.
 
 This keeps display strings near the setting values they describe.
 
 The Settings view also uses `@AccessibilityFocusState` for its setting controls. When a user changes a setting, the binding saves the new value and marks that same control as the accessibility focus target. That helps VoiceOver stay on the control that changed instead of jumping to the sheet's Done button after SwiftUI redraws the form.
 
 The feedback button, privacy policy, acknowledgements, and app information are grouped in a native Form section headed `About Intersector`.
+
+The Acknowledgements disclosure begins by thanking Jen Walz for inspiring the creation of Intersector, followed by the OpenStreetMap attribution and license link.
 
 ## Onboarding
 
@@ -856,13 +871,16 @@ For example:
 struct NearestIntersectionIntent: AppIntent
 ```
 
-The intent's `perform()` method calls the same shared service as the app UI:
+The intent's `perform()` method loads the user's saved app preferences and calls the same shared service as the app UI:
 
 ```swift
-let report = try await OrientSvc.shared.report(.nearest)
+let prefs = await AppPrefs.saved()
+let text = try await OrientSvc.shared.spokenText(.nearest, prefs: prefs)
 ```
 
 That is the important architecture choice. Siri does not have a separate intersection engine. It reuses the same app logic.
+
+Dedicated Second Nearest and Third Nearest intents request ranks 2 and 3 directly. The service sorts candidates by straight-line distance, collapses nearby duplicate map nodes for the same named intersection, and tries radii of 225, 375, 750, and 1,200 meters only until enough results exist.
 
 `IntersectorShortcuts` defines default shortcut phrases. Those phrases include `.applicationName`, which lets the system insert the app name.
 

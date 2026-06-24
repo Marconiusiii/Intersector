@@ -491,6 +491,7 @@ struct IntersectionBuilder {
 		}
 
 		if options.includeCrossings {
+			let streetIntersections = intersections
 			let crossingCandidates = response.elements.compactMap { element -> IntersectionCandidate? in
 				guard
 					element.type == "node",
@@ -503,11 +504,16 @@ struct IntersectionBuilder {
 					return nil
 				}
 
-				return IntersectionCandidate(
+				let candidate = IntersectionCandidate(
 					id: "crossing-\(element.id)",
 					names: ["Crossing on \(roadName)"],
-					coordinate: coordinate
+					coordinate: coordinate,
+					associatedRoadNames: [roadName]
 				)
+				let duplicatesStreetIntersection = streetIntersections.contains {
+					Geo.distanceMeters(from: $0.coordinate, to: coordinate) < 30
+				}
+				return duplicatesStreetIntersection ? nil : candidate
 			}
 			intersections.append(contentsOf: crossingCandidates)
 		}

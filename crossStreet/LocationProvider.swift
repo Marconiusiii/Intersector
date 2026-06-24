@@ -158,7 +158,11 @@ final class LocationProvider: NSObject, LocationProviding {
 	private func context(from location: CLLocation) -> DeviceContext {
 		DeviceContext(
 			coordinate: location.coordinate,
-			headingDegrees: latestHeading
+			headingDegrees: latestHeading,
+			courseDegrees: location.course >= 0 ? location.course : nil,
+			courseAccuracy: location.courseAccuracy >= 0 ? location.courseAccuracy : nil,
+			speedMetersPerSecond: location.speed >= 0 ? location.speed : nil,
+			horizontalAccuracy: location.horizontalAccuracy >= 0 ? location.horizontalAccuracy : nil
 		)
 	}
 

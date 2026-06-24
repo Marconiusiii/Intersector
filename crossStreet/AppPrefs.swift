@@ -13,6 +13,7 @@ struct AppPrefs {
 	var measurementUnit = MeasurementUnit.feet
 	var directionStyle = DirectionStyle.words
 	var intersectionWording = IntersectionWording.direct
+	var spokenIntersectionCount = SpokenIntersectionCount.one
 	var mapDetails = MapDetailOptions()
 	var haptics = true
 
@@ -22,6 +23,7 @@ struct AppPrefs {
 		measurementUnit: MeasurementUnit = .feet,
 		directionStyle: DirectionStyle = .words,
 		intersectionWording: IntersectionWording = .direct,
+		spokenIntersectionCount: SpokenIntersectionCount = .one,
 		mapDetails: MapDetailOptions = MapDetailOptions(),
 		haptics: Bool = true
 	) {
@@ -30,8 +32,30 @@ struct AppPrefs {
 		self.measurementUnit = measurementUnit
 		self.directionStyle = directionStyle
 		self.intersectionWording = intersectionWording
+		self.spokenIntersectionCount = spokenIntersectionCount
 		self.mapDetails = mapDetails
 		self.haptics = haptics
+	}
+
+	@MainActor
+	static func saved(from defaults: UserDefaults = .standard) -> AppPrefs {
+		AppPrefs(
+			areaMode: AreaMode(rawValue: defaults.string(forKey: "areaMode") ?? "") ?? .near,
+			detail: DetailLev(rawValue: defaults.string(forKey: "detailLevel") ?? "") ?? .standard,
+			measurementUnit: MeasurementUnit(rawValue: defaults.string(forKey: "measurementUnit") ?? "") ?? .feet,
+			directionStyle: DirectionStyle(rawValue: defaults.string(forKey: "directionStyle") ?? "") ?? .words,
+			intersectionWording: IntersectionWording(
+				rawValue: defaults.string(forKey: "intersectionWording") ?? ""
+			) ?? .direct,
+			spokenIntersectionCount: SpokenIntersectionCount(
+				rawValue: defaults.integer(forKey: "spokenIntersectionCount")
+			) ?? .one,
+			mapDetails: MapDetailOptions(
+				includeCrossings: defaults.object(forKey: "includeCrossings") as? Bool ?? false,
+				includeWalkingPaths: defaults.object(forKey: "includeWalkingPaths") as? Bool ?? false
+			),
+			haptics: defaults.object(forKey: "hapticsEnabled") as? Bool ?? true
+		)
 	}
 }
 
@@ -78,6 +102,7 @@ enum AreaMode: String, CaseIterable, Identifiable {
 }
 
 enum DetailLev: String, CaseIterable, Identifiable {
+	case minimal
 	case brief
 	case standard
 
@@ -85,6 +110,8 @@ enum DetailLev: String, CaseIterable, Identifiable {
 
 	var label: String {
 		switch self {
+		case .minimal:
+			"Minimal"
 		case .brief:
 			"Brief"
 		case .standard:
@@ -139,4 +166,13 @@ enum IntersectionWording: String, CaseIterable, Identifiable {
 			"Street Context"
 		}
 	}
+}
+
+enum SpokenIntersectionCount: Int, CaseIterable, Identifiable {
+	case one = 1
+	case two = 2
+	case three = 3
+
+	var id: Int { rawValue }
+	var label: String { String(rawValue) }
 }

@@ -22,6 +22,10 @@ struct OrientReport: Equatable {
 	var conf: ConfLev
 
 	func text(with prefs: AppPrefs) -> String {
+		if prefs.detail == .minimal {
+			return cross.hasSuffix(".") ? cross : "\(cross)."
+		}
+
 		var text: String
 		if
 			prefs.intersectionWording == .streetContext,
@@ -113,15 +117,77 @@ enum ConfLev {
 struct DeviceContext: Equatable {
 	var coordinate: CLLocationCoordinate2D
 	var headingDegrees: CLLocationDirection?
+	var courseDegrees: CLLocationDirection? = nil
+	var courseAccuracy: CLLocationDirection? = nil
+	var speedMetersPerSecond: CLLocationSpeed? = nil
+	var horizontalAccuracy: CLLocationAccuracy? = nil
+
+	var dependableTravelDirection: CLLocationDirection? {
+		if
+			let courseDegrees,
+			let courseAccuracy,
+			let speedMetersPerSecond,
+			courseDegrees >= 0,
+			courseAccuracy >= 0,
+			courseAccuracy <= 45,
+			speedMetersPerSecond >= 0.7
+		{
+			return courseDegrees
+		}
+		return headingDegrees
+	}
 }
 
 struct IntersectionCandidate: Equatable, Identifiable {
 	var id: String
 	var names: [String]
 	var coordinate: CLLocationCoordinate2D
+	var associatedRoadNames: [String] = []
 
 	var title: String {
 		names.prefix(2).joined(separator: " and ")
+	}
+
+	var roadNames: [String] {
+		associatedRoadNames.isEmpty ? names : associatedRoadNames
+	}
+
+	func contextLabel(on streetName: String, minimal: Bool) -> String {
+		if id.hasPrefix("crossing-") {
+			return minimal ? "mapped crossing" : "a mapped crossing"
+		}
+		let otherNames = names.filter { $0 != streetName }
+		return otherNames.isEmpty ? title : otherNames.joined(separator: " and ")
+	}
+}
+
+struct StreetPositionContext: Equatable {
+	var streetName: String
+	var boundaries: [IntersectionCandidate]
+	var following: IntersectionCandidate?
+	var isOnStreet: Bool
+
+	func text(with prefs: AppPrefs) -> String {
+		if prefs.detail == .minimal {
+			var labels = [streetName]
+			labels += boundaries.map { $0.contextLabel(on: streetName, minimal: true) }
+			if let following {
+				labels.append(following.contextLabel(on: streetName, minimal: true))
+			}
+			return labels.joined(separator: ", ") + "."
+		}
+
+		guard boundaries.count == 2 else {
+			return ""
+		}
+		let prefix = isOnStreet ? "On" : "Along"
+		let first = boundaries[0].contextLabel(on: streetName, minimal: false)
+		let second = boundaries[1].contextLabel(on: streetName, minimal: false)
+		var text = "\(prefix) \(streetName) between \(first) and \(second)"
+		if let following {
+			text += ", toward \(following.contextLabel(on: streetName, minimal: false))"
+		}
+		return text + "."
 	}
 }
 
@@ -141,11 +207,58 @@ struct MapDataSet: Equatable {
 			return []
 		}
 		return intersections
-			.filter { $0.names.contains(road.name) }
+			.filter { !$0.id.hasPrefix("crossing-") && $0.roadNames.contains(road.name) }
 			.sorted {
 				Geo.distanceMeters(from: coordinate, to: $0.coordinate)
 					< Geo.distanceMeters(from: coordinate, to: $1.coordinate)
 			}
+	}
+
+	func streetPosition(
+		from context: DeviceContext,
+		count: SpokenIntersectionCount
+	) -> StreetPositionContext? {
+		guard count != .one, let road = nearestRoad(to: context.coordinate) else {
+			return nil
+		}
+		let candidates = IntersectionFinder().rankedNearest(
+			from: context.coordinate,
+			in: intersections.filter { $0.roadNames.contains(road.name) }
+		)
+		let positioned = candidates.compactMap { candidate -> (IntersectionCandidate, Double)? in
+			guard let distance = road.signedDistanceAlongRoad(
+				from: context.coordinate,
+				to: candidate.coordinate
+			) else {
+				return nil
+			}
+			return (candidate, distance)
+		}
+		let negative = positioned.filter { $0.1 < -3 }.sorted { abs($0.1) < abs($1.1) }
+		let positive = positioned.filter { $0.1 > 3 }.sorted { abs($0.1) < abs($1.1) }
+		guard let negativeBoundary = negative.first, let positiveBoundary = positive.first else {
+			return nil
+		}
+
+		var following: IntersectionCandidate?
+		if
+			count == .three,
+			let direction = context.dependableTravelDirection,
+			let directionSign = road.directionSign(for: direction, at: context.coordinate)
+		{
+			let forward = directionSign >= 0 ? positive : negative
+			following = forward.dropFirst().first?.0
+		}
+
+		let roadDistance = road.minimumDistance(to: context.coordinate)
+		let accuracy = context.horizontalAccuracy ?? 25
+		let onStreetThreshold = max(20, min(accuracy, 50))
+		return StreetPositionContext(
+			streetName: road.name,
+			boundaries: [negativeBoundary.0, positiveBoundary.0],
+			following: following,
+			isOnStreet: roadDistance <= onStreetThreshold
+		)
 	}
 
 	func nearestRoadName(
@@ -185,6 +298,82 @@ extension MapRoad {
 				)
 			}
 			.min() ?? .greatestFiniteMagnitude
+	}
+
+	func signedDistanceAlongRoad(
+		from origin: CLLocationCoordinate2D,
+		to target: CLLocationCoordinate2D
+	) -> CLLocationDistance? {
+		guard let reference = nearestSegmentReference(to: origin) else {
+			return nil
+		}
+		let targetVector = Self.localVector(from: origin, to: target)
+		return targetVector.x * reference.tangentX + targetVector.y * reference.tangentY
+	}
+
+	func directionSign(
+		for heading: CLLocationDirection,
+		at coordinate: CLLocationCoordinate2D
+	) -> Double? {
+		guard let reference = nearestSegmentReference(to: coordinate) else {
+			return nil
+		}
+		let radians = heading * Double.pi / 180
+		let headingX = sin(radians)
+		let headingY = cos(radians)
+		return headingX * reference.tangentX + headingY * reference.tangentY
+	}
+
+	private func nearestSegmentReference(to coordinate: CLLocationCoordinate2D) -> SegmentReference? {
+		zip(coordinates, coordinates.dropFirst())
+			.compactMap { start, end in
+				Self.segmentReference(from: coordinate, start: start, end: end)
+			}
+			.min { $0.distance < $1.distance }
+	}
+
+	private struct SegmentReference {
+		var distance: CLLocationDistance
+		var tangentX: Double
+		var tangentY: Double
+	}
+
+	private static func segmentReference(
+		from coordinate: CLLocationCoordinate2D,
+		start: CLLocationCoordinate2D,
+		end: CLLocationCoordinate2D
+	) -> SegmentReference? {
+		let startVector = localVector(from: coordinate, to: start)
+		let endVector = localVector(from: coordinate, to: end)
+		let segmentX = endVector.x - startVector.x
+		let segmentY = endVector.y - startVector.y
+		let segmentLength = hypot(segmentX, segmentY)
+		guard segmentLength > 0 else {
+			return nil
+		}
+		let segmentLengthSquared = segmentLength * segmentLength
+		let projection = -(startVector.x * segmentX + startVector.y * segmentY) / segmentLengthSquared
+		let clampedProjection = min(1, max(0, projection))
+		let closestX = startVector.x + clampedProjection * segmentX
+		let closestY = startVector.y + clampedProjection * segmentY
+		return SegmentReference(
+			distance: hypot(closestX, closestY),
+			tangentX: segmentX / segmentLength,
+			tangentY: segmentY / segmentLength
+		)
+	}
+
+	private static func localVector(
+		from origin: CLLocationCoordinate2D,
+		to target: CLLocationCoordinate2D
+	) -> (x: Double, y: Double) {
+		let earthRadius = 6_371_000.0
+		let latitudeScale = Double.pi / 180
+		let longitudeScale = latitudeScale * cos(origin.latitude * latitudeScale)
+		return (
+			(target.longitude - origin.longitude) * longitudeScale * earthRadius,
+			(target.latitude - origin.latitude) * latitudeScale * earthRadius
+		)
 	}
 
 	private static func distance(

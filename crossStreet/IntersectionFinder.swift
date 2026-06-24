@@ -16,7 +16,7 @@ struct IntersectionFinder {
 	) -> IntersectionCandidate? {
 		switch kind {
 		case .nearest:
-			return nearestCandidate(from: context.coordinate, in: candidates)
+			return rankedNearest(from: context.coordinate, in: candidates).first
 		case .upcoming, .scan:
 			guard let heading = context.headingDegrees else {
 				return nearestCandidate(from: context.coordinate, in: candidates)
@@ -32,6 +32,41 @@ struct IntersectionFinder {
 					from: context.coordinate
 				)
 			} ?? nearestCandidate(from: context.coordinate, in: candidates)
+		}
+	}
+
+	func nearest(
+		rank: Int,
+		from coordinate: CLLocationCoordinate2D,
+		in candidates: [IntersectionCandidate]
+	) -> IntersectionCandidate? {
+		guard rank > 0 else {
+			return nil
+		}
+		let ranked = rankedNearest(from: coordinate, in: candidates)
+		guard ranked.indices.contains(rank - 1) else {
+			return nil
+		}
+		return ranked[rank - 1]
+	}
+
+	func rankedNearest(
+		from coordinate: CLLocationCoordinate2D,
+		in candidates: [IntersectionCandidate]
+	) -> [IntersectionCandidate] {
+		let sorted = candidates.sorted {
+			Geo.distanceMeters(from: coordinate, to: $0.coordinate)
+				< Geo.distanceMeters(from: coordinate, to: $1.coordinate)
+		}
+
+		return sorted.reduce(into: []) { unique, candidate in
+			let isDuplicate = unique.contains { existing in
+				normalizedNames(existing.names) == normalizedNames(candidate.names) &&
+					Geo.distanceMeters(from: existing.coordinate, to: candidate.coordinate) < 30
+			}
+			if !isDuplicate {
+				unique.append(candidate)
+			}
 		}
 	}
 
@@ -79,6 +114,10 @@ struct IntersectionFinder {
 		candidates.reduce(nil) { best, candidate in
 			nearest(best, or: candidate, from: coordinate)
 		}
+	}
+
+	private func normalizedNames(_ names: [String]) -> Set<String> {
+		Set(names.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
 	}
 
 	private func nearest(

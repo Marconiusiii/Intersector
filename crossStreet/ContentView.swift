@@ -15,6 +15,7 @@ private enum SettingsFocusTarget: Hashable {
 	case measurementUnit
 	case direction
 	case intersectionWording
+	case spokenIntersections
 	case verbosity
 	case haptics
 }
@@ -26,6 +27,7 @@ struct ContentView: View {
 	@AppStorage("measurementUnit") private var measurementUnitRaw = MeasurementUnit.feet.rawValue
 	@AppStorage("directionStyle") private var directionStyleRaw = DirectionStyle.words.rawValue
 	@AppStorage("intersectionWording") private var intersectionWordingRaw = IntersectionWording.direct.rawValue
+	@AppStorage("spokenIntersectionCount") private var spokenIntersectionCountRaw = SpokenIntersectionCount.one.rawValue
 	@AppStorage("includeCrossings") private var includeCrossings = false
 	@AppStorage("includeWalkingPaths") private var includeWalkingPaths = false
 	@AppStorage("hapticsEnabled") private var hapticsEnabled = true
@@ -34,7 +36,6 @@ struct ContentView: View {
 	@ScaledMetric(relativeTo: .largeTitle) private var headerMinHeight: CGFloat = 88
 	@ScaledMetric(relativeTo: .body) private var statusMinHeight: CGFloat = 128
 	@ScaledMetric(relativeTo: .title2) private var actionMinHeight: CGFloat = 120
-	@State private var report: OrientReport?
 	@State private var statusText = "Choose an action."
 	@State private var isLoading = false
 	@State private var isDirectionLoading = false
@@ -53,6 +54,7 @@ struct ContentView: View {
 			measurementUnit: MeasurementUnit(rawValue: measurementUnitRaw) ?? .feet,
 			directionStyle: DirectionStyle(rawValue: directionStyleRaw) ?? .words,
 			intersectionWording: IntersectionWording(rawValue: intersectionWordingRaw) ?? .direct,
+			spokenIntersectionCount: SpokenIntersectionCount(rawValue: spokenIntersectionCountRaw) ?? .one,
 			mapDetails: MapDetailOptions(
 				includeCrossings: includeCrossings,
 				includeWalkingPaths: includeWalkingPaths
@@ -271,6 +273,37 @@ struct ContentView: View {
 		}
 	}
 
+	private var verbosityDescription: String {
+		switch prefs.detail {
+		case .minimal:
+			"Speaks intersection names only."
+		case .brief:
+			"Adds distance and direction."
+		case .standard:
+			"Also adds available neighborhood context."
+		}
+	}
+
+	private var spokenIntersectionCountBinding: Binding<SpokenIntersectionCount> {
+		Binding {
+			prefs.spokenIntersectionCount
+		} set: { count in
+			spokenIntersectionCountRaw = count.rawValue
+			settingsFocusTarget = .spokenIntersections
+		}
+	}
+
+	private var spokenIntersectionCountDescription: String {
+		switch prefs.spokenIntersectionCount {
+		case .one:
+			"Speaks one nearby intersection."
+		case .two:
+			"Speaks the intersections on either side of your position."
+		case .three:
+			"Also speaks the following intersection in the direction you are facing."
+		}
+	}
+
 	private var hapticsBinding: Binding<Bool> {
 		Binding {
 			hapticsEnabled
@@ -320,6 +353,11 @@ struct ContentView: View {
 						.accessibilityFocused($settingsFocusTarget, equals: .crossings)
 					Toggle("Include walking paths", isOn: walkingPathsBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .walkingPaths)
+					Text("Keep Walking Paths off to focus results on the street grid.")
+						.font(.footnote)
+						.foregroundStyle(.secondary)
+						.lineLimit(nil)
+						.fixedSize(horizontal: false, vertical: true)
 				} header: {
 					Text("Map Detail")
 				}
@@ -339,6 +377,23 @@ struct ContentView: View {
 						.fixedSize(horizontal: false, vertical: true)
 				} header: {
 					Text("Intersection Wording")
+				}
+
+				Section {
+					Picker("Spoken Intersections", selection: spokenIntersectionCountBinding) {
+						ForEach(SpokenIntersectionCount.allCases) { count in
+							Text(count.label).tag(count)
+						}
+					}
+					.pickerStyle(.segmented)
+					.accessibilityFocused($settingsFocusTarget, equals: .spokenIntersections)
+					Text(spokenIntersectionCountDescription)
+						.font(.footnote)
+						.foregroundStyle(.secondary)
+						.lineLimit(nil)
+						.fixedSize(horizontal: false, vertical: true)
+				} header: {
+					Text("Spoken Intersections")
 				}
 
 				Section {
@@ -378,6 +433,11 @@ struct ContentView: View {
 					}
 					.pickerStyle(.segmented)
 					.accessibilityFocused($settingsFocusTarget, equals: .verbosity)
+					Text(verbosityDescription)
+						.font(.footnote)
+						.foregroundStyle(.secondary)
+						.lineLimit(nil)
+						.fixedSize(horizontal: false, vertical: true)
 				}
 
 				Toggle("Haptic scan feedback", isOn: hapticsBinding)
@@ -401,6 +461,9 @@ struct ContentView: View {
 
 					DisclosureGroup("Acknowledgements") {
 						VStack(alignment: .leading, spacing: 8) {
+							Text("Special thanks to Jen Walz for inspiring the creation of this app!")
+								.lineLimit(nil)
+								.fixedSize(horizontal: false, vertical: true)
 							Text("Map data from OpenStreetMap, available under the Open Database License.")
 								.lineLimit(nil)
 								.fixedSize(horizontal: false, vertical: true)
@@ -508,9 +571,7 @@ struct ContentView: View {
 		statusText = "Updating \(kind.intentLabel)."
 
 		do {
-			let updatedReport = try await OrientSvc.shared.report(kind, prefs: prefs)
-			report = updatedReport
-			let text = updatedReport.text(with: prefs)
+			let text = try await OrientSvc.shared.spokenText(kind, prefs: prefs)
 			statusText = text
 			VoiceOverAnnouncer.reportUpdated(text)
 		} catch {
@@ -632,6 +693,8 @@ extension Color {
 	)
 }
 
-#Preview {
-	ContentView()
-}
+#if DEBUG
+	#Preview {
+		ContentView()
+	}
+#endif

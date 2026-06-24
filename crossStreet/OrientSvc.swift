@@ -59,15 +59,73 @@ struct OrientSvc {
 		neighborhoodProvider: NeighborhoodProvider()
 	)
 
-	func report(_ kind: ReportKind, prefs: AppPrefs = AppPrefs()) async throws -> OrientReport {
+	func report(
+		_ kind: ReportKind,
+		rank: Int = 1,
+		prefs: AppPrefs = AppPrefs()
+	) async throws -> OrientReport {
 		let context = try await locationProvider.currentContext()
-		let mapData = try await mapData(for: kind, from: context, prefs: prefs)
-
-		guard let match = finder.bestMatch(
+		let mapData = try await mapData(
 			for: kind,
 			from: context,
-			in: mapData.intersections
-		) else {
+			minimumCandidateCount: rank,
+			prefs: prefs
+		)
+		return try await makeReport(
+			kind,
+			rank: rank,
+			context: context,
+			mapData: mapData,
+			prefs: prefs
+		)
+	}
+
+	func spokenText(
+		_ kind: ReportKind,
+		prefs: AppPrefs = AppPrefs()
+	) async throws -> String {
+		guard prefs.spokenIntersectionCount != .one else {
+			return try await report(kind, prefs: prefs).text(with: prefs)
+		}
+
+		let context = try await locationProvider.currentContext()
+		let mapData = try await mapDataForStreetPosition(from: context, prefs: prefs)
+		if let position = mapData.streetPosition(
+			from: context,
+			count: prefs.spokenIntersectionCount
+		) {
+			return position.text(with: prefs)
+		}
+
+		let fallback = try await makeReport(
+			kind,
+			rank: 1,
+			context: context,
+			mapData: mapData,
+			prefs: prefs
+		)
+		return fallback.text(with: prefs)
+	}
+
+	private func makeReport(
+		_ kind: ReportKind,
+		rank: Int,
+		context: DeviceContext,
+		mapData: MapDataSet,
+		prefs: AppPrefs
+	) async throws -> OrientReport {
+
+		let match = if kind == .nearest {
+			finder.nearest(
+				rank: rank,
+				from: context.coordinate,
+				in: mapData.intersections
+			)
+		} else {
+			finder.bestMatch(for: kind, from: context, in: mapData.intersections)
+		}
+
+		guard let match else {
 			throw OrientError.noIntersections
 		}
 
@@ -88,9 +146,12 @@ struct OrientSvc {
 		)
 		let currentStreet = mapData.nearestRoadName(
 			to: context.coordinate,
-			matching: match.names
+			matching: match.roadNames
 		)
-		let crossStreet = currentStreet.flatMap { roadName in
+		let crossStreet: String? = currentStreet.flatMap { roadName in
+			guard !match.id.hasPrefix("crossing-") else {
+				return nil
+			}
 			let otherNames = match.names.filter { $0 != roadName }
 			return otherNames.isEmpty ? nil : otherNames.joined(separator: " and ")
 		}
@@ -110,28 +171,76 @@ struct OrientSvc {
 		)
 	}
 
-	private func mapData(
-		for kind: ReportKind,
+	private func mapDataForStreetPosition(
 		from context: DeviceContext,
 		prefs: AppPrefs
 	) async throws -> MapDataSet {
-		let fastRadius: CLLocationDistance = 225
-		let fallbackRadius: CLLocationDistance = 375
-		let mapData = try await mapDataClient.mapData(
-			near: context.coordinate,
-			radiusMeters: fastRadius,
-			options: prefs.mapDetails
-		)
+		let radii: [CLLocationDistance] = [225, 375, 750, 1_200]
+		var latestData = MapDataSet(intersections: [], roads: [])
 
-		if shouldFetchFallback(for: kind, from: context, intersections: mapData.intersections) {
-			return try await mapDataClient.mapData(
+		for radius in radii {
+			latestData = try await mapDataClient.mapData(
 				near: context.coordinate,
-				radiusMeters: fallbackRadius,
+				radiusMeters: radius,
 				options: prefs.mapDetails
 			)
+			if let position = latestData.streetPosition(
+				from: context,
+				count: prefs.spokenIntersectionCount
+			) {
+				let needsFollowing = prefs.spokenIntersectionCount == .three &&
+					context.dependableTravelDirection != nil
+				if !needsFollowing || position.following != nil {
+					return latestData
+				}
+			}
 		}
 
-		return mapData
+		return latestData
+	}
+
+	private func mapData(
+		for kind: ReportKind,
+		from context: DeviceContext,
+		minimumCandidateCount: Int,
+		prefs: AppPrefs
+	) async throws -> MapDataSet {
+		let radii: [CLLocationDistance] = [225, 375, 750, 1_200]
+		var latestData = MapDataSet(intersections: [], roads: [])
+
+		for radius in radii {
+			latestData = try await mapDataClient.mapData(
+				near: context.coordinate,
+				radiusMeters: radius,
+				options: prefs.mapDetails
+			)
+
+			if hasEnoughCandidates(
+				for: kind,
+				from: context,
+				minimumCandidateCount: minimumCandidateCount,
+				intersections: latestData.intersections
+			) {
+				return latestData
+			}
+		}
+
+		return latestData
+	}
+
+	private func hasEnoughCandidates(
+		for kind: ReportKind,
+		from context: DeviceContext,
+		minimumCandidateCount: Int,
+		intersections: [IntersectionCandidate]
+	) -> Bool {
+		if kind == .nearest {
+			return finder.rankedNearest(
+				from: context.coordinate,
+				in: intersections
+			).count >= minimumCandidateCount
+		}
+		return !shouldFetchFallback(for: kind, from: context, intersections: intersections)
 	}
 
 	private func neighborhoodContext(

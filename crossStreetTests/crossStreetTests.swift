@@ -10,6 +10,47 @@ import Testing
 @testable import Intersector
 
 struct IntersectorTests {
+	@Test func minimalVerbositySpeaksIntersectionNameOnly() async throws {
+		var prefs = AppPrefs()
+		prefs.detail = .minimal
+		prefs.areaMode = .toward
+		prefs.intersectionWording = .streetContext
+		let report = OrientReport(
+			kind: .upcoming,
+			cross: "Amsterdam Avenue and West 94th Street",
+			dist: "140 feet",
+			relDir: "ahead",
+			relDegrees: 0,
+			street: "Amsterdam Avenue",
+			crossStreet: "West 94th Street",
+			head: "north",
+			area: "Upper West Side",
+			toward: "Manhattan Valley",
+			conf: .medium
+		)
+
+		#expect(report.text(with: prefs) == "Amsterdam Avenue and West 94th Street.")
+	}
+
+	@Test @MainActor func savedPreferencesLoadSiriSettings() async throws {
+		let suiteName = "IntersectorTests.\(UUID().uuidString)"
+		let defaults = try #require(UserDefaults(suiteName: suiteName))
+		defer { defaults.removePersistentDomain(forName: suiteName) }
+		defaults.set(DetailLev.minimal.rawValue, forKey: "detailLevel")
+		defaults.set(true, forKey: "includeCrossings")
+		defaults.set(true, forKey: "includeWalkingPaths")
+		defaults.set(MeasurementUnit.meters.rawValue, forKey: "measurementUnit")
+		defaults.set(SpokenIntersectionCount.three.rawValue, forKey: "spokenIntersectionCount")
+
+		let prefs = AppPrefs.saved(from: defaults)
+
+		#expect(prefs.detail == .minimal)
+		#expect(prefs.mapDetails.includeCrossings)
+		#expect(prefs.mapDetails.includeWalkingPaths)
+		#expect(prefs.measurementUnit == .meters)
+		#expect(prefs.spokenIntersectionCount == .three)
+	}
+
 	@Test func reportTextCanHideArea() async throws {
 		var prefs = AppPrefs()
 		prefs.areaMode = .off
@@ -246,6 +287,127 @@ struct IntersectorTests {
 		#expect(road.minimumDistance(to: origin) < 1)
 	}
 
+	@Test func spokenIntersectionsFindsBothSidesAndFollowingStreet() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapData = MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: "south",
+					names: ["Amsterdam Avenue", "West 93rd Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 36.999, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "north",
+					names: ["Amsterdam Avenue", "West 94th Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "following",
+					names: ["Amsterdam Avenue", "West 95th Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+				)
+			],
+			roads: [
+				MapRoad(
+					id: "amsterdam",
+					name: "Amsterdam Avenue",
+					nodeIDs: [1, 2],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 36.995, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 37.005, longitude: -122.0)
+					]
+				)
+			]
+		)
+		let context = DeviceContext(
+			coordinate: origin,
+			headingDegrees: 0,
+			horizontalAccuracy: 10
+		)
+
+		let position = try #require(mapData.streetPosition(from: context, count: .three))
+		var briefPrefs = AppPrefs()
+		briefPrefs.detail = .brief
+		var minimalPrefs = AppPrefs()
+		minimalPrefs.detail = .minimal
+
+		#expect(position.boundaries.map(\.id) == ["south", "north"])
+		#expect(position.following?.id == "following")
+		#expect(position.isOnStreet)
+		#expect(
+			position.text(with: briefPrefs) ==
+				"On Amsterdam Avenue between West 93rd Street and West 94th Street, toward West 95th Street."
+		)
+		#expect(
+			position.text(with: minimalPrefs) ==
+				"Amsterdam Avenue, West 93rd Street, West 94th Street, West 95th Street."
+		)
+	}
+
+	@Test func spokenIntersectionsUsesAlongWhenAwayFromStreet() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -121.999)
+		let mapData = MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: "south",
+					names: ["Central Park West", "West 93rd Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 36.997, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "north",
+					names: ["Central Park West", "West 94th Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.003, longitude: -122.0)
+				)
+			],
+			roads: [
+				MapRoad(
+					id: "park-west",
+					name: "Central Park West",
+					nodeIDs: [1, 2],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 36.995, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 37.005, longitude: -122.0)
+					]
+				)
+			]
+		)
+		let context = DeviceContext(
+			coordinate: origin,
+			headingDegrees: nil,
+			horizontalAccuracy: 10
+		)
+
+		let position = try #require(mapData.streetPosition(from: context, count: .two))
+
+		#expect(!position.isOnStreet)
+		#expect(
+			position.text(with: AppPrefs()) ==
+				"Along Central Park West between West 93rd Street and West 94th Street."
+		)
+	}
+
+	@Test func dependableDirectionPrefersAccurateWalkingCourse() async throws {
+		let moving = DeviceContext(
+			coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0),
+			headingDegrees: 180,
+			courseDegrees: 0,
+			courseAccuracy: 10,
+			speedMetersPerSecond: 1,
+			horizontalAccuracy: 10
+		)
+		let uncertainCourse = DeviceContext(
+			coordinate: moving.coordinate,
+			headingDegrees: 180,
+			courseDegrees: 0,
+			courseAccuracy: 90,
+			speedMetersPerSecond: 1,
+			horizontalAccuracy: 10
+		)
+
+		#expect(moving.dependableTravelDirection == 0)
+		#expect(uncertainCourse.dependableTravelDirection == 180)
+	}
+
 	@Test func upcomingPrefersCandidateAhead() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let context = DeviceContext(coordinate: origin, headingDegrees: 0)
@@ -269,6 +431,56 @@ struct IntersectorTests {
 		)
 
 		#expect(match?.id == "north")
+	}
+
+	@Test func rankedNearestReturnsRequestedDistanceOrder() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let candidates = [
+			IntersectionCandidate(
+				id: "third",
+				names: ["Oak Street", "Third Street"],
+				coordinate: CLLocationCoordinate2D(latitude: 37.003, longitude: -122.0)
+			),
+			IntersectionCandidate(
+				id: "first",
+				names: ["Oak Street", "First Street"],
+				coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+			),
+			IntersectionCandidate(
+				id: "second",
+				names: ["Oak Street", "Second Street"],
+				coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+			)
+		]
+
+		let match = IntersectionFinder().nearest(rank: 2, from: origin, in: candidates)
+
+		#expect(match?.id == "second")
+	}
+
+	@Test func rankedNearestCollapsesNearbyDuplicateMapNodes() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let candidates = [
+			IntersectionCandidate(
+				id: "duplicate-a",
+				names: ["Oak Street", "Pine Street"],
+				coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+			),
+			IntersectionCandidate(
+				id: "duplicate-b",
+				names: ["Pine Street", "Oak Street"],
+				coordinate: CLLocationCoordinate2D(latitude: 37.0011, longitude: -122.0)
+			),
+			IntersectionCandidate(
+				id: "second",
+				names: ["Oak Street", "Cedar Street"],
+				coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+			)
+		]
+
+		let ranked = IntersectionFinder().rankedNearest(from: origin, in: candidates)
+
+		#expect(ranked.map(\.id) == ["duplicate-a", "second"])
 	}
 
 	@Test func pointScanFiltersToCurrentStreetIntersections() async throws {
@@ -440,6 +652,24 @@ struct IntersectorTests {
 		#expect(data.intersections.map(\.title) == ["Crossing on Oak Street"])
 	}
 
+	@Test func intersectionBuilderSuppressesCrossingBesideStreetIntersection() async throws {
+		let response = OverpassResponse(
+			elements: [
+				OverpassElement(type: "node", id: 1, lat: 37.0, lon: -122.0, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 2, lat: 37.00005, lon: -122.0, nodes: nil, tags: ["highway": "crossing"]),
+				OverpassElement(type: "node", id: 3, lat: 37.001, lon: -122.0, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 4, lat: 37.0, lon: -122.001, nodes: nil, tags: nil),
+				OverpassElement(type: "way", id: 10, lat: nil, lon: nil, nodes: [1, 2, 3], tags: ["highway": "residential", "name": "Oak Street"]),
+				OverpassElement(type: "way", id: 11, lat: nil, lon: nil, nodes: [4, 1], tags: ["highway": "residential", "name": "Pine Street"])
+			]
+		)
+		let options = MapDetailOptions(includeCrossings: true)
+
+		let data = IntersectionBuilder().mapData(from: response, options: options)
+
+		#expect(data.intersections.map(\.title) == ["Oak Street and Pine Street"])
+	}
+
 	@Test func areaModeOffSkipsNeighborhoodLookup() async throws {
 		let neighborhoodProvider = FakeNeighborhoodProvider(candidates: [
 			NeighborhoodCandidate(
@@ -555,6 +785,27 @@ struct IntersectorTests {
 		#expect(report.area == nil)
 		#expect(report.toward == nil)
 	}
+
+	@Test func thirdNearestExpandsRadiusOnlyUntilEnoughResultsExist() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		let mapClient = AdaptiveMapDataClient()
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(
+					coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0),
+					headingDegrees: nil
+				)
+			),
+			mapDataClient: mapClient,
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+
+		let report = try await service.report(.nearest, rank: 3, prefs: prefs)
+
+		#expect(report.cross == "Oak Street and Third Street")
+		#expect(await mapClient.requestedRadii == [225, 375, 750])
+	}
 }
 
 actor FetchCounter {
@@ -612,6 +863,43 @@ struct FakeMapDataClient: MapDataFetching {
 			),
 			roads: []
 		)
+	}
+}
+
+actor AdaptiveMapDataClient: MapDataFetching {
+	private(set) var requestedRadii: [CLLocationDistance] = []
+
+	func intersections(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> [IntersectionCandidate] {
+		try await mapData(
+			near: coordinate,
+			radiusMeters: radiusMeters,
+			options: options
+		).intersections
+	}
+
+	func mapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> MapDataSet {
+		requestedRadii.append(radiusMeters)
+		let availableCount = radiusMeters < 375 ? 1 : (radiusMeters < 750 ? 2 : 3)
+		let names = ["First Street", "Second Street", "Third Street"]
+		let candidates = (0..<availableCount).map { index in
+			IntersectionCandidate(
+				id: "rank-\(index + 1)",
+				names: ["Oak Street", names[index]],
+				coordinate: CLLocationCoordinate2D(
+					latitude: coordinate.latitude + Double(index + 1) * 0.001,
+					longitude: coordinate.longitude
+				)
+			)
+		}
+		return MapDataSet(intersections: candidates, roads: [])
 	}
 }
 

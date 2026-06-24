@@ -15,8 +15,8 @@ struct NearestIntersectionIntent: AppIntent {
 
 	func perform() async throws -> some IntentResult & ProvidesDialog {
 		do {
-			let report = try await OrientSvc.shared.report(.nearest)
-			let text = await report.text(with: AppPrefs())
+			let prefs = await AppPrefs.saved()
+			let text = try await OrientSvc.shared.spokenText(.nearest, prefs: prefs)
 			return .result(dialog: IntentDialog(stringLiteral: text))
 		} catch {
 			return .result(
@@ -35,14 +35,52 @@ struct UpcomingIntersectionIntent: AppIntent {
 
 	func perform() async throws -> some IntentResult & ProvidesDialog {
 		do {
-			let report = try await OrientSvc.shared.report(.upcoming)
-			let text = await report.text(with: AppPrefs())
+			let prefs = await AppPrefs.saved()
+			let text = try await OrientSvc.shared.spokenText(.upcoming, prefs: prefs)
 			return .result(dialog: IntentDialog(stringLiteral: text))
 		} catch {
 			return .result(
 				dialog: IntentDialog(
 					stringLiteral: "I couldn't get your upcoming intersection. Make sure Location Services are enabled for Intersector and try again."
 				)
+			)
+		}
+	}
+}
+
+struct SecondNearestIntersectionIntent: AppIntent {
+	static var title: LocalizedStringResource = "Second Nearest Intersection"
+	static var description = IntentDescription("Reports the second closest mapped intersection.")
+	static var openAppWhenRun = false
+
+	func perform() async throws -> some IntentResult & ProvidesDialog {
+		do {
+			let prefs = await AppPrefs.saved()
+			let report = try await OrientSvc.shared.report(.nearest, rank: 2, prefs: prefs)
+			let text = await report.text(with: prefs)
+			return .result(dialog: IntentDialog(stringLiteral: text))
+		} catch {
+			return .result(
+				dialog: "I couldn't get your second nearest intersection. Make sure Location Services are enabled for Intersector and try again."
+			)
+		}
+	}
+}
+
+struct ThirdNearestIntersectionIntent: AppIntent {
+	static var title: LocalizedStringResource = "Third Nearest Intersection"
+	static var description = IntentDescription("Reports the third closest mapped intersection.")
+	static var openAppWhenRun = false
+
+	func perform() async throws -> some IntentResult & ProvidesDialog {
+		do {
+			let prefs = await AppPrefs.saved()
+			let report = try await OrientSvc.shared.report(.nearest, rank: 3, prefs: prefs)
+			let text = await report.text(with: prefs)
+			return .result(dialog: IntentDialog(stringLiteral: text))
+		} catch {
+			return .result(
+				dialog: "I couldn't get your third nearest intersection. Make sure Location Services are enabled for Intersector and try again."
 			)
 		}
 	}
@@ -90,6 +128,28 @@ struct IntersectorShortcuts: AppShortcutsProvider {
 			],
 			shortTitle: "Upcoming",
 			systemImageName: "arrow.up.circle.fill"
+		)
+		AppShortcut(
+			intent: SecondNearestIntersectionIntent(),
+			phrases: [
+				"Second nearest intersection in \(.applicationName)",
+				"What's my second nearest intersection with \(.applicationName)",
+				"What is my second nearest intersection with \(.applicationName)",
+				"Find my second nearest intersection with \(.applicationName)"
+			],
+			shortTitle: "Second Nearest",
+			systemImageName: "2.circle.fill"
+		)
+		AppShortcut(
+			intent: ThirdNearestIntersectionIntent(),
+			phrases: [
+				"Third nearest intersection in \(.applicationName)",
+				"What's my third nearest intersection with \(.applicationName)",
+				"What is my third nearest intersection with \(.applicationName)",
+				"Find my third nearest intersection with \(.applicationName)"
+			],
+			shortTitle: "Third Nearest",
+			systemImageName: "3.circle.fill"
 		)
 		AppShortcut(
 			intent: StartPointScanIntent(),
