@@ -16,6 +16,7 @@ struct AppPrefs {
 	var spokenIntersectionCount = SpokenIntersectionCount.one
 	var mapDetails = MapDetailOptions()
 	var haptics = true
+	var manhattanSnobMode = false
 
 	nonisolated init(
 		areaMode: AreaMode = .near,
@@ -25,7 +26,8 @@ struct AppPrefs {
 		intersectionWording: IntersectionWording = .direct,
 		spokenIntersectionCount: SpokenIntersectionCount = .one,
 		mapDetails: MapDetailOptions = MapDetailOptions(),
-		haptics: Bool = true
+		haptics: Bool = true,
+		manhattanSnobMode: Bool = false
 	) {
 		self.areaMode = areaMode
 		self.detail = detail
@@ -35,6 +37,7 @@ struct AppPrefs {
 		self.spokenIntersectionCount = spokenIntersectionCount
 		self.mapDetails = mapDetails
 		self.haptics = haptics
+		self.manhattanSnobMode = manhattanSnobMode
 	}
 
 	@MainActor
@@ -54,7 +57,8 @@ struct AppPrefs {
 				includeCrossings: defaults.object(forKey: "includeCrossings") as? Bool ?? false,
 				includeWalkingPaths: defaults.object(forKey: "includeWalkingPaths") as? Bool ?? false
 			),
-			haptics: defaults.object(forKey: "hapticsEnabled") as? Bool ?? true
+			haptics: defaults.object(forKey: "hapticsEnabled") as? Bool ?? true,
+			manhattanSnobMode: defaults.object(forKey: "manhattanSnobMode") as? Bool ?? false
 		)
 	}
 }

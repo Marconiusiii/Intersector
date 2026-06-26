@@ -17,6 +17,7 @@ private enum SettingsFocusTarget: Hashable {
 	case intersectionWording
 	case spokenIntersections
 	case verbosity
+	case manhattanSnobMode
 	case haptics
 }
 
@@ -31,6 +32,7 @@ struct ContentView: View {
 	@AppStorage("includeCrossings") private var includeCrossings = false
 	@AppStorage("includeWalkingPaths") private var includeWalkingPaths = false
 	@AppStorage("hapticsEnabled") private var hapticsEnabled = true
+	@AppStorage("manhattanSnobMode") private var manhattanSnobMode = false
 	@Environment(\.dynamicTypeSize) private var dynamicTypeSize
 	@Environment(\.openURL) private var openURL
 	@ScaledMetric(relativeTo: .largeTitle) private var headerMinHeight: CGFloat = 88
@@ -59,7 +61,8 @@ struct ContentView: View {
 				includeCrossings: includeCrossings,
 				includeWalkingPaths: includeWalkingPaths
 			),
-			haptics: hapticsEnabled
+			haptics: hapticsEnabled,
+			manhattanSnobMode: manhattanSnobMode
 		)
 	}
 
@@ -78,33 +81,32 @@ struct ContentView: View {
 
 	private var mainView: some View {
 		NavigationStack {
-			ScrollView {
-				VStack(spacing: 0) {
-					headerView
-						.frame(minHeight: headerMinHeight)
-					statusView
-						.frame(minHeight: statusMinHeight)
-					actionButton("Nearest Intersection", systemImage: "location.fill") {
-						await updateReport(.nearest)
-					}
-					.frame(minHeight: actionMinHeight)
-					actionButton("Upcoming Intersection", systemImage: "arrow.up.circle.fill") {
-						await updateReport(.upcoming)
-					}
-					.frame(minHeight: actionMinHeight)
-					actionButton(
-						"My Direction",
-						systemImage: "safari.fill",
-						accessibilityHint: "Speaks cardinal direction.",
-						isDisabled: isDirectionLoading
-					) {
-						await updateDirection()
-					}
-					.frame(minHeight: actionMinHeight)
-					pointScanToggle
+			VStack(spacing: 0) {
+				ScrollView {
+					VStack(spacing: 0) {
+						headerView
+							.frame(minHeight: headerMinHeight)
+						statusView
+							.frame(minHeight: statusMinHeight)
+						nearestButton
+							.frame(minHeight: actionMinHeight)
+						upcomingButton
+							.frame(minHeight: actionMinHeight)
+						actionButton(
+							"Direction",
+							systemImage: "safari.fill",
+							accessibilityLabel: "My Direction",
+							accessibilityHint: "Speaks cardinal direction.",
+							isDisabled: isDirectionLoading
+						) {
+							await updateDirection()
+						}
 						.frame(minHeight: actionMinHeight)
+					}
+					.frame(maxWidth: .infinity)
 				}
-				.frame(maxWidth: .infinity)
+				pointScanToggle
+					.frame(minHeight: actionMinHeight)
 			}
 			.background(Color.crossBg)
 			.navigationBarTitleDisplayMode(.inline)
@@ -199,6 +201,46 @@ struct ContentView: View {
 			.fixedSize(horizontal: false, vertical: true)
 	}
 
+	private var nearestButton: some View {
+		actionButton(
+			"Nearest",
+			systemImage: "location.fill",
+			accessibilityLabel: "Nearest Intersection"
+		) {
+			await updateReport(.nearest)
+		}
+		.accessibilityAction(named: Text("3rd Nearest Intersection")) {
+			Task {
+				await updateReport(.nearest, rank: 3)
+			}
+		}
+		.accessibilityAction(named: Text("2nd Nearest Intersection")) {
+			Task {
+				await updateReport(.nearest, rank: 2)
+			}
+		}
+	}
+
+	private var upcomingButton: some View {
+		actionButton(
+			"Upcoming",
+			systemImage: "arrow.up.circle.fill",
+			accessibilityLabel: "Upcoming Intersection"
+		) {
+			await updateReport(.upcoming)
+		}
+		.accessibilityAction(named: Text("3rd Upcoming Intersection")) {
+			Task {
+				await updateReport(.upcoming, rank: 3)
+			}
+		}
+		.accessibilityAction(named: Text("2nd Upcoming Intersection")) {
+			Task {
+				await updateReport(.upcoming, rank: 2)
+			}
+		}
+	}
+
 	private var pointScanToggle: some View {
 		Toggle(
 			isOn: Binding(
@@ -210,13 +252,14 @@ struct ContentView: View {
 				}
 			)
 		) {
-			actionLabel("Point and Scan", systemImage: "dot.radiowaves.left.and.right")
+			actionLabel("Scan", systemImage: "dot.radiowaves.left.and.right")
 		}
 		.toggleStyle(.button)
 		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
 		.background(Color.crossBtn)
 		.contentShape(Rectangle())
 		.disabled(isLoading)
+		.accessibilityLabel("Point and Scan")
 	}
 
 	private var areaModeBinding: Binding<AreaMode> {
@@ -321,6 +364,15 @@ struct ContentView: View {
 		} set: { isEnabled in
 			hapticsEnabled = isEnabled
 			settingsFocusTarget = .haptics
+		}
+	}
+
+	private var manhattanSnobModeBinding: Binding<Bool> {
+		Binding {
+			manhattanSnobMode
+		} set: { isEnabled in
+			manhattanSnobMode = isEnabled
+			settingsFocusTarget = .manhattanSnobMode
 		}
 	}
 
@@ -450,6 +502,18 @@ struct ContentView: View {
 					Text("Verbosity")
 				}
 
+				Section {
+					Toggle("Manhattan Snob Mode", isOn: manhattanSnobModeBinding)
+						.accessibilityFocused($settingsFocusTarget, equals: .manhattanSnobMode)
+					Text("Uses Uptown, Downtown, East Side, and West Side for cardinal direction wording.")
+						.font(.footnote)
+						.foregroundStyle(.secondary)
+						.lineLimit(nil)
+						.fixedSize(horizontal: false, vertical: true)
+				} header: {
+					Text("Manhattan Snob Mode")
+				}
+
 				Toggle("Haptic scan feedback", isOn: hapticsBinding)
 					.accessibilityFocused($settingsFocusTarget, equals: .haptics)
 
@@ -521,6 +585,7 @@ struct ContentView: View {
 	private func actionButton(
 		_ title: String,
 		systemImage: String,
+		accessibilityLabel: String? = nil,
 		accessibilityHint: String? = nil,
 		isDisabled: Bool? = nil,
 		action: @escaping () async -> Void
@@ -543,6 +608,7 @@ struct ContentView: View {
 		.frame(maxWidth: .infinity, maxHeight: .infinity)
 		.contentShape(Rectangle())
 		.disabled(isDisabled ?? (isLoading || pointScanner.isScanning || pointScanner.isPreparing))
+		.accessibilityLabel(accessibilityLabel ?? title)
 		.accessibilityHint(accessibilityHint ?? "")
 	}
 
@@ -573,24 +639,46 @@ struct ContentView: View {
 		.padding(12)
 	}
 
-	private func updateReport(_ kind: ReportKind) async {
+	private func updateReport(_ kind: ReportKind, rank: Int = 1) async {
 		guard !isLoading else {
 			return
 		}
 		isLoading = true
-		statusText = "Updating \(kind.intentLabel)."
+		statusText = "Updating \(reportLabel(kind, rank: rank))."
 
 		do {
-			let text = try await OrientSvc.shared.spokenText(kind, prefs: prefs)
+			let text = if rank == 1 {
+				try await OrientSvc.shared.spokenText(kind, prefs: prefs)
+			} else {
+				try await OrientSvc.shared.report(kind, rank: rank, prefs: prefs).text(with: prefs, rank: rank)
+			}
 			statusText = text
 			VoiceOverAnnouncer.reportUpdated(text)
 		} catch {
-			let text = "Unable to update \(kind.intentLabel). \(error.localizedDescription)"
+			let text = "Unable to update \(reportLabel(kind, rank: rank)). \(error.localizedDescription)"
 			statusText = text
 			VoiceOverAnnouncer.reportUpdated(text)
 		}
 
 		isLoading = false
+	}
+
+	private func reportLabel(_ kind: ReportKind, rank: Int) -> String {
+		guard rank > 1 else {
+			return kind.intentLabel
+		}
+		return "\(ordinal(rank)) \(kind.intentLabel)"
+	}
+
+	private func ordinal(_ value: Int) -> String {
+		switch value {
+		case 2:
+			"2nd"
+		case 3:
+			"3rd"
+		default:
+			"\(value)th"
+		}
 	}
 
 	private func updateDirection() async {
@@ -602,7 +690,7 @@ struct ContentView: View {
 
 		do {
 			let heading = try await directionLocationProvider.currentHeading()
-			let text = "Facing \(Geo.compassDirection(heading))."
+			let text = "Facing \(Geo.localizedDirection(heading, prefs: prefs))."
 			statusText = text
 			VoiceOverAnnouncer.reportUpdated(text)
 		} catch {

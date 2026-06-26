@@ -84,6 +84,21 @@ struct IntersectionFinder {
 		return rankedNearest(from: context.coordinate, in: forwardCandidates)
 	}
 
+	func upcoming(
+		rank: Int,
+		from context: DeviceContext,
+		in candidates: [IntersectionCandidate]
+	) -> IntersectionCandidate? {
+		guard rank > 0 else {
+			return nil
+		}
+		let ranked = rankedUpcoming(from: context, in: candidates)
+		guard ranked.indices.contains(rank - 1) else {
+			return nil
+		}
+		return ranked[rank - 1]
+	}
+
 	func scanMatch(
 		from context: DeviceContext,
 		in candidates: [IntersectionCandidate]

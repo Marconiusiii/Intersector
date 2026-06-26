@@ -110,10 +110,12 @@ The main screen has these parts:
 
 1. Header
 2. Current Info area
-3. Nearest Intersection button
-4. Upcoming Intersection button
-5. My Direction button
-6. Point and Scan toggle
+3. Nearest button
+4. Upcoming button
+5. Direction button
+6. Scan toggle
+
+The visible button labels are intentionally short so they hold up better with larger text sizes. Their accessibility labels still use the fuller action names, such as `Nearest Intersection`, `Upcoming Intersection`, `My Direction`, and `Point and Scan`.
 
 The main screen uses a vertical `ScrollView` for all text sizes.
 
@@ -532,6 +534,8 @@ For Street Context wording, the same distance calculation is limited to the road
 
 For Spoken Intersections values 2 and 3, Nearest Intersection ranks mapped candidates by distance. Upcoming Intersection first filters candidates to a 120-degree forward-facing cone centered on the phone heading, then ranks those candidates from closest to farthest. A closer intersection behind the phone is therefore excluded from an Upcoming result. If a heading is unavailable, Upcoming falls back to one nearest result instead of guessing a forward direction.
 
+Ranked one-shot requests, such as 2nd Nearest, 3rd Nearest, 2nd Upcoming, and 3rd Upcoming, are different from the Spoken Intersections setting. A ranked one-shot request speaks only the requested intersection. For example, 2nd Upcoming speaks the second upcoming result by itself, not the first and second results together. The spoken lead includes the rank, such as `2nd Upcoming:` or `3rd Nearest:`.
+
 ## MapDataCache
 
 `MapDataCache` is an `actor`.
@@ -782,10 +786,11 @@ struct AppPrefs {
 	var spokenIntersectionCount = SpokenIntersectionCount.one
 	var mapDetails = MapDetailOptions()
 	var haptics = true
+	var manhattanSnobMode = false
 }
 ```
 
-`AreaMode`, `DetailLev`, `MeasurementUnit`, `DirectionStyle`, `IntersectionWording`, and `SpokenIntersectionCount` are enums. Each enum provides a value or label for the native Settings controls.
+`AreaMode`, `DetailLev`, `MeasurementUnit`, `DirectionStyle`, `IntersectionWording`, and `SpokenIntersectionCount` are enums. Each enum provides a value or label for the native Settings controls. Manhattan Snob Mode is a Boolean because it is just on or off.
 
 Intersection wording uses a segmented control. Direct wording names both roads as an intersection. Street Context first names the road nearest the device, then identifies the other road. For example: `Upcoming: On E 20th Avenue, Main Street is about 140 feet ahead.` A short description below the control changes with the selection. If the nearest road cannot be matched confidently to the selected intersection, the report uses Direct wording instead.
 
@@ -798,6 +803,8 @@ Walking Paths remains off by default. The Settings explanation makes clear that 
 Direction style controls whether report directions use word directions, such as `ahead and right`, or clock-face directions, such as `at 2 o'clock`. Clock-face directions treat the direction the phone is pointing as 12 o'clock.
 
 Verbosity has three levels. Minimal returns intersection names only and overrides distance, direction, neighborhood, confidence, and Intersection Wording additions. When several results share the same street, Minimal names that street in the first intersection and then lists the remaining cross streets, such as `Amsterdam Avenue and West 93rd Street, West 94th Street`. When the results do not share a street, each intersection remains complete, such as `Foothill Boulevard and Frazier Avenue, Stanley Avenue and Talbot Avenue`. Brief adds distance and direction. Standard can also add neighborhood context, such as `in SoMa` or `toward Civic Center`, when that data is available.
+
+Manhattan Snob Mode changes cardinal word directions into New York-style wording. North and northeast become `Uptown`, east and southeast become `East Side`, south and southwest become `Downtown`, and west and northwest become `West Side`. My Direction can say copy like `Facing Uptown.` Nearest and Upcoming reports append copy like `towards Uptown` when the app is using word directions. Clock-face directions stay clock-face directions.
 
 Spoken Intersections is a segmented control with values 1, 2, and 3. The selected number controls how many results the app requests. Nearest orders multiple results by distance. Upcoming uses the phone heading and orders only forward-facing results from closest to farthest. The visible segment labels remain numeric, while VoiceOver receives the complete labels `One intersection`, `Two intersections`, and `Three intersections`. The explanatory text for values 2 and 3 states exactly how many results Nearest and Upcoming will speak.
 
@@ -880,7 +887,7 @@ let text = try await OrientSvc.shared.spokenText(.nearest, prefs: prefs)
 
 That is the important architecture choice. Siri does not have a separate intersection engine. It reuses the same app logic.
 
-Dedicated Second Nearest and Third Nearest intents request ranks 2 and 3 directly. The service sorts candidates by straight-line distance, collapses nearby duplicate map nodes for the same named intersection, and tries radii of 225, 375, 750, and 1,200 meters only until enough results exist.
+Dedicated 2nd Nearest, 3rd Nearest, 2nd Upcoming, and 3rd Upcoming intents request one exact rank directly. The service sorts nearest candidates by straight-line distance. For upcoming ranks, it filters to intersections ahead of the phone and then sorts those forward-facing candidates by distance. These ranked shortcut actions speak only the requested intersection, not the intersections leading up to it, and their spoken prefixes include the requested rank.
 
 `IntersectorShortcuts` defines default shortcut phrases. Those phrases include `.applicationName`, which lets the system insert the app name.
 

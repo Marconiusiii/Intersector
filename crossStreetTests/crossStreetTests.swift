@@ -61,6 +61,7 @@ struct IntersectorTests {
 		defaults.set(true, forKey: "includeWalkingPaths")
 		defaults.set(MeasurementUnit.meters.rawValue, forKey: "measurementUnit")
 		defaults.set(SpokenIntersectionCount.three.rawValue, forKey: "spokenIntersectionCount")
+		defaults.set(true, forKey: "manhattanSnobMode")
 
 		let prefs = AppPrefs.saved(from: defaults)
 
@@ -69,6 +70,7 @@ struct IntersectorTests {
 		#expect(prefs.mapDetails.includeWalkingPaths)
 		#expect(prefs.measurementUnit == .meters)
 		#expect(prefs.spokenIntersectionCount == .three)
+		#expect(prefs.manhattanSnobMode)
 	}
 
 	@Test func reportTextCanHideArea() async throws {
@@ -117,6 +119,87 @@ struct IntersectorTests {
 		let text = report.text(with: prefs)
 
 		#expect(text == "Upcoming: Mission Street and 6th Street, about 140 feet at 2 o'clock toward Civic Center.")
+	}
+
+	@Test func manhattanSnobModeAddsManhattanDirectionToReports() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.manhattanSnobMode = true
+		let report = OrientReport(
+			kind: .nearest,
+			cross: "Amsterdam Avenue and West 94th Street",
+			dist: "120 feet",
+			relDir: "ahead",
+			relDegrees: 0,
+			street: "Amsterdam Avenue",
+			head: "north",
+			area: nil,
+			toward: nil,
+			conf: .high
+		)
+
+		#expect(report.text(with: prefs) == "Nearest: Amsterdam Avenue and West 94th Street, about 120 feet towards Uptown.")
+		#expect(Geo.localizedDirection(180, prefs: prefs) == "Downtown")
+	}
+
+	@Test func manhattanSnobModeDoesNotOverrideClockFaceReports() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.directionStyle = .clockFace
+		prefs.manhattanSnobMode = true
+		let report = OrientReport(
+			kind: .upcoming,
+			cross: "Amsterdam Avenue and West 94th Street",
+			dist: "120 feet",
+			relDir: "ahead",
+			relDegrees: 0,
+			street: "Amsterdam Avenue",
+			head: "north",
+			area: nil,
+			toward: nil,
+			conf: .high
+		)
+
+		#expect(report.text(with: prefs) == "Upcoming: Amsterdam Avenue and West 94th Street, about 120 feet at 12 o'clock.")
+	}
+
+	@Test func rankedReportTextIncludesRankPrefix() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		let report = OrientReport(
+			kind: .nearest,
+			cross: "Amsterdam Avenue and West 94th Street",
+			dist: "120 feet",
+			relDir: "ahead",
+			relDegrees: 0,
+			street: "Amsterdam Avenue",
+			head: "north",
+			area: nil,
+			toward: nil,
+			conf: .high
+		)
+
+		#expect(report.text(with: prefs, rank: 3) == "3rd Nearest: Amsterdam Avenue and West 94th Street, about 120 feet ahead.")
+	}
+
+	@Test func rankedMinimalReportTextIncludesRankPrefix() async throws {
+		var prefs = AppPrefs()
+		prefs.detail = .minimal
+		let report = OrientReport(
+			kind: .upcoming,
+			cross: "Amsterdam Avenue and West 94th Street",
+			dist: "120 feet",
+			relDir: "ahead",
+			relDegrees: 0,
+			street: "Amsterdam Avenue",
+			crossStreet: "West 94th Street",
+			head: "north",
+			area: nil,
+			toward: nil,
+			conf: .high
+		)
+
+		#expect(report.text(with: prefs, rank: 2) == "2nd Upcoming: Amsterdam Avenue and West 94th Street.")
 	}
 
 	@Test func streetContextNamesCurrentStreetBeforeCrossStreet() async throws {
@@ -554,6 +637,48 @@ struct IntersectorTests {
 
 		#expect(text == "Oak Street and First Street, Second Street.")
 		#expect(!text.contains("Behind Street"))
+	}
+
+	@Test func rankedUpcomingReportSpeaksOnlyRequestedIntersection() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapData = MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: "first-ahead",
+					names: ["Oak Street", "First Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "second-ahead",
+					names: ["Oak Street", "Second Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "third-ahead",
+					names: ["Oak Street", "Third Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.003, longitude: -122.0)
+				)
+			],
+			roads: []
+		)
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(coordinate: origin, headingDegrees: 0)
+			),
+			mapDataClient: StaticMapDataClient(data: mapData),
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.detail = .minimal
+		prefs.spokenIntersectionCount = .three
+
+		let report = try await service.report(.upcoming, rank: 2, prefs: prefs)
+		let text = report.text(with: prefs, rank: 2)
+
+		#expect(text == "2nd Upcoming: Oak Street and Second Street.")
+		#expect(!text.contains("First Street"))
+		#expect(!text.contains("Third Street"))
 	}
 
 	@Test func rankedNearestReturnsRequestedDistanceOrder() async throws {

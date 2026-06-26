@@ -49,7 +49,7 @@ struct UpcomingIntersectionIntent: AppIntent {
 }
 
 struct SecondNearestIntersectionIntent: AppIntent {
-	static var title: LocalizedStringResource = "Second Nearest Intersection"
+	static var title: LocalizedStringResource = "2nd Nearest Intersection"
 	static var description = IntentDescription("Reports the second closest mapped intersection.")
 	static var openAppWhenRun = false
 
@@ -57,7 +57,7 @@ struct SecondNearestIntersectionIntent: AppIntent {
 		do {
 			let prefs = await AppPrefs.saved()
 			let report = try await OrientSvc.shared.report(.nearest, rank: 2, prefs: prefs)
-			let text = await report.text(with: prefs)
+			let text = await report.text(with: prefs, rank: 2)
 			return .result(dialog: IntentDialog(stringLiteral: text))
 		} catch {
 			return .result(
@@ -68,7 +68,7 @@ struct SecondNearestIntersectionIntent: AppIntent {
 }
 
 struct ThirdNearestIntersectionIntent: AppIntent {
-	static var title: LocalizedStringResource = "Third Nearest Intersection"
+	static var title: LocalizedStringResource = "3rd Nearest Intersection"
 	static var description = IntentDescription("Reports the third closest mapped intersection.")
 	static var openAppWhenRun = false
 
@@ -76,11 +76,49 @@ struct ThirdNearestIntersectionIntent: AppIntent {
 		do {
 			let prefs = await AppPrefs.saved()
 			let report = try await OrientSvc.shared.report(.nearest, rank: 3, prefs: prefs)
-			let text = await report.text(with: prefs)
+			let text = await report.text(with: prefs, rank: 3)
 			return .result(dialog: IntentDialog(stringLiteral: text))
 		} catch {
 			return .result(
 				dialog: "I couldn't get your third nearest intersection. Make sure Location Services are enabled for Intersector and try again."
+			)
+		}
+	}
+}
+
+struct SecondUpcomingIntersectionIntent: AppIntent {
+	static var title: LocalizedStringResource = "2nd Upcoming Intersection"
+	static var description = IntentDescription("Reports the second mapped intersection ahead.")
+	static var openAppWhenRun = false
+
+	func perform() async throws -> some IntentResult & ProvidesDialog {
+		do {
+			let prefs = await AppPrefs.saved()
+			let report = try await OrientSvc.shared.report(.upcoming, rank: 2, prefs: prefs)
+			let text = await report.text(with: prefs, rank: 2)
+			return .result(dialog: IntentDialog(stringLiteral: text))
+		} catch {
+			return .result(
+				dialog: "I couldn't get your second upcoming intersection. Make sure Location Services are enabled for Intersector and try again."
+			)
+		}
+	}
+}
+
+struct ThirdUpcomingIntersectionIntent: AppIntent {
+	static var title: LocalizedStringResource = "3rd Upcoming Intersection"
+	static var description = IntentDescription("Reports the third mapped intersection ahead.")
+	static var openAppWhenRun = false
+
+	func perform() async throws -> some IntentResult & ProvidesDialog {
+		do {
+			let prefs = await AppPrefs.saved()
+			let report = try await OrientSvc.shared.report(.upcoming, rank: 3, prefs: prefs)
+			let text = await report.text(with: prefs, rank: 3)
+			return .result(dialog: IntentDialog(stringLiteral: text))
+		} catch {
+			return .result(
+				dialog: "I couldn't get your third upcoming intersection. Make sure Location Services are enabled for Intersector and try again."
 			)
 		}
 	}
@@ -132,24 +170,62 @@ struct IntersectorShortcuts: AppShortcutsProvider {
 		AppShortcut(
 			intent: SecondNearestIntersectionIntent(),
 			phrases: [
+				"2nd nearest intersection in \(.applicationName)",
 				"Second nearest intersection in \(.applicationName)",
+				"What's my 2nd nearest intersection with \(.applicationName)",
 				"What's my second nearest intersection with \(.applicationName)",
+				"What's the 2nd nearest intersection with \(.applicationName)",
+				"What's the second nearest intersection with \(.applicationName)",
 				"What is my second nearest intersection with \(.applicationName)",
 				"Find my second nearest intersection with \(.applicationName)"
 			],
-			shortTitle: "Second Nearest",
+			shortTitle: "2nd Nearest",
 			systemImageName: "2.circle.fill"
 		)
 		AppShortcut(
 			intent: ThirdNearestIntersectionIntent(),
 			phrases: [
+				"3rd nearest intersection in \(.applicationName)",
 				"Third nearest intersection in \(.applicationName)",
+				"What's my 3rd nearest intersection with \(.applicationName)",
 				"What's my third nearest intersection with \(.applicationName)",
+				"What's the 3rd nearest intersection with \(.applicationName)",
+				"What's the third nearest intersection with \(.applicationName)",
 				"What is my third nearest intersection with \(.applicationName)",
 				"Find my third nearest intersection with \(.applicationName)"
 			],
-			shortTitle: "Third Nearest",
+			shortTitle: "3rd Nearest",
 			systemImageName: "3.circle.fill"
+		)
+		AppShortcut(
+			intent: SecondUpcomingIntersectionIntent(),
+			phrases: [
+				"2nd upcoming intersection in \(.applicationName)",
+				"Second upcoming intersection in \(.applicationName)",
+				"What's my 2nd upcoming intersection with \(.applicationName)",
+				"What's my second upcoming intersection with \(.applicationName)",
+				"What's the 2nd upcoming intersection with \(.applicationName)",
+				"What's the second upcoming intersection with \(.applicationName)",
+				"What is my second upcoming intersection with \(.applicationName)",
+				"Find my second upcoming intersection with \(.applicationName)"
+			],
+			shortTitle: "2nd Upcoming",
+			systemImageName: "2.circle"
+		)
+		AppShortcut(
+			intent: ThirdUpcomingIntersectionIntent(),
+			phrases: [
+				"3rd upcoming intersection in \(.applicationName)",
+				"Third upcoming intersection in \(.applicationName)",
+				"What's my 3rd upcoming intersection with \(.applicationName)",
+				"What's my third upcoming intersection with \(.applicationName)",
+				"What's the 3rd upcoming intersection with \(.applicationName)",
+				"What's the third upcoming intersection with \(.applicationName)",
+				"What is my third upcoming intersection with \(.applicationName)",
+				"Find my third upcoming intersection with \(.applicationName)"
+			],
+			shortTitle: "3rd Upcoming",
+			systemImageName: "3.circle"
 		)
 		AppShortcut(
 			intent: StartPointScanIntent(),

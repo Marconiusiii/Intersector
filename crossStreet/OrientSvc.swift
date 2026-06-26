@@ -142,6 +142,12 @@ struct OrientSvc {
 				from: context.coordinate,
 				in: mapData.intersections
 			)
+		} else if rank > 1 {
+			finder.upcoming(
+				rank: rank,
+				from: context,
+				in: mapData.intersections
+			)
 		} else {
 			finder.bestMatch(for: kind, from: context, in: mapData.intersections)
 		}
@@ -361,6 +367,29 @@ enum Geo {
 		]
 		let index = Int((normalizedDegrees(degrees) + 22.5) / 45) % names.count
 		return names[index]
+	}
+
+	static func localizedDirection(_ degrees: CLLocationDirection, prefs: AppPrefs) -> String {
+		let direction = compassDirection(degrees)
+		guard prefs.manhattanSnobMode else {
+			return direction
+		}
+		return manhattanDirection(for: direction)
+	}
+
+	static func manhattanDirection(for direction: String) -> String {
+		switch direction {
+		case "north", "northeast":
+			"Uptown"
+		case "east", "southeast":
+			"East Side"
+		case "south", "southwest":
+			"Downtown"
+		case "west", "northwest":
+			"West Side"
+		default:
+			direction
+		}
 	}
 
 	static func spokenDistance(_ meters: CLLocationDistance, unit: MeasurementUnit = .feet) -> String {

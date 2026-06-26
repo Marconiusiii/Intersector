@@ -25,7 +25,29 @@ struct OrientReport: Equatable {
 		text(with: prefs, includeLead: true)
 	}
 
+	func text(with prefs: AppPrefs, rank: Int) -> String {
+		guard rank > 1 else {
+			return text(with: prefs)
+		}
+
+		if prefs.detail == .minimal {
+			let minimalText: String
+			if let street, let crossStreet {
+				minimalText = "\(street) and \(crossStreet)"
+			} else {
+				minimalText = cross
+			}
+			return "\(leadText(rank: rank)): \(minimalText)."
+		}
+
+		return text(with: prefs, includeLead: true, rank: rank)
+	}
+
 	func text(with prefs: AppPrefs, includeLead: Bool) -> String {
+		text(with: prefs, includeLead: includeLead, rank: nil)
+	}
+
+	private func text(with prefs: AppPrefs, includeLead: Bool, rank: Int?) -> String {
 		if prefs.detail == .minimal {
 			let minimalText: String
 			if let street, let crossStreet {
@@ -47,7 +69,7 @@ struct OrientReport: Equatable {
 			text = "\(cross), about \(dist)"
 		}
 		if includeLead {
-			text = "\(leadText): \(text)"
+			text = "\(leadText(rank: rank)): \(text)"
 		}
 		if let direction = directionText(with: prefs) {
 			text += " \(direction)"
@@ -59,7 +81,14 @@ struct OrientReport: Equatable {
 		return text
 	}
 
-	private var leadText: String {
+	private func leadText(rank: Int? = nil) -> String {
+		if let rank, rank > 1 {
+			return "\(Self.ordinal(rank)) \(baseLeadText)"
+		}
+		return baseLeadText
+	}
+
+	private var baseLeadText: String {
 		switch kind {
 		case .nearest:
 			"Nearest"
@@ -67,6 +96,17 @@ struct OrientReport: Equatable {
 			"Upcoming"
 		case .scan:
 			"Pointed"
+		}
+	}
+
+	private static func ordinal(_ value: Int) -> String {
+		switch value {
+		case 2:
+			"2nd"
+		case 3:
+			"3rd"
+		default:
+			"\(value)th"
 		}
 	}
 
@@ -92,9 +132,12 @@ struct OrientReport: Equatable {
 	private func directionText(with prefs: AppPrefs) -> String? {
 		switch prefs.directionStyle {
 		case .words:
-			relDir
+			if prefs.manhattanSnobMode, kind != .scan {
+				return head.map { "towards \(Geo.manhattanDirection(for: $0))" }
+			}
+			return relDir
 		case .clockFace:
-			relDegrees.map { Self.clockFaceDirection(from: $0) }
+			return relDegrees.map { Self.clockFaceDirection(from: $0) }
 		}
 	}
 
