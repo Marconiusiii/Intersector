@@ -37,9 +37,42 @@ struct OrientReport: Equatable {
 		text(with: prefs, includeLead: includeLead, rank: nil)
 	}
 
+	func neighborhoodText(with prefs: AppPrefs) -> String? {
+		areaText(prefs)
+	}
+
+	func text(
+		with prefs: AppPrefs,
+		includeLead: Bool,
+		includeNeighborhood: Bool
+	) -> String {
+		text(
+			with: prefs,
+			includeLead: includeLead,
+			rank: nil,
+			includeNeighborhood: includeNeighborhood
+		)
+	}
+
 	private func text(with prefs: AppPrefs, includeLead: Bool, rank: Int?) -> String {
+		text(
+			with: prefs,
+			includeLead: includeLead,
+			rank: rank,
+			includeNeighborhood: true
+		)
+	}
+
+	private func text(
+		with prefs: AppPrefs,
+		includeLead: Bool,
+		rank: Int?,
+		includeNeighborhood: Bool
+	) -> String {
 		var text: String
-		if
+		if prefs.announcementOptions.speaksIntersectionNamesOnly {
+			text = nameOnlyText()
+		} else if
 			prefs.intersectionWording == .streetContext,
 			let street,
 			let crossStreet
@@ -48,14 +81,23 @@ struct OrientReport: Equatable {
 		} else {
 			text = directText(with: prefs)
 		}
-		if includeLead {
+		let shouldIncludeLead = includeLead &&
+			(!prefs.announcementOptions.speaksIntersectionNamesOnly || rank != nil)
+		if shouldIncludeLead {
 			text = "\(leadText(rank: rank)): \(text)"
 		}
-		if let area = areaText(prefs) {
+		if includeNeighborhood, let area = areaText(prefs) {
 			text += " \(area)"
 		}
 		text += "."
 		return text
+	}
+
+	private func nameOnlyText() -> String {
+		guard let street, let crossStreet else {
+			return cross
+		}
+		return "\(street) and \(crossStreet)"
 	}
 
 	private func leadText(rank: Int? = nil) -> String {
@@ -103,9 +145,9 @@ struct OrientReport: Equatable {
 	) -> String {
 		let details = reportDetails(with: prefs)
 		guard !details.isEmpty else {
-			return "On \(street), \(crossStreet)"
+			return "On \(street) at \(crossStreet)"
 		}
-		return "On \(street), \(crossStreet) is \(details.joined(separator: " "))"
+		return "On \(street) at \(crossStreet), \(details.joined(separator: " "))"
 	}
 
 	private func reportDetails(with prefs: AppPrefs) -> [String] {
@@ -186,9 +228,39 @@ struct IntersectionReportList: Equatable {
 			return labels.joined(separator: ", ") + "."
 		}
 
-		return reports.enumerated().map { index, report in
-			report.text(with: prefs, includeLead: index == 0)
+		let sharedNeighborhood = sharedNeighborhoodText(with: prefs)
+		let text = reports.enumerated().map { index, report in
+			report.text(
+				with: prefs,
+				includeLead: index == 0,
+				includeNeighborhood: sharedNeighborhood == nil
+			)
 		}.joined(separator: " ")
+		guard let sharedNeighborhood else {
+			return text
+		}
+		return text.dropTrailingPeriod() + " \(sharedNeighborhood)."
+	}
+
+	private func sharedNeighborhoodText(with prefs: AppPrefs) -> String? {
+		guard reports.count > 1, prefs.announcementOptions.includeNeighborhood else {
+			return nil
+		}
+		let neighborhoodTexts = reports.map { $0.neighborhoodText(with: prefs) }
+		guard
+			let first = neighborhoodTexts.first,
+			let shared = first,
+			neighborhoodTexts.allSatisfy({ $0 == shared })
+		else {
+			return nil
+		}
+		return shared
+	}
+}
+
+private extension String {
+	func dropTrailingPeriod() -> String {
+		hasSuffix(".") ? String(dropLast()) : self
 	}
 }
 
@@ -386,10 +458,122 @@ struct MapDataSet: Equatable {
 			.name
 	}
 
+	func crossStreetNames(
+		for match: IntersectionCandidate,
+		on roadName: String,
+		heading: CLLocationDirection?
+	) -> [String] {
+		guard !match.id.hasPrefix("crossing-") else {
+			return []
+		}
+		let candidates = splitIntersectionCandidates(for: match, on: roadName)
+		let orderedCandidates = orderedSplitCandidates(
+			candidates,
+			roadName: roadName,
+			heading: heading
+		)
+		return orderedCandidates.reduce(into: []) { names, candidate in
+			for name in candidate.names where name != roadName && !names.contains(name) {
+				names.append(name)
+			}
+		}
+	}
+
 	private func nearestRoad(to coordinate: CLLocationCoordinate2D) -> MapRoad? {
 		roads.min {
 			$0.minimumDistance(to: coordinate) < $1.minimumDistance(to: coordinate)
 		}
+	}
+
+	private func splitIntersectionCandidates(
+		for match: IntersectionCandidate,
+		on roadName: String
+	) -> [IntersectionCandidate] {
+		let sameStreetCandidates = intersections.filter {
+			!$0.id.hasPrefix("crossing-") && $0.roadNames.contains(roadName)
+		}
+		let nearbyCandidates = sameStreetCandidates.filter { candidate in
+			candidate.id == match.id || isSameSplitIntersection(candidate, as: match, on: roadName)
+		}
+		return nearbyCandidates.isEmpty ? [match] : nearbyCandidates
+	}
+
+	private func isSameSplitIntersection(
+		_ candidate: IntersectionCandidate,
+		as match: IntersectionCandidate,
+		on roadName: String
+	) -> Bool {
+		guard candidate.id != match.id else {
+			return true
+		}
+		let straightLineDistance = Geo.distanceMeters(from: candidate.coordinate, to: match.coordinate)
+		guard straightLineDistance <= 45 else {
+			return false
+		}
+		guard
+			let road = roads.first(where: { $0.name == roadName }),
+			let candidatePosition = road.signedDistanceAlongRoad(
+				from: match.coordinate,
+				to: candidate.coordinate
+			)
+		else {
+			return straightLineDistance <= 30
+		}
+		return abs(candidatePosition) <= 30
+	}
+
+	private func orderedSplitCandidates(
+		_ candidates: [IntersectionCandidate],
+		roadName: String,
+		heading: CLLocationDirection?
+	) -> [IntersectionCandidate] {
+		guard let heading else {
+			return candidates.sorted {
+				Geo.distanceMeters(from: candidates[0].coordinate, to: $0.coordinate)
+					< Geo.distanceMeters(from: candidates[0].coordinate, to: $1.coordinate)
+			}
+		}
+		return candidates.enumerated().sorted { lhs, rhs in
+			let lhsSide = sideScore(for: lhs.element, roadName: roadName, heading: heading)
+			let rhsSide = sideScore(for: rhs.element, roadName: roadName, heading: heading)
+			if lhsSide != rhsSide {
+				return lhsSide > rhsSide
+			}
+			return lhs.offset < rhs.offset
+		}.map(\.element)
+	}
+
+	private func sideScore(
+		for candidate: IntersectionCandidate,
+		roadName: String,
+		heading: CLLocationDirection
+	) -> Double {
+		let vectors = candidate.names
+			.filter { $0 != roadName }
+			.compactMap { crossStreetVector(for: $0, from: candidate.coordinate) }
+		guard let vector = vectors.first else {
+			return 0
+		}
+		let radians = heading * Double.pi / 180
+		let headingX = sin(radians)
+		let headingY = cos(radians)
+		return headingX * vector.y - headingY * vector.x
+	}
+
+	private func crossStreetVector(
+		for roadName: String,
+		from coordinate: CLLocationCoordinate2D
+	) -> (x: Double, y: Double)? {
+		roads
+			.filter { $0.name == roadName }
+			.compactMap { road -> (distance: CLLocationDistance, vector: (x: Double, y: Double))? in
+				guard let vector = road.vectorAway(from: coordinate) else {
+					return nil
+				}
+				return (road.minimumDistance(to: coordinate), vector)
+			}
+			.min { $0.distance < $1.distance }?
+			.vector
 	}
 }
 
@@ -486,6 +670,13 @@ extension MapRoad {
 			(target.longitude - origin.longitude) * longitudeScale * earthRadius,
 			(target.latitude - origin.latitude) * latitudeScale * earthRadius
 		)
+	}
+
+	func vectorAway(from coordinate: CLLocationCoordinate2D) -> (x: Double, y: Double)? {
+		coordinates
+			.map { Self.localVector(from: coordinate, to: $0) }
+			.filter { hypot($0.x, $0.y) > 1 }
+			.min { hypot($0.x, $0.y) < hypot($1.x, $1.y) }
 	}
 
 	private static func distance(

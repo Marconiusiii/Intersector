@@ -111,13 +111,10 @@ struct OrientSvc {
 			}
 		}
 		let resultCount = kind == .upcoming && context.headingDegrees == nil ? 1 : requestedCount
-		let matches = Array(ranked.prefix(resultCount))
-		guard !matches.isEmpty else {
-			throw OrientError.noIntersections
-		}
 		let neighborhoodContext = await neighborhoodContext(for: prefs.areaMode, from: context)
-		let reports = matches.map { match in
-			makeReport(
+		var reports: [OrientReport] = []
+		for match in ranked {
+			let report = makeReport(
 				kind,
 				match: match,
 				context: context,
@@ -125,6 +122,15 @@ struct OrientSvc {
 				prefs: prefs,
 				neighborhoodContext: neighborhoodContext
 			)
+			if !reports.containsSpokenIntersection(matching: report) {
+				reports.append(report)
+			}
+			if reports.count == resultCount {
+				break
+			}
+		}
+		guard !reports.isEmpty else {
+			throw OrientError.noIntersections
 		}
 		return IntersectionReportList(reports: reports).text(with: prefs)
 	}
@@ -189,16 +195,20 @@ struct OrientSvc {
 			matching: match.roadNames
 		)
 		let crossStreet: String? = currentStreet.flatMap { roadName in
-			guard !match.id.hasPrefix("crossing-") else {
-				return nil
-			}
-			let otherNames = match.names.filter { $0 != roadName }
+			let otherNames = mapData.crossStreetNames(
+				for: match,
+				on: roadName,
+				heading: context.dependableTravelDirection
+			)
 			return otherNames.isEmpty ? nil : otherNames.joined(separator: " and ")
 		}
+		let cross = currentStreet.flatMap { roadName in
+			crossStreet.map { "\(roadName) and \($0)" }
+		} ?? match.title
 
 		return OrientReport(
 			kind: kind,
-			cross: match.title,
+			cross: cross,
 			dist: Geo.spokenDistance(distance, unit: prefs.measurementUnit),
 			relDir: relDir,
 			relDegrees: relDegrees,
@@ -330,6 +340,22 @@ struct OrientSvc {
 			.medium
 		case (_, .none):
 			.low
+		}
+	}
+}
+
+private extension Array where Element == OrientReport {
+	func containsSpokenIntersection(matching report: OrientReport) -> Bool {
+		contains { existing in
+			if
+				let existingStreet = existing.street,
+				let existingCrossStreet = existing.crossStreet,
+				let reportStreet = report.street,
+				let reportCrossStreet = report.crossStreet
+			{
+				return existingStreet == reportStreet && existingCrossStreet == reportCrossStreet
+			}
+			return existing.cross == report.cross
 		}
 	}
 }

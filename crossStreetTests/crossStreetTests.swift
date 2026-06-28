@@ -247,7 +247,7 @@ struct IntersectorTests {
 			conf: .high
 		)
 
-		#expect(report.text(with: prefs) == "Upcoming: On E 20th Avenue, Main Street is about 140 feet ahead.")
+		#expect(report.text(with: prefs) == "Upcoming: On E 20th Avenue at Main Street, about 140 feet ahead.")
 	}
 
 	@Test func streetContextFallsBackToDirectWordingWithoutCurrentStreet() async throws {
@@ -335,6 +335,84 @@ struct IntersectorTests {
 		let text = report.text(with: prefs)
 
 		#expect(text == "Upcoming: Mission Street and 6th Street, about 140 feet ahead and right toward Civic Center.")
+	}
+
+	@Test func multipleReportsShareMatchingNeighborhoodTextOnce() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .near
+		prefs.announcementOptions.includeNeighborhood = true
+		let reports = IntersectionReportList(reports: [
+			OrientReport(
+				kind: .upcoming,
+				cross: "Oak Street and First Street",
+				dist: "100 feet",
+				relDir: "ahead",
+				relDegrees: 0,
+				street: "Oak Street",
+				head: "north",
+				area: "Downtown",
+				toward: nil,
+				conf: .medium
+			),
+			OrientReport(
+				kind: .upcoming,
+				cross: "Oak Street and Second Street",
+				dist: "200 feet",
+				relDir: "ahead",
+				relDegrees: 0,
+				street: "Oak Street",
+				head: "north",
+				area: "Downtown",
+				toward: nil,
+				conf: .medium
+			)
+		])
+
+		let text = reports.text(with: prefs)
+
+		#expect(
+			text ==
+				"Upcoming: Oak Street and First Street, about 100 feet ahead. Oak Street and Second Street, about 200 feet ahead in Downtown."
+		)
+	}
+
+	@Test func multipleReportsKeepDifferentNeighborhoodTextWithEachReport() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .near
+		prefs.announcementOptions.includeNeighborhood = true
+		let reports = IntersectionReportList(reports: [
+			OrientReport(
+				kind: .upcoming,
+				cross: "Oak Street and First Street",
+				dist: "100 feet",
+				relDir: "ahead",
+				relDegrees: 0,
+				street: "Oak Street",
+				head: "north",
+				area: "Downtown",
+				toward: nil,
+				conf: .medium
+			),
+			OrientReport(
+				kind: .upcoming,
+				cross: "Oak Street and Second Street",
+				dist: "200 feet",
+				relDir: "ahead",
+				relDegrees: 0,
+				street: "Oak Street",
+				head: "north",
+				area: "Uptown",
+				toward: nil,
+				conf: .medium
+			)
+		])
+
+		let text = reports.text(with: prefs)
+
+		#expect(
+			text ==
+				"Upcoming: Oak Street and First Street, about 100 feet ahead in Downtown. Oak Street and Second Street, about 200 feet ahead in Uptown."
+		)
 	}
 
 	@Test func distanceTextCanUseMeters() async throws {
@@ -697,6 +775,86 @@ struct IntersectorTests {
 
 		#expect(text == "Oak Street and First Street, Second Street.")
 		#expect(!text.contains("Behind Street"))
+	}
+
+	@Test func splitCrossStreetsUseHeadingToSpeakLeftThenRight() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapData = MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: "stanley",
+					names: ["Foothill Boulevard", "Stanley Avenue"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.00008)
+				),
+				IntersectionCandidate(
+					id: "talbot",
+					names: ["Foothill Boulevard", "Talbot Avenue"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -121.99992)
+				),
+				IntersectionCandidate(
+					id: "next",
+					names: ["Foothill Boulevard", "Next Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+				)
+			],
+			roads: [
+				MapRoad(
+					id: "foothill",
+					name: "Foothill Boulevard",
+					nodeIDs: [1, 2],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 36.995, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 37.005, longitude: -122.0)
+					]
+				),
+				MapRoad(
+					id: "stanley",
+					name: "Stanley Avenue",
+					nodeIDs: [3, 4],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 37.001, longitude: -122.00008),
+						CLLocationCoordinate2D(latitude: 37.001, longitude: -122.001)
+					]
+				),
+				MapRoad(
+					id: "talbot",
+					name: "Talbot Avenue",
+					nodeIDs: [5, 6],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 37.001, longitude: -121.99992),
+						CLLocationCoordinate2D(latitude: 37.001, longitude: -121.999)
+					]
+				),
+				MapRoad(
+					id: "next",
+					name: "Next Street",
+					nodeIDs: [7, 8],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 37.002, longitude: -121.999)
+					]
+				)
+			]
+		)
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(coordinate: origin, headingDegrees: 0)
+			),
+			mapDataClient: StaticMapDataClient(data: mapData),
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.announcementOptions = AnnouncementOptions(
+			includeDistance: false,
+			includeDirection: false,
+			includeNeighborhood: false
+		)
+		prefs.spokenIntersectionCount = .two
+
+		let text = try await service.spokenText(.upcoming, prefs: prefs)
+
+		#expect(text == "Foothill Boulevard and Stanley Avenue and Talbot Avenue, Next Street.")
 	}
 
 	@Test func rankedUpcomingReportSpeaksOnlyRequestedIntersection() async throws {
