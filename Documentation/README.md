@@ -26,7 +26,7 @@ These are the most important files:
   Shows the first-run onboarding flow and requests location permission.
 
 - `AppPrefs.swift`
-  Defines app settings such as neighborhood context, map detail, intersection wording, measurement unit, direction style, detail level, and haptic feedback.
+  Defines app settings such as neighborhood context, map detail, intersection wording, measurement unit, direction style, announcement content, and haptic feedback.
 
 - `LocationProvider.swift`
   Wraps CoreLocation so the rest of the app can ask for location and heading data with async functions.
@@ -117,6 +117,10 @@ The main screen has these parts:
 
 The visible button labels are intentionally short so they hold up better with larger text sizes. Their accessibility labels still use the fuller action names, such as `Nearest Intersection`, `Upcoming Intersection`, `My Direction`, and `Point and Scan`.
 
+Nearest and Upcoming can also show subtle chevron menu controls beside them. These menus give sighted and low-vision touch users access to 2nd and 3rd ranked results without adding four more full-width buttons. The menus are hidden from VoiceOver because the Nearest and Upcoming buttons already expose those same ranked choices as custom accessibility actions.
+
+Point and Scan uses a stronger border because it starts and stops a live mode. When it is preparing or scanning, its background changes from yellow to orange so the active state is visible without relying only on the other buttons becoming disabled.
+
 The main screen uses a vertical `ScrollView` for all text sizes.
 
 Each major row has a scaled minimum height. The minimum height gives the row enough tappable space at normal text sizes, while still allowing the row to grow when Dynamic Type is larger.
@@ -133,6 +137,9 @@ This avoids a common SwiftUI problem: if you force large text into a fixed-heigh
 @AppStorage("directionStyle") private var directionStyleRaw = DirectionStyle.words.rawValue
 @AppStorage("intersectionWording") private var intersectionWordingRaw = IntersectionWording.direct.rawValue
 @AppStorage("spokenIntersectionCount") private var spokenIntersectionCountRaw = SpokenIntersectionCount.one.rawValue
+@AppStorage("includeAnnouncementDistance") private var includeAnnouncementDistance = true
+@AppStorage("includeAnnouncementDirection") private var includeAnnouncementDirection = true
+@AppStorage("includeAnnouncementNeighborhood") private var includeAnnouncementNeighborhood = true
 @AppStorage("includeCrossings") private var includeCrossings = false
 @AppStorage("includeWalkingPaths") private var includeWalkingPaths = false
 @State private var statusText = "Choose an action."
@@ -200,7 +207,7 @@ The shared service code is mostly the same, but the matching rule changes in `In
 
 For nearest, the app picks the closest candidate.
 
-For upcoming, the app tries to use heading data. It looks for intersections within 60 degrees of the direction the device is facing. If it cannot find one in that forward window, it falls back to the nearest candidate.
+For upcoming, the app tries to use heading data. It looks for intersections within 45 degrees of the direction the device is facing. If it cannot find one in that forward window, it falls back to the nearest candidate.
 
 The useful pattern here is that `ReportKind` changes behavior without duplicating the whole lookup flow.
 
@@ -532,7 +539,7 @@ It finds the nearest road by measuring from the user's coordinate to the full li
 
 For Street Context wording, the same distance calculation is limited to the roads that form the selected intersection. A nearby unrelated road therefore cannot force the report back to Direct wording.
 
-For Spoken Intersections values 2 and 3, Nearest Intersection ranks mapped candidates by distance. Upcoming Intersection first filters candidates to a 120-degree forward-facing cone centered on the phone heading, then ranks those candidates from closest to farthest. A closer intersection behind the phone is therefore excluded from an Upcoming result. If a heading is unavailable, Upcoming falls back to one nearest result instead of guessing a forward direction.
+For Spoken Intersections values 2 and 3, Nearest Intersection ranks mapped candidates by distance. Upcoming Intersection first filters candidates to a 90-degree forward-facing cone centered on the phone heading, then ranks those candidates from closest to farthest. A closer intersection behind the phone is therefore excluded from an Upcoming result. If a heading is unavailable, Upcoming falls back to one nearest result instead of guessing a forward direction.
 
 Ranked one-shot requests, such as 2nd Nearest, 3rd Nearest, 2nd Upcoming, and 3rd Upcoming, are different from the Spoken Intersections setting. A ranked one-shot request speaks only the requested intersection. For example, 2nd Upcoming speaks the second upcoming result by itself, not the first and second results together. The spoken lead includes the rank, such as `2nd Upcoming:` or `3rd Nearest:`.
 
@@ -779,36 +786,34 @@ The settings use native SwiftUI controls:
 ```swift
 struct AppPrefs {
 	var areaMode = AreaMode.near
-	var detail = DetailLev.standard
 	var measurementUnit = MeasurementUnit.feet
 	var directionStyle = DirectionStyle.words
 	var intersectionWording = IntersectionWording.direct
 	var spokenIntersectionCount = SpokenIntersectionCount.one
+	var announcementOptions = AnnouncementOptions()
 	var mapDetails = MapDetailOptions()
 	var haptics = true
 	var manhattanSnobMode = false
 }
 ```
 
-`AreaMode`, `DetailLev`, `MeasurementUnit`, `DirectionStyle`, `IntersectionWording`, and `SpokenIntersectionCount` are enums. Each enum provides a value or label for the native Settings controls. Manhattan Snob Mode is a Boolean because it is just on or off.
+`AreaMode`, `MeasurementUnit`, `DirectionStyle`, `IntersectionWording`, and `SpokenIntersectionCount` are enums. Each enum provides a value or label for the native Settings controls. `AnnouncementOptions` stores the Distance, Direction, and Neighborhood toggles. Manhattan Snob Mode is a Boolean because it is just on or off.
 
 Intersection wording uses a segmented control. Direct wording names both roads as an intersection. Street Context first names the road nearest the device, then identifies the other road. For example: `Upcoming: On E 20th Avenue, Main Street is about 140 feet ahead.` A short description below the control changes with the selection. If the nearest road cannot be matched confidently to the selected intersection, the report uses Direct wording instead.
-
-Measurement unit controls whether report distances use feet or meters.
 
 Map detail controls whether extra OpenStreetMap details are included in the lookup. Crossings can add mapped crossing points on a named road. Walking Paths can include named paths such as footways when they intersect with streets or other named paths.
 
 Walking Paths remains off by default. The Settings explanation makes clear that leaving it off keeps results focused on the street grid.
 
-Direction style controls whether report directions use word directions, such as `ahead and right`, or clock-face directions, such as `at 2 o'clock`. Clock-face directions treat the direction the phone is pointing as 12 o'clock.
+Announcement content uses three toggles: Distance, Direction, and Neighborhood. The intersection name is always included. Turning all three toggles off gives compact intersection-name-only output. When several results share the same street, compact output names that street in the first intersection and then lists the remaining cross streets, such as `Amsterdam Avenue and West 93rd Street, West 94th Street`. When the results do not share a street, each intersection remains complete, such as `Foothill Boulevard and Frazier Avenue, Stanley Avenue and Talbot Avenue`.
 
-Verbosity has three levels. Minimal returns intersection names only and overrides distance, direction, neighborhood, confidence, and Intersection Wording additions. When several results share the same street, Minimal names that street in the first intersection and then lists the remaining cross streets, such as `Amsterdam Avenue and West 93rd Street, West 94th Street`. When the results do not share a street, each intersection remains complete, such as `Foothill Boulevard and Frazier Avenue, Stanley Avenue and Talbot Avenue`. Brief adds distance and direction. Standard can also add neighborhood context, such as `in SoMa` or `toward Civic Center`, when that data is available.
+The Announcements section progressively reveals dependent controls. When Distance is on, Measurement Unit appears so the user can choose feet or meters. When Direction is on, Direction Style appears so the user can choose word directions, such as `ahead and right`, or clock-face directions, such as `at 2 o'clock`. Clock-face directions treat the direction the phone is pointing as 12 o'clock. When Direction Style is Words, Manhattan Snob Mode appears. Manhattan Snob Mode changes cardinal word directions into New York-style wording. North and northeast become `Uptown`, east and southeast become `East Side`, south and southwest become `Downtown`, and west and northwest become `West Side`. My Direction can say copy like `Facing Uptown.` Nearest and Upcoming reports append copy like `towards Uptown` when the app is using word directions. Clock-face directions stay clock-face directions. When Neighborhood is on, Neighborhood Context appears so the user can choose whether neighborhood wording is nearby-only or heading-aware. A sample string below the toggles updates as these settings change.
 
-Manhattan Snob Mode changes cardinal word directions into New York-style wording. North and northeast become `Uptown`, east and southeast become `East Side`, south and southwest become `Downtown`, and west and northwest become `West Side`. My Direction can say copy like `Facing Uptown.` Nearest and Upcoming reports append copy like `towards Uptown` when the app is using word directions. Clock-face directions stay clock-face directions.
+Spoken Intersections is a menu picker with values 1, 2, and 3. The selected number controls how many results the app requests. Nearest orders multiple results by distance. Upcoming uses the phone heading and orders only forward-facing results from closest to farthest. VoiceOver receives the complete labels `One intersection`, `Two intersections`, and `Three intersections`. The explanatory text for values 2 and 3 states exactly how many results Nearest and Upcoming will speak.
 
-Spoken Intersections is a segmented control with values 1, 2, and 3. The selected number controls how many results the app requests. Nearest orders multiple results by distance. Upcoming uses the phone heading and orders only forward-facing results from closest to farthest. The visible segment labels remain numeric, while VoiceOver receives the complete labels `One intersection`, `Two intersections`, and `Three intersections`. The explanatory text for values 2 and 3 states exactly how many results Nearest and Upcoming will speak.
+The `Show 2nd and 3rd Controls` toggle controls whether the main screen shows chevron menus for ranked Nearest and Upcoming results. Turning it off removes those visible menus, but Siri, Shortcuts, and VoiceOver custom actions still provide ranked access.
 
-Settings groups use native `Section` headers. This gives Measurement Unit, Direction, Verbosity, and the other setting groups consistent Form spacing, Dynamic Type behavior, and heading navigation without separate heading-like rows.
+Settings groups use native `Section` headers. The Announcements section comes first and acts as the main builder for spoken output. More specialized sections, such as Intersection Wording, Spoken Intersections, Map Detail, and About Intersector, follow it.
 
 This keeps display strings near the setting values they describe.
 

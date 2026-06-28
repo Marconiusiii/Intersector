@@ -9,32 +9,32 @@ import Foundation
 
 struct AppPrefs {
 	var areaMode = AreaMode.near
-	var detail = DetailLev.standard
 	var measurementUnit = MeasurementUnit.feet
 	var directionStyle = DirectionStyle.words
 	var intersectionWording = IntersectionWording.direct
 	var spokenIntersectionCount = SpokenIntersectionCount.one
+	var announcementOptions = AnnouncementOptions()
 	var mapDetails = MapDetailOptions()
 	var haptics = true
 	var manhattanSnobMode = false
 
 	nonisolated init(
 		areaMode: AreaMode = .near,
-		detail: DetailLev = .standard,
 		measurementUnit: MeasurementUnit = .feet,
 		directionStyle: DirectionStyle = .words,
 		intersectionWording: IntersectionWording = .direct,
 		spokenIntersectionCount: SpokenIntersectionCount = .one,
+		announcementOptions: AnnouncementOptions = AnnouncementOptions(),
 		mapDetails: MapDetailOptions = MapDetailOptions(),
 		haptics: Bool = true,
 		manhattanSnobMode: Bool = false
 	) {
 		self.areaMode = areaMode
-		self.detail = detail
 		self.measurementUnit = measurementUnit
 		self.directionStyle = directionStyle
 		self.intersectionWording = intersectionWording
 		self.spokenIntersectionCount = spokenIntersectionCount
+		self.announcementOptions = announcementOptions
 		self.mapDetails = mapDetails
 		self.haptics = haptics
 		self.manhattanSnobMode = manhattanSnobMode
@@ -42,9 +42,9 @@ struct AppPrefs {
 
 	@MainActor
 	static func saved(from defaults: UserDefaults = .standard) -> AppPrefs {
-		AppPrefs(
+		let announcementOptions = AnnouncementOptions.saved(from: defaults)
+		return AppPrefs(
 			areaMode: AreaMode(rawValue: defaults.string(forKey: "areaMode") ?? "") ?? .near,
-			detail: DetailLev(rawValue: defaults.string(forKey: "detailLevel") ?? "") ?? .standard,
 			measurementUnit: MeasurementUnit(rawValue: defaults.string(forKey: "measurementUnit") ?? "") ?? .feet,
 			directionStyle: DirectionStyle(rawValue: defaults.string(forKey: "directionStyle") ?? "") ?? .words,
 			intersectionWording: IntersectionWording(
@@ -53,6 +53,7 @@ struct AppPrefs {
 			spokenIntersectionCount: SpokenIntersectionCount(
 				rawValue: defaults.integer(forKey: "spokenIntersectionCount")
 			) ?? .one,
+			announcementOptions: announcementOptions,
 			mapDetails: MapDetailOptions(
 				includeCrossings: defaults.object(forKey: "includeCrossings") as? Bool ?? false,
 				includeWalkingPaths: defaults.object(forKey: "includeWalkingPaths") as? Bool ?? false
@@ -60,6 +61,51 @@ struct AppPrefs {
 			haptics: defaults.object(forKey: "hapticsEnabled") as? Bool ?? true,
 			manhattanSnobMode: defaults.object(forKey: "manhattanSnobMode") as? Bool ?? false
 		)
+	}
+}
+
+struct AnnouncementOptions: Equatable, Hashable, Sendable {
+	var includeDistance = true
+	var includeDirection = true
+	var includeNeighborhood = true
+
+	nonisolated init(
+		includeDistance: Bool = true,
+		includeDirection: Bool = true,
+		includeNeighborhood: Bool = true
+	) {
+		self.includeDistance = includeDistance
+		self.includeDirection = includeDirection
+		self.includeNeighborhood = includeNeighborhood
+	}
+
+	@MainActor
+	static func saved(from defaults: UserDefaults) -> AnnouncementOptions {
+		let hasExplicitOptions =
+			defaults.object(forKey: "includeAnnouncementDistance") != nil ||
+			defaults.object(forKey: "includeAnnouncementDirection") != nil ||
+			defaults.object(forKey: "includeAnnouncementNeighborhood") != nil
+
+		if hasExplicitOptions {
+			return AnnouncementOptions(
+				includeDistance: defaults.object(forKey: "includeAnnouncementDistance") as? Bool ?? true,
+				includeDirection: defaults.object(forKey: "includeAnnouncementDirection") as? Bool ?? true,
+				includeNeighborhood: defaults.object(forKey: "includeAnnouncementNeighborhood") as? Bool ?? true
+			)
+		}
+
+		switch DetailLev(rawValue: defaults.string(forKey: "detailLevel") ?? "") ?? .standard {
+		case .minimal:
+			return AnnouncementOptions(
+				includeDistance: false,
+				includeDirection: false,
+				includeNeighborhood: false
+			)
+		case .brief:
+			return AnnouncementOptions(includeNeighborhood: false)
+		case .standard:
+			return AnnouncementOptions()
+		}
 	}
 }
 

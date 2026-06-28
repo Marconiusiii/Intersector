@@ -10,11 +10,15 @@ import Testing
 @testable import Intersector
 
 struct IntersectorTests {
-	@Test func minimalVerbositySpeaksIntersectionNameOnly() async throws {
+	@Test func announcementOptionsCanSpeakIntersectionNameOnly() async throws {
 		var prefs = AppPrefs()
-		prefs.detail = .minimal
 		prefs.areaMode = .toward
 		prefs.intersectionWording = .streetContext
+		prefs.announcementOptions = AnnouncementOptions(
+			includeDistance: false,
+			includeDirection: false,
+			includeNeighborhood: false
+		)
 		let report = OrientReport(
 			kind: .upcoming,
 			cross: "Amsterdam Avenue and West 94th Street",
@@ -32,9 +36,13 @@ struct IntersectorTests {
 		#expect(report.text(with: prefs) == "Amsterdam Avenue and West 94th Street.")
 	}
 
-	@Test func minimalVerbosityNamesCurrentStreetFirst() async throws {
+	@Test func intersectionNameOnlyUsesCurrentStreetFirst() async throws {
 		var prefs = AppPrefs()
-		prefs.detail = .minimal
+		prefs.announcementOptions = AnnouncementOptions(
+			includeDistance: false,
+			includeDirection: false,
+			includeNeighborhood: false
+		)
 		let report = OrientReport(
 			kind: .nearest,
 			cross: "Main Street and Oak Avenue",
@@ -57,6 +65,9 @@ struct IntersectorTests {
 		let defaults = try #require(UserDefaults(suiteName: suiteName))
 		defer { defaults.removePersistentDomain(forName: suiteName) }
 		defaults.set(DetailLev.minimal.rawValue, forKey: "detailLevel")
+		defaults.set(true, forKey: "includeAnnouncementDistance")
+		defaults.set(false, forKey: "includeAnnouncementDirection")
+		defaults.set(true, forKey: "includeAnnouncementNeighborhood")
 		defaults.set(true, forKey: "includeCrossings")
 		defaults.set(true, forKey: "includeWalkingPaths")
 		defaults.set(MeasurementUnit.meters.rawValue, forKey: "measurementUnit")
@@ -65,12 +76,24 @@ struct IntersectorTests {
 
 		let prefs = AppPrefs.saved(from: defaults)
 
-		#expect(prefs.detail == .minimal)
+		#expect(prefs.announcementOptions.includeDistance)
+		#expect(!prefs.announcementOptions.includeDirection)
+		#expect(prefs.announcementOptions.includeNeighborhood)
 		#expect(prefs.mapDetails.includeCrossings)
 		#expect(prefs.mapDetails.includeWalkingPaths)
 		#expect(prefs.measurementUnit == .meters)
 		#expect(prefs.spokenIntersectionCount == .three)
 		#expect(prefs.manhattanSnobMode)
+	}
+
+	@Test func myDirectionIntentUsesSavedDirectionWording() async throws {
+		var prefs = AppPrefs()
+
+		#expect(MyDirectionIntent.spokenDirection(for: 90, prefs: prefs) == "Facing east.")
+
+		prefs.manhattanSnobMode = true
+
+		#expect(MyDirectionIntent.spokenDirection(for: 90, prefs: prefs) == "Facing East Side.")
 	}
 
 	@Test func reportTextCanHideArea() async throws {
@@ -184,7 +207,11 @@ struct IntersectorTests {
 
 	@Test func rankedMinimalReportTextIncludesRankPrefix() async throws {
 		var prefs = AppPrefs()
-		prefs.detail = .minimal
+		prefs.announcementOptions = AnnouncementOptions(
+			includeDistance: false,
+			includeDirection: false,
+			includeNeighborhood: false
+		)
 		let report = OrientReport(
 			kind: .upcoming,
 			cross: "Amsterdam Avenue and West 94th Street",
@@ -266,10 +293,10 @@ struct IntersectorTests {
 		#expect(!text.localizedCaseInsensitiveContains("uncertain"))
 	}
 
-	@Test func briefVerbosityOmitsNeighborhoodContext() async throws {
+	@Test func announcementOptionsCanOmitNeighborhoodContext() async throws {
 		var prefs = AppPrefs()
 		prefs.areaMode = .toward
-		prefs.detail = .brief
+		prefs.announcementOptions.includeNeighborhood = false
 		let report = OrientReport(
 			kind: .upcoming,
 			cross: "Mission Street and 6th Street",
@@ -288,10 +315,10 @@ struct IntersectorTests {
 		#expect(text == "Upcoming: Mission Street and 6th Street, about 140 feet ahead and right.")
 	}
 
-	@Test func standardVerbosityIncludesNeighborhoodContext() async throws {
+	@Test func announcementOptionsCanIncludeNeighborhoodContext() async throws {
 		var prefs = AppPrefs()
 		prefs.areaMode = .toward
-		prefs.detail = .standard
+		prefs.announcementOptions.includeNeighborhood = true
 		let report = OrientReport(
 			kind: .upcoming,
 			cross: "Mission Street and 6th Street",
@@ -430,9 +457,13 @@ struct IntersectorTests {
 
 		let position = try #require(mapData.streetPosition(from: context, count: .three))
 		var briefPrefs = AppPrefs()
-		briefPrefs.detail = .brief
+		briefPrefs.announcementOptions.includeNeighborhood = false
 		var minimalPrefs = AppPrefs()
-		minimalPrefs.detail = .minimal
+		minimalPrefs.announcementOptions = AnnouncementOptions(
+			includeDistance: false,
+			includeDirection: false,
+			includeNeighborhood: false
+		)
 
 		#expect(position.boundaries.map(\.id) == ["south", "north"])
 		#expect(position.following?.id == "following")
@@ -447,9 +478,13 @@ struct IntersectorTests {
 		)
 	}
 
-	@Test func minimalSpokenIntersectionsKeepsUnrelatedIntersectionsComplete() async throws {
+	@Test func intersectionNameOnlySpokenIntersectionsKeepsUnrelatedIntersectionsComplete() async throws {
 		var prefs = AppPrefs()
-		prefs.detail = .minimal
+		prefs.announcementOptions = AnnouncementOptions(
+			includeDistance: false,
+			includeDirection: false,
+			includeNeighborhood: false
+		)
 		let position = StreetPositionContext(
 			streetName: "Foothill Boulevard",
 			boundaries: [
@@ -589,6 +624,27 @@ struct IntersectorTests {
 		#expect(ranked.map(\.id) == ["first-ahead", "second-ahead"])
 	}
 
+	@Test func rankedUpcomingExcludesIntersectionsOutsideUrbanForwardCone() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 0, longitude: 0)
+		let context = DeviceContext(coordinate: origin, headingDegrees: 0)
+		let candidates = [
+			IntersectionCandidate(
+				id: "side-street",
+				names: ["Oak Street", "Side Street"],
+				coordinate: CLLocationCoordinate2D(latitude: 0.001, longitude: 0.0012)
+			),
+			IntersectionCandidate(
+				id: "ahead",
+				names: ["Oak Street", "Ahead Street"],
+				coordinate: CLLocationCoordinate2D(latitude: 0.002, longitude: 0)
+			)
+		]
+
+		let ranked = IntersectionFinder().rankedUpcoming(from: context, in: candidates)
+
+		#expect(ranked.map(\.id) == ["ahead"])
+	}
+
 	@Test func multipleUpcomingIntersectionsFollowPhoneHeading() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let mapData = MapDataSet(
@@ -630,7 +686,11 @@ struct IntersectorTests {
 		)
 		var prefs = AppPrefs()
 		prefs.areaMode = .off
-		prefs.detail = .minimal
+		prefs.announcementOptions = AnnouncementOptions(
+			includeDistance: false,
+			includeDirection: false,
+			includeNeighborhood: false
+		)
 		prefs.spokenIntersectionCount = .two
 
 		let text = try await service.spokenText(.upcoming, prefs: prefs)
@@ -670,7 +730,11 @@ struct IntersectorTests {
 		)
 		var prefs = AppPrefs()
 		prefs.areaMode = .off
-		prefs.detail = .minimal
+		prefs.announcementOptions = AnnouncementOptions(
+			includeDistance: false,
+			includeDirection: false,
+			includeNeighborhood: false
+		)
 		prefs.spokenIntersectionCount = .three
 
 		let report = try await service.report(.upcoming, rank: 2, prefs: prefs)

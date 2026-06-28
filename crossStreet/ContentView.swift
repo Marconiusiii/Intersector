@@ -14,9 +14,12 @@ private enum SettingsFocusTarget: Hashable {
 	case walkingPaths
 	case measurementUnit
 	case direction
+	case announcementDistance
+	case announcementDirection
+	case announcementNeighborhood
 	case intersectionWording
 	case spokenIntersections
-	case verbosity
+	case rankedControls
 	case manhattanSnobMode
 	case haptics
 }
@@ -24,20 +27,23 @@ private enum SettingsFocusTarget: Hashable {
 struct ContentView: View {
 	@AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 	@AppStorage("areaMode") private var areaModeRaw = AreaMode.near.rawValue
-	@AppStorage("detailLevel") private var detailRaw = DetailLev.standard.rawValue
 	@AppStorage("measurementUnit") private var measurementUnitRaw = MeasurementUnit.feet.rawValue
 	@AppStorage("directionStyle") private var directionStyleRaw = DirectionStyle.words.rawValue
 	@AppStorage("intersectionWording") private var intersectionWordingRaw = IntersectionWording.direct.rawValue
 	@AppStorage("spokenIntersectionCount") private var spokenIntersectionCountRaw = SpokenIntersectionCount.one.rawValue
+	@AppStorage("includeAnnouncementDistance") private var includeAnnouncementDistance = true
+	@AppStorage("includeAnnouncementDirection") private var includeAnnouncementDirection = true
+	@AppStorage("includeAnnouncementNeighborhood") private var includeAnnouncementNeighborhood = true
 	@AppStorage("includeCrossings") private var includeCrossings = false
 	@AppStorage("includeWalkingPaths") private var includeWalkingPaths = false
 	@AppStorage("hapticsEnabled") private var hapticsEnabled = true
 	@AppStorage("manhattanSnobMode") private var manhattanSnobMode = false
+	@AppStorage("showRankedControls") private var showRankedControls = true
 	@Environment(\.dynamicTypeSize) private var dynamicTypeSize
 	@Environment(\.openURL) private var openURL
 	@ScaledMetric(relativeTo: .largeTitle) private var headerMinHeight: CGFloat = 88
-	@ScaledMetric(relativeTo: .body) private var statusMinHeight: CGFloat = 128
-	@ScaledMetric(relativeTo: .title2) private var actionMinHeight: CGFloat = 120
+	@ScaledMetric(relativeTo: .body) private var statusMinHeight: CGFloat = 112
+	@ScaledMetric(relativeTo: .title2) private var actionMinHeight: CGFloat = 76
 	@State private var statusText = "Choose an action."
 	@State private var isLoading = false
 	@State private var isDirectionLoading = false
@@ -52,11 +58,15 @@ struct ContentView: View {
 	private var prefs: AppPrefs {
 		AppPrefs(
 			areaMode: AreaMode(rawValue: areaModeRaw) ?? .near,
-			detail: DetailLev(rawValue: detailRaw) ?? .standard,
 			measurementUnit: MeasurementUnit(rawValue: measurementUnitRaw) ?? .feet,
 			directionStyle: DirectionStyle(rawValue: directionStyleRaw) ?? .words,
 			intersectionWording: IntersectionWording(rawValue: intersectionWordingRaw) ?? .direct,
 			spokenIntersectionCount: SpokenIntersectionCount(rawValue: spokenIntersectionCountRaw) ?? .one,
+			announcementOptions: AnnouncementOptions(
+				includeDistance: includeAnnouncementDistance,
+				includeDirection: includeAnnouncementDirection,
+				includeNeighborhood: includeAnnouncementNeighborhood
+			),
 			mapDetails: MapDetailOptions(
 				includeCrossings: includeCrossings,
 				includeWalkingPaths: includeWalkingPaths
@@ -81,32 +91,60 @@ struct ContentView: View {
 
 	private var mainView: some View {
 		NavigationStack {
-			VStack(spacing: 0) {
-				ScrollView {
-					VStack(spacing: 0) {
-						headerView
-							.frame(minHeight: headerMinHeight)
-						statusView
-							.frame(minHeight: statusMinHeight)
-						nearestButton
-							.frame(minHeight: actionMinHeight)
-						upcomingButton
-							.frame(minHeight: actionMinHeight)
-						actionButton(
-							"Direction",
-							systemImage: "safari.fill",
-							accessibilityLabel: "My Direction",
-							accessibilityHint: "Speaks cardinal direction.",
-							isDisabled: isDirectionLoading
-						) {
-							await updateDirection()
+			ScrollView {
+				VStack(spacing: 0) {
+					headerView
+						.frame(minHeight: headerMinHeight)
+					statusView
+						.frame(minHeight: statusMinHeight)
+					Group {
+						if showRankedControls {
+							rankedActionRow(
+								primary: nearestButton,
+								menu: rankedMenu(
+									title: "More Nearest",
+									actions: [
+										("2nd", { await updateReport(.nearest, rank: 2) }),
+										("3rd", { await updateReport(.nearest, rank: 3) })
+									]
+								)
+							)
+						} else {
+							nearestButton
 						}
-						.frame(minHeight: actionMinHeight)
 					}
-					.frame(maxWidth: .infinity)
-				}
-				pointScanToggle
 					.frame(minHeight: actionMinHeight)
+					Group {
+						if showRankedControls {
+							rankedActionRow(
+								primary: upcomingButton,
+								menu: rankedMenu(
+									title: "More Upcoming",
+									actions: [
+										("2nd", { await updateReport(.upcoming, rank: 2) }),
+										("3rd", { await updateReport(.upcoming, rank: 3) })
+									]
+								)
+							)
+						} else {
+							upcomingButton
+						}
+					}
+					.frame(minHeight: actionMinHeight)
+					actionButton(
+						"Direction",
+						systemImage: "safari.fill",
+						accessibilityLabel: "My Direction",
+						accessibilityHint: "Speaks cardinal direction.",
+						isDisabled: isDirectionLoading
+					) {
+						await updateDirection()
+					}
+					.frame(minHeight: actionMinHeight)
+					pointScanToggle
+						.frame(minHeight: actionMinHeight)
+				}
+				.frame(maxWidth: .infinity)
 			}
 			.background(Color.crossBg)
 			.navigationBarTitleDisplayMode(.inline)
@@ -205,7 +243,8 @@ struct ContentView: View {
 		actionButton(
 			"Nearest",
 			systemImage: "location.fill",
-			accessibilityLabel: "Nearest Intersection"
+			accessibilityLabel: "Nearest Intersection",
+			drawsChrome: !showRankedControls
 		) {
 			await updateReport(.nearest)
 		}
@@ -225,7 +264,8 @@ struct ContentView: View {
 		actionButton(
 			"Upcoming",
 			systemImage: "arrow.up.circle.fill",
-			accessibilityLabel: "Upcoming Intersection"
+			accessibilityLabel: "Upcoming Intersection",
+			drawsChrome: !showRankedControls
 		) {
 			await updateReport(.upcoming)
 		}
@@ -255,11 +295,57 @@ struct ContentView: View {
 			actionLabel("Scan", systemImage: "dot.radiowaves.left.and.right")
 		}
 		.toggleStyle(.button)
-		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-		.background(Color.crossBtn)
+		.frame(maxWidth: .infinity, alignment: .center)
+		.foregroundStyle(Color.crossButtonText)
+		.background(pointScanBackground)
+		.overlay(Rectangle().stroke(Color.crossButtonStrongBorder, lineWidth: 2))
+		.shadow(color: Color.black.opacity(0.18), radius: 2, x: 0, y: 1)
 		.contentShape(Rectangle())
 		.disabled(isLoading)
 		.accessibilityLabel("Point and Scan")
+	}
+
+	private var pointScanBackground: Color {
+		pointScanner.isScanning || pointScanner.isPreparing ? Color.crossScanActive : Color.crossBtn
+	}
+
+	private func rankedActionRow(
+		primary: some View,
+		menu: some View
+	) -> some View {
+		HStack(spacing: 0) {
+			primary
+			menu
+				.frame(minWidth: 54)
+		}
+		.background(Color.crossBtn)
+		.overlay(Rectangle().stroke(Color.crossButtonBorder, lineWidth: 1))
+		.shadow(color: Color.black.opacity(0.12), radius: 2, x: 0, y: 1)
+	}
+
+	private func rankedMenu(
+		title: String,
+		actions: [(String, () async -> Void)]
+	) -> some View {
+		Menu {
+			ForEach(actions, id: \.0) { action in
+				Button(action.0) {
+					Task {
+						await action.1()
+					}
+				}
+			}
+		} label: {
+			Image(systemName: "chevron.down")
+				.imageScale(.large)
+			.frame(maxWidth: .infinity, minHeight: actionMinHeight)
+			.foregroundStyle(Color.crossChevron)
+			.contentShape(Rectangle())
+		}
+		.menuStyle(.button)
+		.buttonStyle(IntersectorActionButtonStyle(drawsChrome: false))
+		.disabled(isLoading || pointScanner.isScanning || pointScanner.isPreparing)
+		.accessibilityHidden(true)
 	}
 
 	private var areaModeBinding: Binding<AreaMode> {
@@ -268,15 +354,6 @@ struct ContentView: View {
 		} set: { areaMode in
 			areaModeRaw = areaMode.rawValue
 			settingsFocusTarget = .neighborhood
-		}
-	}
-
-	private var detailBinding: Binding<DetailLev> {
-		Binding {
-			prefs.detail
-		} set: { detail in
-			detailRaw = detail.rawValue
-			settingsFocusTarget = .verbosity
 		}
 	}
 
@@ -316,15 +393,48 @@ struct ContentView: View {
 		}
 	}
 
-	private var verbosityDescription: String {
-		switch prefs.detail {
-		case .minimal:
-			"Speaks intersection names only."
-		case .brief:
-			"Adds distance and direction."
-		case .standard:
-			"Also adds available neighborhood context."
+	private var announcementDistanceBinding: Binding<Bool> {
+		Binding {
+			includeAnnouncementDistance
+		} set: { isEnabled in
+			includeAnnouncementDistance = isEnabled
+			settingsFocusTarget = .announcementDistance
 		}
+	}
+
+	private var announcementDirectionBinding: Binding<Bool> {
+		Binding {
+			includeAnnouncementDirection
+		} set: { isEnabled in
+			includeAnnouncementDirection = isEnabled
+			settingsFocusTarget = .announcementDirection
+		}
+	}
+
+	private var announcementNeighborhoodBinding: Binding<Bool> {
+		Binding {
+			includeAnnouncementNeighborhood
+		} set: { isEnabled in
+			includeAnnouncementNeighborhood = isEnabled
+			settingsFocusTarget = .announcementNeighborhood
+		}
+	}
+
+	private var announcementSampleText: String {
+		let report = OrientReport(
+			kind: .nearest,
+			cross: "Amsterdam Avenue and West 94th Street",
+			dist: "120 feet",
+			relDir: "ahead",
+			relDegrees: 0,
+			street: "Amsterdam Avenue",
+			crossStreet: "West 94th Street",
+			head: "north",
+			area: "Upper West Side",
+			toward: "Manhattan Valley",
+			conf: .high
+		)
+		return "Sample: \(report.text(with: prefs))"
 	}
 
 	private var spokenIntersectionCountBinding: Binding<SpokenIntersectionCount> {
@@ -344,6 +454,15 @@ struct ContentView: View {
 			"Nearest speaks the two closest intersections. Upcoming speaks the first two intersections ahead."
 		case .three:
 			"Nearest speaks the three closest intersections. Upcoming speaks the first three intersections ahead."
+		}
+	}
+
+	private var rankedControlsBinding: Binding<Bool> {
+		Binding {
+			showRankedControls
+		} set: { isEnabled in
+			showRankedControls = isEnabled
+			settingsFocusTarget = .rankedControls
 		}
 	}
 
@@ -403,26 +522,56 @@ struct ContentView: View {
 					.lineLimit(nil)
 					.fixedSize(horizontal: false, vertical: true)
 
-				Picker("Neighborhood context", selection: areaModeBinding) {
-					ForEach(AreaMode.allCases) { mode in
-						Text(mode.label).tag(mode)
-					}
-				}
-				.pickerStyle(.menu)
-				.accessibilityFocused($settingsFocusTarget, equals: .neighborhood)
-
 				Section {
-					Toggle("Include crossings", isOn: crossingsBinding)
-						.accessibilityFocused($settingsFocusTarget, equals: .crossings)
-					Toggle("Include walking paths", isOn: walkingPathsBinding)
-						.accessibilityFocused($settingsFocusTarget, equals: .walkingPaths)
-					Text("Keep Walking Paths off to focus results on the street grid.")
+					Toggle("Distance", isOn: announcementDistanceBinding)
+						.accessibilityFocused($settingsFocusTarget, equals: .announcementDistance)
+					if includeAnnouncementDistance {
+						Picker("Measurement Unit", selection: measurementUnitBinding) {
+							ForEach(MeasurementUnit.allCases) { item in
+								Text(item.label).tag(item)
+							}
+						}
+						.pickerStyle(.segmented)
+						.accessibilityFocused($settingsFocusTarget, equals: .measurementUnit)
+					}
+					Toggle("Direction", isOn: announcementDirectionBinding)
+						.accessibilityFocused($settingsFocusTarget, equals: .announcementDirection)
+					if includeAnnouncementDirection {
+						Picker("Direction Style", selection: directionStyleBinding) {
+							ForEach(DirectionStyle.allCases) { item in
+								Text(item.label).tag(item)
+							}
+						}
+						.pickerStyle(.segmented)
+						.accessibilityFocused($settingsFocusTarget, equals: .direction)
+						if prefs.directionStyle == .words {
+							Toggle("Manhattan Snob Mode", isOn: manhattanSnobModeBinding)
+								.accessibilityFocused($settingsFocusTarget, equals: .manhattanSnobMode)
+							Text("Uses Uptown, Downtown, East Side, and West Side for cardinal direction wording.")
+								.font(.footnote)
+								.foregroundStyle(.secondary)
+								.lineLimit(nil)
+								.fixedSize(horizontal: false, vertical: true)
+						}
+					}
+					Toggle("Neighborhood", isOn: announcementNeighborhoodBinding)
+						.accessibilityFocused($settingsFocusTarget, equals: .announcementNeighborhood)
+					if includeAnnouncementNeighborhood {
+						Picker("Neighborhood Context", selection: areaModeBinding) {
+							ForEach(AreaMode.allCases) { mode in
+								Text(mode.label).tag(mode)
+							}
+						}
+						.pickerStyle(.menu)
+						.accessibilityFocused($settingsFocusTarget, equals: .neighborhood)
+					}
+					Text(announcementSampleText)
 						.font(.footnote)
 						.foregroundStyle(.secondary)
 						.lineLimit(nil)
 						.fixedSize(horizontal: false, vertical: true)
 				} header: {
-					Text("Map Detail")
+					Text("Announcements")
 				}
 
 				Section {
@@ -450,68 +599,32 @@ struct ContentView: View {
 								.tag(count)
 						}
 					}
-					.pickerStyle(.segmented)
+					.pickerStyle(.menu)
 					.accessibilityFocused($settingsFocusTarget, equals: .spokenIntersections)
 					Text(spokenIntersectionCountDescription)
 						.font(.footnote)
 						.foregroundStyle(.secondary)
 						.lineLimit(nil)
 						.fixedSize(horizontal: false, vertical: true)
+					Toggle("Show 2nd and 3rd Controls", isOn: rankedControlsBinding)
+						.accessibilityFocused($settingsFocusTarget, equals: .rankedControls)
+						.accessibilityHint("Toggles the visibility of the menu chevrons")
 				} header: {
 					Text("Spoken Intersections")
 				}
 
 				Section {
-					Picker("Measurement Unit", selection: measurementUnitBinding) {
-						ForEach(MeasurementUnit.allCases) { item in
-							Text(item.label).tag(item)
-						}
-					}
-					.pickerStyle(.segmented)
-					.accessibilityFocused($settingsFocusTarget, equals: .measurementUnit)
-				} header: {
-					Text("Measurement Unit")
-				}
-
-				Section {
-					Picker("Direction", selection: directionStyleBinding) {
-						ForEach(DirectionStyle.allCases) { item in
-							Text(item.label).tag(item)
-						}
-					}
-					.pickerStyle(.segmented)
-					.accessibilityFocused($settingsFocusTarget, equals: .direction)
-				} header: {
-					Text("Direction")
-				}
-
-				Section {
-					Picker("Verbosity", selection: detailBinding) {
-						ForEach(DetailLev.allCases) { item in
-							Text(item.label).tag(item)
-						}
-					}
-					.pickerStyle(.segmented)
-					.accessibilityFocused($settingsFocusTarget, equals: .verbosity)
-					Text(verbosityDescription)
+					Toggle("Include crossings", isOn: crossingsBinding)
+						.accessibilityFocused($settingsFocusTarget, equals: .crossings)
+					Toggle("Include walking paths", isOn: walkingPathsBinding)
+						.accessibilityFocused($settingsFocusTarget, equals: .walkingPaths)
+					Text("Keep Walking Paths off to focus results on the street grid.")
 						.font(.footnote)
 						.foregroundStyle(.secondary)
 						.lineLimit(nil)
 						.fixedSize(horizontal: false, vertical: true)
 				} header: {
-					Text("Verbosity")
-				}
-
-				Section {
-					Toggle("Manhattan Snob Mode", isOn: manhattanSnobModeBinding)
-						.accessibilityFocused($settingsFocusTarget, equals: .manhattanSnobMode)
-					Text("Uses Uptown, Downtown, East Side, and West Side for cardinal direction wording.")
-						.font(.footnote)
-						.foregroundStyle(.secondary)
-						.lineLimit(nil)
-						.fixedSize(horizontal: false, vertical: true)
-				} header: {
-					Text("Manhattan Snob Mode")
+					Text("Map Detail")
 				}
 
 				Toggle("Haptic scan feedback", isOn: hapticsBinding)
@@ -588,6 +701,7 @@ struct ContentView: View {
 		accessibilityLabel: String? = nil,
 		accessibilityHint: String? = nil,
 		isDisabled: Bool? = nil,
+		drawsChrome: Bool = true,
 		action: @escaping () async -> Void
 	) -> some View {
 		Button {
@@ -599,13 +713,11 @@ struct ContentView: View {
 				Color.clear
 				actionLabel(title, systemImage: systemImage)
 			}
-			.frame(maxWidth: .infinity, maxHeight: .infinity)
+			.frame(maxWidth: .infinity)
 			.contentShape(Rectangle())
 		}
-		.buttonStyle(.plain)
-		.foregroundStyle(Color.crossText)
-		.background(Color.crossBtn)
-		.frame(maxWidth: .infinity, maxHeight: .infinity)
+		.buttonStyle(IntersectorActionButtonStyle(drawsChrome: drawsChrome))
+		.frame(maxWidth: .infinity)
 		.contentShape(Rectangle())
 		.disabled(isDisabled ?? (isLoading || pointScanner.isScanning || pointScanner.isPreparing))
 		.accessibilityLabel(accessibilityLabel ?? title)
@@ -738,6 +850,26 @@ struct ContentView: View {
 	}
 }
 
+private struct IntersectorActionButtonStyle: ButtonStyle {
+	@Environment(\.isEnabled) private var isEnabled
+	var drawsChrome = true
+
+	func makeBody(configuration: Configuration) -> some View {
+		configuration.label
+			.foregroundStyle(Color.crossButtonText)
+			.background(drawsChrome ? Color.crossBtn : Color.clear)
+			.overlay(Rectangle().stroke(drawsChrome ? Color.crossButtonBorder : Color.clear, lineWidth: 1))
+			.shadow(
+				color: drawsChrome ? Color.black.opacity(configuration.isPressed ? 0.06 : 0.12) : Color.clear,
+				radius: 2,
+				x: 0,
+				y: 1
+			)
+			.opacity(isEnabled ? (configuration.isPressed ? 0.82 : 1) : 0.45)
+			.scaleEffect(configuration.isPressed ? 0.985 : 1)
+	}
+}
+
 extension View {
 	func accessibilityTouchRegion(
 		minHeight: CGFloat,
@@ -781,6 +913,11 @@ extension Color {
 				: UIColor(red: 0.02, green: 0.02, blue: 0.02, alpha: 1)
 		}
 	)
+	static let crossButtonText = Color(red: 0.02, green: 0.02, blue: 0.02)
+	static let crossButtonBorder = Color(red: 0.42, green: 0.28, blue: 0.00)
+	static let crossButtonStrongBorder = Color(red: 0.02, green: 0.02, blue: 0.02)
+	static let crossChevron = Color(red: 0.42, green: 0.28, blue: 0.00)
+	static let crossScanActive = Color(red: 1.00, green: 0.55, blue: 0.12)
 	static let crossInv = Color(red: 0.98, green: 0.98, blue: 0.96)
 	static let crossAccent = Color(
 		UIColor { traits in

@@ -30,16 +30,6 @@ struct OrientReport: Equatable {
 			return text(with: prefs)
 		}
 
-		if prefs.detail == .minimal {
-			let minimalText: String
-			if let street, let crossStreet {
-				minimalText = "\(street) and \(crossStreet)"
-			} else {
-				minimalText = cross
-			}
-			return "\(leadText(rank: rank)): \(minimalText)."
-		}
-
 		return text(with: prefs, includeLead: true, rank: rank)
 	}
 
@@ -48,31 +38,18 @@ struct OrientReport: Equatable {
 	}
 
 	private func text(with prefs: AppPrefs, includeLead: Bool, rank: Int?) -> String {
-		if prefs.detail == .minimal {
-			let minimalText: String
-			if let street, let crossStreet {
-				minimalText = "\(street) and \(crossStreet)"
-			} else {
-				minimalText = cross
-			}
-			return minimalText.hasSuffix(".") ? minimalText : "\(minimalText)."
-		}
-
 		var text: String
 		if
 			prefs.intersectionWording == .streetContext,
 			let street,
 			let crossStreet
 		{
-			text = "On \(street), \(crossStreet) is about \(dist)"
+			text = streetContextText(street: street, crossStreet: crossStreet, prefs: prefs)
 		} else {
-			text = "\(cross), about \(dist)"
+			text = directText(with: prefs)
 		}
 		if includeLead {
 			text = "\(leadText(rank: rank)): \(text)"
-		}
-		if let direction = directionText(with: prefs) {
-			text += " \(direction)"
 		}
 		if let area = areaText(prefs) {
 			text += " \(area)"
@@ -110,8 +87,43 @@ struct OrientReport: Equatable {
 		}
 	}
 
+	private func directText(with prefs: AppPrefs) -> String {
+		var text = cross
+		let details = reportDetails(with: prefs)
+		if !details.isEmpty {
+			text += ", \(details.joined(separator: " "))"
+		}
+		return text
+	}
+
+	private func streetContextText(
+		street: String,
+		crossStreet: String,
+		prefs: AppPrefs
+	) -> String {
+		let details = reportDetails(with: prefs)
+		guard !details.isEmpty else {
+			return "On \(street), \(crossStreet)"
+		}
+		return "On \(street), \(crossStreet) is \(details.joined(separator: " "))"
+	}
+
+	private func reportDetails(with prefs: AppPrefs) -> [String] {
+		var details: [String] = []
+		if prefs.announcementOptions.includeDistance {
+			details.append("about \(dist)")
+		}
+		if
+			prefs.announcementOptions.includeDirection,
+			let direction = directionText(with: prefs)
+		{
+			details.append(direction)
+		}
+		return details
+	}
+
 	private func areaText(_ prefs: AppPrefs) -> String? {
-		guard prefs.detail == .standard else {
+		guard prefs.announcementOptions.includeNeighborhood else {
 			return nil
 		}
 
@@ -154,7 +166,7 @@ struct IntersectionReportList: Equatable {
 		guard let first = reports.first else {
 			return ""
 		}
-		if prefs.detail == .minimal {
+		if prefs.announcementOptions.speaksIntersectionNamesOnly {
 			let sharedStreet = first.street.flatMap { streetName in
 				reports.allSatisfy { $0.street == streetName && $0.crossStreet != nil }
 					? streetName
@@ -177,6 +189,12 @@ struct IntersectionReportList: Equatable {
 		return reports.enumerated().map { index, report in
 			report.text(with: prefs, includeLead: index == 0)
 		}.joined(separator: " ")
+	}
+}
+
+private extension AnnouncementOptions {
+	var speaksIntersectionNamesOnly: Bool {
+		!includeDistance && !includeDirection && !includeNeighborhood
 	}
 }
 
@@ -257,7 +275,7 @@ struct StreetPositionContext: Equatable {
 	var isOnStreet: Bool
 
 	func text(with prefs: AppPrefs) -> String {
-		if prefs.detail == .minimal {
+		if prefs.announcementOptions.speaksIntersectionNamesOnly {
 			let candidates = boundaries + [following].compactMap { $0 }
 			let allShareStreet = candidates.allSatisfy { $0.names.contains(streetName) }
 			let labels: [String]

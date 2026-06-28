@@ -9,6 +9,8 @@ import CoreLocation
 import Foundation
 
 struct IntersectionFinder {
+	static let upcomingConeDegrees: CLLocationDirection = 45
+
 	func bestMatch(
 		for kind: ReportKind,
 		from context: DeviceContext,
@@ -23,7 +25,7 @@ struct IntersectionFinder {
 			}
 			return candidates.reduce(nil) { best, candidate in
 				let bearing = Geo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
-				guard angleDelta(from: heading, to: bearing) <= 60 else {
+				guard angleDelta(from: heading, to: bearing) <= Self.upcomingConeDegrees else {
 					return best
 				}
 				return nearest(
@@ -79,7 +81,7 @@ struct IntersectionFinder {
 		}
 		let forwardCandidates = candidates.filter { candidate in
 			let bearing = Geo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
-			return angleDelta(from: heading, to: bearing) <= 60
+			return angleDelta(from: heading, to: bearing) <= Self.upcomingConeDegrees
 		}
 		return rankedNearest(from: context.coordinate, in: forwardCandidates)
 	}

@@ -6,6 +6,7 @@
 //
 
 import AppIntents
+import CoreLocation
 import Foundation
 
 struct NearestIntersectionIntent: AppIntent {
@@ -124,6 +125,30 @@ struct ThirdUpcomingIntersectionIntent: AppIntent {
 	}
 }
 
+struct MyDirectionIntent: AppIntent {
+	static var title: LocalizedStringResource = "My Direction"
+	static var description = IntentDescription("Reports the cardinal direction the device is facing.")
+	static var openAppWhenRun = false
+
+	func perform() async throws -> some IntentResult & ProvidesDialog {
+		do {
+			let prefs = await AppPrefs.saved()
+			let provider = await MainActor.run { LocationProvider() }
+			let heading = try await provider.currentHeading()
+			let text = Self.spokenDirection(for: heading, prefs: prefs)
+			return .result(dialog: IntentDialog(stringLiteral: text))
+		} catch {
+			return .result(
+				dialog: "I couldn't get your direction. Make sure Location Services are enabled for Intersector and try again."
+			)
+		}
+	}
+
+	static func spokenDirection(for heading: CLLocationDirection, prefs: AppPrefs) -> String {
+		"Facing \(Geo.localizedDirection(heading, prefs: prefs))."
+	}
+}
+
 enum LaunchKeys {
 	static let startPointScan = "startPointScanOnLaunch"
 }
@@ -226,6 +251,18 @@ struct IntersectorShortcuts: AppShortcutsProvider {
 			],
 			shortTitle: "3rd Upcoming",
 			systemImageName: "3.circle"
+		)
+		AppShortcut(
+			intent: MyDirectionIntent(),
+			phrases: [
+				"My direction in \(.applicationName)",
+				"Which way am I facing with \(.applicationName)",
+				"What direction am I facing with \(.applicationName)",
+				"What way am I facing with \(.applicationName)",
+				"Where am I facing with \(.applicationName)"
+			],
+			shortTitle: "Direction",
+			systemImageName: "safari.fill"
 		)
 		AppShortcut(
 			intent: StartPointScanIntent(),
