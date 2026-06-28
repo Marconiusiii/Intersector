@@ -10,7 +10,7 @@ import Foundation
 
 struct IntersectionFinder {
 	static let upcomingConeDegrees: CLLocationDirection = 45
-	static let scanMaxDistanceMeters: CLLocationDistance = 120
+	static let scanMaxDistanceMeters: CLLocationDistance = 600 / 3.28084
 
 	func bestMatch(
 		for kind: ReportKind,
