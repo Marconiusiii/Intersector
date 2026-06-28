@@ -723,6 +723,27 @@ struct IntersectorTests {
 		#expect(ranked.map(\.id) == ["ahead"])
 	}
 
+	@Test func scanMatchIgnoresAlignedIntersectionsBeyondImmediateRange() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let context = DeviceContext(coordinate: origin, headingDegrees: 0)
+		let candidates = [
+			IntersectionCandidate(
+				id: "far-ahead",
+				names: ["Oak Street", "Far Street"],
+				coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+			),
+			IntersectionCandidate(
+				id: "near-left",
+				names: ["Oak Street", "Near Street"],
+				coordinate: CLLocationCoordinate2D(latitude: 37.0008, longitude: -122.00005)
+			)
+		]
+
+		let match = IntersectionFinder().scanMatch(from: context, in: candidates)
+
+		#expect(match?.candidate.id == "near-left")
+	}
+
 	@Test func multipleUpcomingIntersectionsFollowPhoneHeading() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let mapData = MapDataSet(
@@ -855,6 +876,86 @@ struct IntersectorTests {
 		let text = try await service.spokenText(.upcoming, prefs: prefs)
 
 		#expect(text == "Foothill Boulevard and Stanley Avenue and Talbot Avenue, Next Street.")
+	}
+
+	@Test func scanReportUsesSplitCrossStreetAnnouncementWithinImmediateRange() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapData = MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: "stanley",
+					names: ["Foothill Boulevard", "Stanley Avenue"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.0008, longitude: -122.00008)
+				),
+				IntersectionCandidate(
+					id: "talbot",
+					names: ["Foothill Boulevard", "Talbot Avenue"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.0008, longitude: -121.99992)
+				),
+				IntersectionCandidate(
+					id: "far",
+					names: ["Foothill Boulevard", "Far Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+				)
+			],
+			roads: [
+				MapRoad(
+					id: "foothill",
+					name: "Foothill Boulevard",
+					nodeIDs: [1, 2],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 36.995, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 37.005, longitude: -122.0)
+					]
+				),
+				MapRoad(
+					id: "stanley",
+					name: "Stanley Avenue",
+					nodeIDs: [3, 4],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 37.0008, longitude: -122.00008),
+						CLLocationCoordinate2D(latitude: 37.0008, longitude: -122.001)
+					]
+				),
+				MapRoad(
+					id: "talbot",
+					name: "Talbot Avenue",
+					nodeIDs: [5, 6],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 37.0008, longitude: -121.99992),
+						CLLocationCoordinate2D(latitude: 37.0008, longitude: -121.999)
+					]
+				),
+				MapRoad(
+					id: "far",
+					name: "Far Street",
+					nodeIDs: [7, 8],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 37.002, longitude: -121.999)
+					]
+				)
+			]
+		)
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(coordinate: origin, headingDegrees: 0)
+			),
+			mapDataClient: StaticMapDataClient(data: mapData),
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.announcementOptions = AnnouncementOptions(
+			includeDistance: false,
+			includeDirection: false,
+			includeNeighborhood: false
+		)
+
+		let text = try await service.spokenText(.scan, prefs: prefs)
+
+		#expect(text == "Foothill Boulevard and Stanley Avenue and Talbot Avenue.")
+		#expect(!text.contains("Far Street"))
 	}
 
 	@Test func rankedUpcomingReportSpeaksOnlyRequestedIntersection() async throws {

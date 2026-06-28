@@ -89,6 +89,7 @@ final class PointScanController: ObservableObject {
 					handleHeading(
 						context,
 						intersections: intersections,
+						mapData: mapData,
 						prefs: prefs,
 						onUpdate: onUpdate
 					)
@@ -139,6 +140,7 @@ final class PointScanController: ObservableObject {
 	private func handleHeading(
 		_ context: DeviceContext,
 		intersections: [IntersectionCandidate],
+		mapData: MapDataSet,
 		prefs: AppPrefs,
 		onUpdate: @escaping (String) -> Void
 	) {
@@ -156,13 +158,30 @@ final class PointScanController: ObservableObject {
 			return
 		}
 
+		let currentStreet = mapData.nearestRoadName(
+			to: context.coordinate,
+			matching: match.candidate.roadNames
+		)
+		let crossStreet: String? = currentStreet.flatMap { roadName in
+			let names = mapData.crossStreetNames(
+				for: match.candidate,
+				on: roadName,
+				heading: context.dependableTravelDirection
+			)
+			return names.isEmpty ? nil : names.joined(separator: " and ")
+		}
+		let cross = currentStreet.flatMap { roadName in
+			crossStreet.map { "\(roadName) and \($0)" }
+		} ?? match.candidate.title
+
 		let report = OrientReport(
 			kind: .scan,
-			cross: match.candidate.title,
+			cross: cross,
 			dist: Geo.spokenDistance(match.distanceMeters, unit: prefs.measurementUnit),
 			relDir: nil,
 			relDegrees: nil,
-			street: match.candidate.names.first,
+			street: currentStreet,
+			crossStreet: crossStreet,
 			head: Geo.compassDirection(match.bearingDegrees),
 			area: nil,
 			toward: nil,

@@ -10,6 +10,7 @@ import Foundation
 
 struct IntersectionFinder {
 	static let upcomingConeDegrees: CLLocationDirection = 45
+	static let scanMaxDistanceMeters: CLLocationDistance = 120
 
 	func bestMatch(
 		for kind: ReportKind,
@@ -22,6 +23,9 @@ struct IntersectionFinder {
 		case .upcoming, .scan:
 			guard let heading = context.headingDegrees else {
 				return nearestCandidate(from: context.coordinate, in: candidates)
+			}
+			if kind == .scan {
+				return scanMatch(from: context, in: candidates)?.candidate
 			}
 			return candidates.reduce(nil) { best, candidate in
 				let bearing = Geo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
@@ -103,30 +107,36 @@ struct IntersectionFinder {
 
 	func scanMatch(
 		from context: DeviceContext,
-		in candidates: [IntersectionCandidate]
+		in candidates: [IntersectionCandidate],
+		maxDistanceMeters: CLLocationDistance = Self.scanMaxDistanceMeters
 	) -> ScanMatch? {
 		guard let heading = context.headingDegrees else {
 			return nil
 		}
 
 		return candidates
-			.reduce(nil) { best, candidate in
-				let bearing = Geo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
+			.compactMap { candidate -> ScanMatch? in
 				let distance = Geo.distanceMeters(from: context.coordinate, to: candidate.coordinate)
+				guard distance <= maxDistanceMeters else {
+					return nil
+				}
+				let bearing = Geo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
 				let delta = angleDelta(from: heading, to: bearing)
-				let match = ScanMatch(
+				return ScanMatch(
 					candidate: candidate,
 					distanceMeters: distance,
 					bearingDegrees: bearing,
 					angleDelta: delta
 				)
+			}
+			.reduce(nil) { best, candidate in
 				guard let best else {
-					return match
+					return candidate
 				}
-				if abs(match.angleDelta - best.angleDelta) > 5 {
-					return match.angleDelta < best.angleDelta ? match : best
+				if abs(candidate.angleDelta - best.angleDelta) > 5 {
+					return candidate.angleDelta < best.angleDelta ? candidate : best
 				}
-				return match.distanceMeters < best.distanceMeters ? match : best
+				return candidate.distanceMeters < best.distanceMeters ? candidate : best
 			}
 	}
 
