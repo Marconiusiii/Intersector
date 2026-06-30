@@ -398,6 +398,45 @@ struct MapDataSet: Equatable {
 			}
 	}
 
+	func rankedUpcoming(from context: DeviceContext) -> [IntersectionCandidate]? {
+		guard
+			let direction = context.dependableTravelDirection,
+			let road = nearestRoad(to: context.coordinate),
+			road.minimumDistance(to: context.coordinate) <= currentRoadDistanceThreshold(for: context),
+			let directionSign = road.directionSign(for: direction, at: context.coordinate)
+		else {
+			return nil
+		}
+
+		let positioned = intersections
+			.filter { $0.roadNames.contains(road.name) }
+			.compactMap { candidate -> (candidate: IntersectionCandidate, progress: CLLocationDistance)? in
+				guard let distance = road.signedDistanceAlongRoad(
+					from: context.coordinate,
+					to: candidate.coordinate
+				) else {
+					return nil
+				}
+				let progress = distance * directionSign
+				guard progress > 3 else {
+					return nil
+				}
+				return (candidate, progress)
+			}
+			.sorted { lhs, rhs in
+				if abs(lhs.progress - rhs.progress) > 1 {
+					return lhs.progress < rhs.progress
+				}
+				return Geo.distanceMeters(from: context.coordinate, to: lhs.candidate.coordinate)
+					< Geo.distanceMeters(from: context.coordinate, to: rhs.candidate.coordinate)
+			}
+
+		guard !positioned.isEmpty else {
+			return nil
+		}
+		return positioned.map(\.candidate)
+	}
+
 	func streetPosition(
 		from context: DeviceContext,
 		count: SpokenIntersectionCount
@@ -483,6 +522,11 @@ struct MapDataSet: Equatable {
 		roads.min {
 			$0.minimumDistance(to: coordinate) < $1.minimumDistance(to: coordinate)
 		}
+	}
+
+	private func currentRoadDistanceThreshold(for context: DeviceContext) -> CLLocationDistance {
+		let accuracy = context.horizontalAccuracy ?? 25
+		return max(25, min(accuracy + 10, 60))
 	}
 
 	private func splitIntersectionCandidates(

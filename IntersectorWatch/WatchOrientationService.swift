@@ -256,7 +256,7 @@ struct WatchOrientationService {
 			if context.headingDegrees == nil {
 				ranked = finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
 			} else {
-				ranked = finder.rankedUpcoming(from: context, in: mapData.intersections)
+				ranked = finder.rankedUpcoming(from: context, in: mapData)
 			}
 		}
 		let resultCount = kind == .upcoming && context.headingDegrees == nil ? 1 : requestedCount
@@ -287,18 +287,17 @@ struct WatchOrientationService {
 	@MainActor
 	func report(_ kind: WatchReportKind, rank: Int = 1, prefs: WatchAppPrefs) async throws -> WatchOrientationReport {
 		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming)
+		let minimumCandidateCount = kind == .upcoming ? max(rank, 3) : rank
 		let mapData = try await mapData(
 			for: kind,
 			from: context,
-			minimumCandidateCount: rank,
+			minimumCandidateCount: minimumCandidateCount,
 			prefs: prefs
 		)
 		let match = if kind == .nearest {
 			finder.nearest(rank: rank, from: context.coordinate, in: mapData.intersections)
-		} else if rank > 1 {
-			finder.upcoming(rank: rank, from: context, in: mapData.intersections)
 		} else {
-			finder.bestMatch(for: kind, from: context, in: mapData.intersections)
+			finder.upcoming(rank: rank, from: context, in: mapData)
 		}
 		guard let match else {
 			throw WatchReportError.noIntersections
@@ -371,7 +370,7 @@ struct WatchOrientationService {
 				for: kind,
 				from: context,
 				minimumCandidateCount: minimumCandidateCount,
-				intersections: latestData.intersections
+				mapData: latestData
 			) {
 				return latestData
 			}
@@ -383,15 +382,15 @@ struct WatchOrientationService {
 		for kind: WatchReportKind,
 		from context: WatchDeviceContext,
 		minimumCandidateCount: Int,
-		intersections: [WatchIntersectionCandidate]
+		mapData: WatchMapDataSet
 	) -> Bool {
 		if kind == .nearest {
-			return finder.rankedNearest(from: context.coordinate, in: intersections).count >= minimumCandidateCount
+			return finder.rankedNearest(from: context.coordinate, in: mapData.intersections).count >= minimumCandidateCount
 		}
 		guard context.headingDegrees != nil else {
-			return !intersections.isEmpty
+			return !mapData.intersections.isEmpty
 		}
-		return finder.rankedUpcoming(from: context, in: intersections).count >= minimumCandidateCount
+		return finder.rankedUpcoming(from: context, in: mapData).count >= minimumCandidateCount
 	}
 
 	private func neighborhoodContext(
@@ -742,6 +741,45 @@ struct WatchMapDataSet: Equatable {
 	var intersections: [WatchIntersectionCandidate]
 	var roads: [WatchMapRoad]
 
+	func rankedUpcoming(from context: WatchDeviceContext) -> [WatchIntersectionCandidate]? {
+		guard
+			let direction = context.dependableTravelDirection,
+			let road = nearestRoad(to: context.coordinate),
+			road.minimumDistance(to: context.coordinate) <= currentRoadDistanceThreshold(for: context),
+			let directionSign = road.directionSign(for: direction, at: context.coordinate)
+		else {
+			return nil
+		}
+
+		let positioned = intersections
+			.filter { $0.roadNames.contains(road.name) }
+			.compactMap { candidate -> (candidate: WatchIntersectionCandidate, progress: CLLocationDistance)? in
+				guard let distance = road.signedDistanceAlongRoad(
+					from: context.coordinate,
+					to: candidate.coordinate
+				) else {
+					return nil
+				}
+				let progress = distance * directionSign
+				guard progress > 3 else {
+					return nil
+				}
+				return (candidate, progress)
+			}
+			.sorted { lhs, rhs in
+				if abs(lhs.progress - rhs.progress) > 1 {
+					return lhs.progress < rhs.progress
+				}
+				return WatchGeo.distanceMeters(from: context.coordinate, to: lhs.candidate.coordinate)
+					< WatchGeo.distanceMeters(from: context.coordinate, to: rhs.candidate.coordinate)
+			}
+
+		guard !positioned.isEmpty else {
+			return nil
+		}
+		return positioned.map(\.candidate)
+	}
+
 	func nearestRoadName(
 		to coordinate: CLLocationCoordinate2D,
 		matching roadNames: [String]
@@ -753,6 +791,17 @@ struct WatchMapDataSet: Equatable {
 				$0.minimumDistance(to: coordinate) < $1.minimumDistance(to: coordinate)
 			}?
 			.name
+	}
+
+	private func nearestRoad(to coordinate: CLLocationCoordinate2D) -> WatchMapRoad? {
+		roads.min {
+			$0.minimumDistance(to: coordinate) < $1.minimumDistance(to: coordinate)
+		}
+	}
+
+	private func currentRoadDistanceThreshold(for context: WatchDeviceContext) -> CLLocationDistance {
+		let accuracy = context.horizontalAccuracy ?? 25
+		return max(25, min(accuracy + 10, 60))
 	}
 
 	func crossStreetNames(
@@ -887,6 +936,19 @@ extension WatchMapRoad {
 		}
 		let targetVector = Self.localVector(from: origin, to: target)
 		return targetVector.x * reference.tangentX + targetVector.y * reference.tangentY
+	}
+
+	func directionSign(
+		for heading: CLLocationDirection,
+		at coordinate: CLLocationCoordinate2D
+	) -> Double? {
+		guard let reference = nearestSegmentReference(to: coordinate) else {
+			return nil
+		}
+		let radians = heading * Double.pi / 180
+		let headingX = sin(radians)
+		let headingY = cos(radians)
+		return headingX * reference.tangentX + headingY * reference.tangentY
 	}
 
 	func vectorAway(from coordinate: CLLocationCoordinate2D) -> (x: Double, y: Double)? {
@@ -1496,12 +1558,34 @@ struct WatchIntersectionFinder {
 		return rankedNearest(from: context.coordinate, in: forwardCandidates)
 	}
 
+	func rankedUpcoming(
+		from context: WatchDeviceContext,
+		in mapData: WatchMapDataSet
+	) -> [WatchIntersectionCandidate] {
+		mapData.rankedUpcoming(from: context) ?? rankedUpcoming(
+			from: context,
+			in: mapData.intersections
+		)
+	}
+
 	func upcoming(
 		rank: Int,
 		from context: WatchDeviceContext,
 		in candidates: [WatchIntersectionCandidate]
 	) -> WatchIntersectionCandidate? {
 		let ranked = rankedUpcoming(from: context, in: candidates)
+		guard rank > 0, ranked.indices.contains(rank - 1) else {
+			return nil
+		}
+		return ranked[rank - 1]
+	}
+
+	func upcoming(
+		rank: Int,
+		from context: WatchDeviceContext,
+		in mapData: WatchMapDataSet
+	) -> WatchIntersectionCandidate? {
+		let ranked = rankedUpcoming(from: context, in: mapData)
 		guard rank > 0, ranked.indices.contains(rank - 1) else {
 			return nil
 		}

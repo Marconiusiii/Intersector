@@ -90,6 +90,16 @@ struct IntersectionFinder {
 		return rankedNearest(from: context.coordinate, in: forwardCandidates)
 	}
 
+	func rankedUpcoming(
+		from context: DeviceContext,
+		in mapData: MapDataSet
+	) -> [IntersectionCandidate] {
+		mapData.rankedUpcoming(from: context) ?? rankedUpcoming(
+			from: context,
+			in: mapData.intersections
+		)
+	}
+
 	func upcoming(
 		rank: Int,
 		from context: DeviceContext,
@@ -99,6 +109,21 @@ struct IntersectionFinder {
 			return nil
 		}
 		let ranked = rankedUpcoming(from: context, in: candidates)
+		guard ranked.indices.contains(rank - 1) else {
+			return nil
+		}
+		return ranked[rank - 1]
+	}
+
+	func upcoming(
+		rank: Int,
+		from context: DeviceContext,
+		in mapData: MapDataSet
+	) -> IntersectionCandidate? {
+		guard rank > 0 else {
+			return nil
+		}
+		let ranked = rankedUpcoming(from: context, in: mapData)
 		guard ranked.indices.contains(rank - 1) else {
 			return nil
 		}

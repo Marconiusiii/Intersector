@@ -819,6 +819,85 @@ struct IntersectorTests {
 		#expect(!text.contains("Behind Street"))
 	}
 
+	@Test func upcomingIntersectionsFollowCurrentRoadProgressBeforeNearbyConeCandidates() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapData = MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: "nearby-diagonal",
+					names: ["Pine Street", "Diagonal Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.0006, longitude: -121.9998)
+				),
+				IntersectionCandidate(
+					id: "first-ahead",
+					names: ["Oak Street", "First Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "second-ahead",
+					names: ["Oak Street", "Second Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "third-ahead",
+					names: ["Oak Street", "Third Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.003, longitude: -122.0)
+				)
+			],
+			roads: [
+				MapRoad(
+					id: "oak",
+					name: "Oak Street",
+					nodeIDs: [1, 2],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 36.995, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 37.005, longitude: -122.0)
+					]
+				),
+				MapRoad(
+					id: "pine",
+					name: "Pine Street",
+					nodeIDs: [3, 4],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 36.995, longitude: -121.9998),
+						CLLocationCoordinate2D(latitude: 37.005, longitude: -121.9998)
+					]
+				),
+				MapRoad(
+					id: "diagonal",
+					name: "Diagonal Street",
+					nodeIDs: [5, 6],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 37.0006, longitude: -122.001),
+						CLLocationCoordinate2D(latitude: 37.0006, longitude: -121.9998)
+					]
+				)
+			]
+		)
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(coordinate: origin, headingDegrees: 0)
+			),
+			mapDataClient: StaticMapDataClient(data: mapData),
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.announcementOptions = AnnouncementOptions(
+			includeDistance: false,
+			includeDirection: false,
+			includeNeighborhood: false
+		)
+		prefs.spokenIntersectionCount = .three
+
+		let text = try await service.spokenText(.upcoming, prefs: prefs)
+		let thirdReport = try await service.report(.upcoming, rank: 3, prefs: prefs)
+
+		#expect(text == "Oak Street and First Street, Second Street, Third Street.")
+		#expect(!text.contains("Diagonal Street"))
+		#expect(thirdReport.cross == "Oak Street and Third Street")
+	}
+
 	@Test func splitCrossStreetsUseHeadingToSpeakLeftThenRight() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let mapData = MapDataSet(
