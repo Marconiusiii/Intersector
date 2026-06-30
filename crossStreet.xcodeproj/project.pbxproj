@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		7C0010012FE9000000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7C0010002FE9000000000001 /* PrivacyInfo.xcprivacy */; };
+		7C0010022FE9000000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7C0010002FE9000000000001 /* PrivacyInfo.xcprivacy */; };
 		A1B2C3D42FE0000000000014 /* Intersector Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = A1B2C3D42FE0000000000002 /* Intersector Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -49,6 +51,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		7C0010002FE9000000000001 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		82E8319E2FD62E4300071B9D /* Intersector.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Intersector.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		82E831AB2FD62E4400071B9D /* IntersectorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntersectorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		82E831B52FD62E4400071B9D /* IntersectorUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntersectorUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -113,6 +116,7 @@
 		82E831952FD62E4300071B9D = {
 			isa = PBXGroup;
 			children = (
+				7C0010002FE9000000000001 /* PrivacyInfo.xcprivacy */,
 				82E831A02FD62E4300071B9D /* crossStreet */,
 				A1B2C3D42FE0000000000003 /* IntersectorWatch */,
 				82E831AE2FD62E4400071B9D /* crossStreetTests */,
@@ -280,6 +284,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7C0010012FE9000000000001 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -301,6 +306,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7C0010022FE9000000000001 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
