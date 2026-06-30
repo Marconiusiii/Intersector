@@ -7,6 +7,7 @@
 
 import MessageUI
 import SwiftUI
+import WatchConnectivity
 
 private enum SettingsFocusTarget: Hashable {
 	case neighborhood
@@ -25,6 +26,97 @@ private enum SettingsFocusTarget: Hashable {
 }
 
 private let lookupLoadingText = "Intersecting..."
+
+private struct WatchSettingsPayload {
+	let areaMode: String
+	let measurementUnit: String
+	let directionStyle: String
+	let intersectionWording: String
+	let spokenIntersectionCount: Int
+	let includeAnnouncementDistance: Bool
+	let includeAnnouncementDirection: Bool
+	let includeAnnouncementNeighborhood: Bool
+	let includeCrossings: Bool
+	let includeWalkingPaths: Bool
+	let manhattanSnobMode: Bool
+
+	var signature: String {
+		[
+			areaMode,
+			measurementUnit,
+			directionStyle,
+			intersectionWording,
+			String(spokenIntersectionCount),
+			String(includeAnnouncementDistance),
+			String(includeAnnouncementDirection),
+			String(includeAnnouncementNeighborhood),
+			String(includeCrossings),
+			String(includeWalkingPaths),
+			String(manhattanSnobMode)
+		].joined(separator: "|")
+	}
+
+	var dictionary: [String: Any] {
+		[
+			"areaMode": areaMode,
+			"measurementUnit": measurementUnit,
+			"directionStyle": directionStyle,
+			"intersectionWording": intersectionWording,
+			"spokenIntersectionCount": spokenIntersectionCount,
+			"includeAnnouncementDistance": includeAnnouncementDistance,
+			"includeAnnouncementDirection": includeAnnouncementDirection,
+			"includeAnnouncementNeighborhood": includeAnnouncementNeighborhood,
+			"includeCrossings": includeCrossings,
+			"includeWalkingPaths": includeWalkingPaths,
+			"manhattanSnobMode": manhattanSnobMode
+		]
+	}
+}
+
+private final class WatchSettingsSync: NSObject, WCSessionDelegate {
+	private let session: WCSession?
+	private var pendingPayload: WatchSettingsPayload?
+
+	override init() {
+		if WCSession.isSupported() {
+			session = WCSession.default
+		} else {
+			session = nil
+		}
+		super.init()
+		session?.delegate = self
+		session?.activate()
+	}
+
+	func sync(_ payload: WatchSettingsPayload) {
+		pendingPayload = payload
+		guard let session, session.activationState == .activated else {
+			return
+		}
+		do {
+			try session.updateApplicationContext(payload.dictionary)
+		} catch {
+			pendingPayload = payload
+		}
+	}
+
+	func session(
+		_ session: WCSession,
+		activationDidCompleteWith activationState: WCSessionActivationState,
+		error: Error?
+	) {
+		guard activationState == .activated, let pendingPayload else {
+			return
+		}
+		sync(pendingPayload)
+	}
+
+	func sessionDidBecomeInactive(_ session: WCSession) {}
+
+	func sessionDidDeactivate(_ session: WCSession) {
+		session.activate()
+	}
+}
 
 struct ContentView: View {
 	@AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
@@ -56,6 +148,7 @@ struct ContentView: View {
 	@State private var onboardingLocationProvider = LocationProvider()
 	@State private var directionLocationProvider = LocationProvider()
 	@StateObject private var pointScanner = PointScanController()
+	@State private var watchSettingsSync = WatchSettingsSync()
 	@AccessibilityFocusState private var settingsFocusTarget: SettingsFocusTarget?
 
 	private var prefs: AppPrefs {
@@ -75,6 +168,22 @@ struct ContentView: View {
 				includeWalkingPaths: includeWalkingPaths
 			),
 			haptics: hapticsEnabled,
+			manhattanSnobMode: manhattanSnobMode
+		)
+	}
+
+	private var watchSettingsPayload: WatchSettingsPayload {
+		WatchSettingsPayload(
+			areaMode: areaModeRaw,
+			measurementUnit: measurementUnitRaw,
+			directionStyle: directionStyleRaw,
+			intersectionWording: intersectionWordingRaw,
+			spokenIntersectionCount: spokenIntersectionCountRaw,
+			includeAnnouncementDistance: includeAnnouncementDistance,
+			includeAnnouncementDirection: includeAnnouncementDirection,
+			includeAnnouncementNeighborhood: includeAnnouncementNeighborhood,
+			includeCrossings: includeCrossings,
+			includeWalkingPaths: includeWalkingPaths,
 			manhattanSnobMode: manhattanSnobMode
 		)
 	}
@@ -158,6 +267,10 @@ struct ContentView: View {
 			.onAppear {
 				loadInitialReportIfNeeded()
 				startRequestedPointScanIfNeeded()
+				watchSettingsSync.sync(watchSettingsPayload)
+			}
+			.onChange(of: watchSettingsPayload.signature) { _, _ in
+				watchSettingsSync.sync(watchSettingsPayload)
 			}
 			.onChange(of: scenePhase) { _, phase in
 				if phase != .active {
@@ -486,6 +599,19 @@ struct ContentView: View {
 		}
 	}
 
+	private func adjustSpokenIntersections(_ direction: AccessibilityAdjustmentDirection) {
+		let rawValue = prefs.spokenIntersectionCount.rawValue
+		switch direction {
+		case .increment:
+			spokenIntersectionCountRaw = min(3, rawValue + 1)
+		case .decrement:
+			spokenIntersectionCountRaw = max(1, rawValue - 1)
+		@unknown default:
+			break
+		}
+		settingsFocusTarget = .spokenIntersections
+	}
+
 	private var hapticsBinding: Binding<Bool> {
 		Binding {
 			hapticsEnabled
@@ -569,22 +695,20 @@ struct ContentView: View {
 					Toggle("Street Context", isOn: streetContextBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .intersectionWording)
 					settingsHelperText(intersectionWordingDescription)
-					Text("Spoken Intersections")
-						.foregroundStyle(Color.crossText)
-					Slider(
-						value: spokenIntersectionSliderBinding,
-						in: 1...3,
-						step: 1
-					) {
+					VStack(alignment: .leading, spacing: 8) {
 						Text("Spoken Intersections")
-					} minimumValueLabel: {
-						Text("1")
-					} maximumValueLabel: {
-						Text("3")
+							.foregroundStyle(Color.crossText)
+						Slider(
+							value: spokenIntersectionSliderBinding,
+							in: 1...3,
+							step: 1
+						)
 					}
+					.accessibilityElement(children: .ignore)
 					.accessibilityFocused($settingsFocusTarget, equals: .spokenIntersections)
 					.accessibilityLabel("Spoken Intersections")
 					.accessibilityValue(spokenIntersectionAccessibilityLabel(prefs.spokenIntersectionCount))
+					.accessibilityAdjustableAction(adjustSpokenIntersections)
 					settingsHelperText(spokenIntersectionCountDescription)
 					Toggle("Show 2nd and 3rd Controls", isOn: rankedControlsBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .rankedControls)
@@ -752,8 +876,13 @@ struct ContentView: View {
 			return
 		}
 		isLoading = true
-		statusText = lookupLoadingText
-		VoiceOverAnnouncer.reportUpdated(lookupLoadingText)
+		let loadingTask = Task { @MainActor in
+			do {
+				try await Task.sleep(for: .milliseconds(800))
+				statusText = lookupLoadingText
+				VoiceOverAnnouncer.reportUpdated(lookupLoadingText)
+			} catch {}
+		}
 
 		do {
 			let text = if rank == 1 {
@@ -761,9 +890,11 @@ struct ContentView: View {
 			} else {
 				try await OrientSvc.shared.report(kind, rank: rank, prefs: prefs).text(with: prefs, rank: rank)
 			}
+			loadingTask.cancel()
 			statusText = text
 			VoiceOverAnnouncer.reportUpdated(text)
 		} catch {
+			loadingTask.cancel()
 			let text = "Unable to update \(reportLabel(kind, rank: rank)). \(error.localizedDescription)"
 			statusText = text
 			VoiceOverAnnouncer.reportUpdated(text)

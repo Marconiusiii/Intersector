@@ -48,7 +48,7 @@ final class PointScanController: ObservableObject {
 		}
 
 		isPreparing = true
-		let loadingText = "Intersecting..."
+		let loadingText = "Point and Scan Loading..."
 		onUpdate(loadingText)
 		VoiceOverAnnouncer.reportUpdated(loadingText)
 		if prefs.haptics {

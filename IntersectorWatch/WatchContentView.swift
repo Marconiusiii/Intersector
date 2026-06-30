@@ -6,8 +6,80 @@
 //
 
 import SwiftUI
+import WatchConnectivity
 
 private let watchLookupLoadingText = "Intersecting..."
+
+private final class WatchSettingsReceiver: NSObject, WCSessionDelegate {
+	private let session: WCSession?
+
+	override init() {
+		if WCSession.isSupported() {
+			session = WCSession.default
+		} else {
+			session = nil
+		}
+		super.init()
+		session?.delegate = self
+		session?.activate()
+	}
+
+	func session(
+		_ session: WCSession,
+		activationDidCompleteWith activationState: WCSessionActivationState,
+		error: Error?
+	) {
+		guard activationState == .activated else {
+			return
+		}
+		let settings = session.receivedApplicationContext
+		DispatchQueue.main.async {
+			self.apply(settings)
+		}
+	}
+
+	func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+		DispatchQueue.main.async {
+			self.apply(applicationContext)
+		}
+	}
+
+	private func apply(_ settings: [String: Any]) {
+		let defaults = UserDefaults.standard
+		setString("areaMode", from: settings, in: defaults)
+		setString("measurementUnit", from: settings, in: defaults)
+		setString("directionStyle", from: settings, in: defaults)
+		setString("intersectionWording", from: settings, in: defaults)
+		setInt("spokenIntersectionCount", from: settings, in: defaults)
+		setBool("includeAnnouncementDistance", from: settings, in: defaults)
+		setBool("includeAnnouncementDirection", from: settings, in: defaults)
+		setBool("includeAnnouncementNeighborhood", from: settings, in: defaults)
+		setBool("includeCrossings", from: settings, in: defaults)
+		setBool("includeWalkingPaths", from: settings, in: defaults)
+		setBool("manhattanSnobMode", from: settings, in: defaults)
+	}
+
+	private func setString(_ key: String, from settings: [String: Any], in defaults: UserDefaults) {
+		guard let value = settings[key] as? String else {
+			return
+		}
+		defaults.set(value, forKey: key)
+	}
+
+	private func setInt(_ key: String, from settings: [String: Any], in defaults: UserDefaults) {
+		guard let value = settings[key] as? Int else {
+			return
+		}
+		defaults.set(value, forKey: key)
+	}
+
+	private func setBool(_ key: String, from settings: [String: Any], in defaults: UserDefaults) {
+		guard let value = settings[key] as? Bool else {
+			return
+		}
+		defaults.set(value, forKey: key)
+	}
+}
 
 struct WatchContentView: View {
 	@AppStorage("areaMode") private var areaModeRaw = WatchAreaMode.near.rawValue
@@ -25,6 +97,7 @@ struct WatchContentView: View {
 	@State private var isLoading = false
 	@State private var isDirectionLoading = false
 	@State private var isShowingSettings = false
+	@State private var settingsReceiver = WatchSettingsReceiver()
 
 	private var prefs: WatchAppPrefs {
 		WatchAppPrefs(
@@ -182,21 +255,19 @@ struct WatchContentView: View {
 						}
 					}
 					Toggle("Street Context", isOn: streetContextBinding)
-					Text("Spoken Intersections")
-						.foregroundStyle(Color.watchCrossText)
-					Slider(
-						value: spokenIntersectionSliderBinding,
-						in: 1...3,
-						step: 1
-					) {
+					VStack(alignment: .leading, spacing: 8) {
 						Text("Spoken Intersections")
-					} minimumValueLabel: {
-						Text("1")
-					} maximumValueLabel: {
-						Text("3")
+							.foregroundStyle(Color.watchCrossText)
+						Slider(
+							value: spokenIntersectionSliderBinding,
+							in: 1...3,
+							step: 1
+						)
 					}
+					.accessibilityElement(children: .ignore)
 					.accessibilityLabel("Spoken Intersections")
 					.accessibilityValue(spokenIntersectionAccessibilityLabel(prefs.spokenIntersectionCount))
+					.accessibilityAdjustableAction(adjustSpokenIntersections)
 					Text(spokenIntersectionDescription)
 						.font(.footnote)
 						.foregroundStyle(Color.watchCrossText)
@@ -289,6 +360,18 @@ struct WatchContentView: View {
 		}
 	}
 
+	private func adjustSpokenIntersections(_ direction: AccessibilityAdjustmentDirection) {
+		let rawValue = prefs.spokenIntersectionCount.rawValue
+		switch direction {
+		case .increment:
+			spokenIntersectionCountRaw = min(3, rawValue + 1)
+		case .decrement:
+			spokenIntersectionCountRaw = max(1, rawValue - 1)
+		@unknown default:
+			break
+		}
+	}
+
 	private func actionButton(
 		_ title: String,
 		systemImage: String,
@@ -328,15 +411,22 @@ struct WatchContentView: View {
 			return
 		}
 		isLoading = true
-		statusText = watchLookupLoadingText
+		let loadingTask = Task { @MainActor in
+			do {
+				try await Task.sleep(for: .milliseconds(800))
+				statusText = watchLookupLoadingText
+			} catch {}
+		}
 		do {
 			let text = if rank == 1 {
 				try await WatchOrientationService().spokenText(kind, prefs: prefs)
 			} else {
 				try await WatchOrientationService().report(kind, rank: rank, prefs: prefs).text(with: prefs, rank: rank)
 			}
+			loadingTask.cancel()
 			statusText = text
 		} catch {
+			loadingTask.cancel()
 			statusText = "Unable to update \(reportLabel(kind, rank: rank)). \(error.localizedDescription)"
 		}
 		isLoading = false
