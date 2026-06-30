@@ -35,6 +35,10 @@ final class LocationProvider: NSObject, LocationProviding {
 	}
 
 	func currentContext() async throws -> DeviceContext {
+		try await currentContext(requiresFreshHeading: false)
+	}
+
+	func currentContext(requiresFreshHeading: Bool) async throws -> DeviceContext {
 		switch manager.authorizationStatus {
 		case .notDetermined:
 			let status = await requestWhenInUseAuthorization()
@@ -51,6 +55,14 @@ final class LocationProvider: NSObject, LocationProviding {
 
 		if CLLocationManager.headingAvailable() {
 			manager.startUpdatingHeading()
+		}
+
+		if requiresFreshHeading {
+			do {
+				_ = try await currentHeading(timeout: 1.2, allowCached: false)
+			} catch {
+				clearHeading()
+			}
 		}
 
 		if let location = latestLocation, isRecentEnough(location), isIdeal(location) {
@@ -88,12 +100,13 @@ final class LocationProvider: NSObject, LocationProviding {
 		}
 	}
 
-	func currentHeading(timeout: TimeInterval = 1.5) async throws -> CLLocationDirection {
+	func currentHeading(timeout: TimeInterval = 1.5, allowCached: Bool = true) async throws -> CLLocationDirection {
 		guard CLLocationManager.headingAvailable() else {
 			throw OrientError.headingUnavailable
 		}
 
-		if let latestHeading,
+		if allowCached,
+		   let latestHeading,
 		   let latestHeadingDate,
 		   Date().timeIntervalSince(latestHeadingDate) < 2 {
 			return latestHeading
@@ -221,6 +234,11 @@ final class LocationProvider: NSObject, LocationProviding {
 		if headingContinuation == nil && headingContinuations.isEmpty {
 			manager.stopUpdatingHeading()
 		}
+	}
+
+	private func clearHeading() {
+		latestHeading = nil
+		latestHeadingDate = nil
 	}
 }
 

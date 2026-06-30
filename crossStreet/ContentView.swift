@@ -381,11 +381,11 @@ struct ContentView: View {
 		}
 	}
 
-	private var intersectionWordingBinding: Binding<IntersectionWording> {
+	private var streetContextBinding: Binding<Bool> {
 		Binding {
-			prefs.intersectionWording
-		} set: { wording in
-			intersectionWordingRaw = wording.rawValue
+			prefs.intersectionWording == .streetContext
+		} set: { isEnabled in
+			intersectionWordingRaw = (isEnabled ? IntersectionWording.streetContext : .direct).rawValue
 			settingsFocusTarget = .intersectionWording
 		}
 	}
@@ -393,9 +393,9 @@ struct ContentView: View {
 	private var intersectionWordingDescription: String {
 		switch prefs.intersectionWording {
 		case .direct:
-			"Names both streets at the intersection."
+			"Speaks the intersection as street names."
 		case .streetContext:
-			"Names the current street first, then the cross street."
+			"Speaks the current street first, then the cross street."
 		}
 	}
 
@@ -522,11 +522,7 @@ struct ContentView: View {
 	private var settingsView: some View {
 		NavigationStack {
 			Form {
-				Text("Intersection directions and distances are estimates based on your location, device heading, and available map data. Accuracy can vary with GPS and compass conditions.")
-					.font(.footnote)
-					.foregroundStyle(.secondary)
-					.lineLimit(nil)
-					.fixedSize(horizontal: false, vertical: true)
+				settingsHelperText("Intersection directions and distances are estimates based on your location, device heading, and available map data. Accuracy can vary with GPS and compass conditions.")
 
 				Section {
 					Toggle("Distance", isOn: announcementDistanceBinding)
@@ -553,11 +549,7 @@ struct ContentView: View {
 						if prefs.directionStyle == .words {
 							Toggle("Manhattan Snob Mode", isOn: manhattanSnobModeBinding)
 								.accessibilityFocused($settingsFocusTarget, equals: .manhattanSnobMode)
-							Text("Uses Uptown, Downtown, East Side, and West Side for cardinal direction wording.")
-								.font(.footnote)
-								.foregroundStyle(.secondary)
-								.lineLimit(nil)
-								.fixedSize(horizontal: false, vertical: true)
+							settingsHelperText("Uses Uptown, Downtown, East Side, and West Side for cardinal direction wording.")
 						}
 					}
 					Toggle("Neighborhood", isOn: announcementNeighborhoodBinding)
@@ -571,30 +563,17 @@ struct ContentView: View {
 						.pickerStyle(.menu)
 						.accessibilityFocused($settingsFocusTarget, equals: .neighborhood)
 					}
-					Text(announcementSampleText)
-						.font(.footnote)
-						.foregroundStyle(.secondary)
-						.lineLimit(nil)
-						.fixedSize(horizontal: false, vertical: true)
+					settingsHelperText(announcementSampleText)
 				} header: {
-					Text("Announcements")
+					settingsHeader("Announcements")
 				}
 
 				Section {
-					Picker("Intersection wording", selection: intersectionWordingBinding) {
-						ForEach(IntersectionWording.allCases) { item in
-							Text(item.label).tag(item)
-						}
-					}
-					.pickerStyle(.segmented)
-					.accessibilityFocused($settingsFocusTarget, equals: .intersectionWording)
-					Text(intersectionWordingDescription)
-						.font(.footnote)
-						.foregroundStyle(.secondary)
-						.lineLimit(nil)
-						.fixedSize(horizontal: false, vertical: true)
+					Toggle("Street Context", isOn: streetContextBinding)
+						.accessibilityFocused($settingsFocusTarget, equals: .intersectionWording)
+					settingsHelperText(intersectionWordingDescription)
 				} header: {
-					Text("Intersection Wording")
+					settingsHeader("Street Context")
 				}
 
 				Section {
@@ -607,16 +586,12 @@ struct ContentView: View {
 					}
 					.pickerStyle(.menu)
 					.accessibilityFocused($settingsFocusTarget, equals: .spokenIntersections)
-					Text(spokenIntersectionCountDescription)
-						.font(.footnote)
-						.foregroundStyle(.secondary)
-						.lineLimit(nil)
-						.fixedSize(horizontal: false, vertical: true)
+					settingsHelperText(spokenIntersectionCountDescription)
 					Toggle("Show 2nd and 3rd Controls", isOn: rankedControlsBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .rankedControls)
 						.accessibilityHint("Toggles the visibility of the menu chevrons")
 				} header: {
-					Text("Spoken Intersections")
+					settingsHeader("Spoken Intersections")
 				}
 
 				Section {
@@ -624,13 +599,9 @@ struct ContentView: View {
 						.accessibilityFocused($settingsFocusTarget, equals: .crossings)
 					Toggle("Include walking paths", isOn: walkingPathsBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .walkingPaths)
-					Text("Keep Walking Paths off to focus results on the street grid.")
-						.font(.footnote)
-						.foregroundStyle(.secondary)
-						.lineLimit(nil)
-						.fixedSize(horizontal: false, vertical: true)
+					settingsHelperText("Keep Walking Paths off to focus results on the street grid.")
 				} header: {
-					Text("Map Detail")
+					settingsHeader("Map Detail")
 				}
 
 				Toggle("Haptic scan feedback", isOn: hapticsBinding)
@@ -674,9 +645,9 @@ struct ContentView: View {
 						.lineLimit(nil)
 						.fixedSize(horizontal: false, vertical: true)
 						.frame(maxWidth: .infinity, alignment: .center)
-						.foregroundStyle(.secondary)
+						.foregroundStyle(Color.crossText)
 				} header: {
-					Text("About Intersector")
+					settingsHeader("About Intersector")
 				}
 			}
 			.scrollContentBackground(.hidden)
@@ -699,6 +670,21 @@ struct ContentView: View {
 				)
 			}
 		}
+	}
+
+	private func settingsHeader(_ title: String) -> some View {
+		Text(title)
+			.font(.headline)
+			.foregroundStyle(Color.crossText)
+			.textCase(nil)
+	}
+
+	private func settingsHelperText(_ text: String) -> some View {
+		Text(text)
+			.font(.footnote)
+			.foregroundStyle(Color.crossText)
+			.lineLimit(nil)
+			.fixedSize(horizontal: false, vertical: true)
 	}
 
 	private func actionButton(
@@ -807,7 +793,7 @@ struct ContentView: View {
 		statusText = "Updating direction."
 
 		do {
-			let heading = try await directionLocationProvider.currentHeading()
+			let heading = try await directionLocationProvider.currentHeading(allowCached: false)
 			let text = "Facing \(Geo.localizedDirection(heading, prefs: prefs))."
 			statusText = text
 			VoiceOverAnnouncer.reportUpdated(text)

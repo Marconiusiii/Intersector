@@ -1072,6 +1072,36 @@ struct IntersectorTests {
 		#expect(await locationProvider.requestCount == 1)
 	}
 
+	@Test func upcomingRequestsFreshHeadingButNearestDoesNot() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let locationProvider = FreshHeadingRecordingLocationProvider(
+			context: DeviceContext(coordinate: origin, headingDegrees: 0)
+		)
+		let service = OrientSvc(
+			locationProvider: locationProvider,
+			mapDataClient: StaticMapDataClient(
+				data: MapDataSet(
+					intersections: [
+						IntersectionCandidate(
+							id: "north",
+							names: ["Oak Street", "North Street"],
+							coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+						)
+					],
+					roads: []
+				)
+			),
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+
+		_ = try await service.report(.nearest, prefs: prefs)
+		_ = try await service.report(.upcoming, prefs: prefs)
+
+		#expect(await locationProvider.freshHeadingRequests == [false, true])
+	}
+
 	@Test func rankedNearestReturnsRequestedDistanceOrder() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let candidates = [
@@ -1511,6 +1541,24 @@ actor SequentialLocationProvider: LocationProviding {
 		}
 		let context = contexts[min(index, contexts.count - 1)]
 		index += 1
+		return context
+	}
+}
+
+actor FreshHeadingRecordingLocationProvider: LocationProviding {
+	private let context: DeviceContext
+	private(set) var freshHeadingRequests: [Bool] = []
+
+	init(context: DeviceContext) {
+		self.context = context
+	}
+
+	func currentContext() async throws -> DeviceContext {
+		try await currentContext(requiresFreshHeading: false)
+	}
+
+	func currentContext(requiresFreshHeading: Bool) async throws -> DeviceContext {
+		freshHeadingRequests.append(requiresFreshHeading)
 		return context
 	}
 }

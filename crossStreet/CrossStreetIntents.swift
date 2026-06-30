@@ -134,7 +134,7 @@ struct MyDirectionIntent: AppIntent {
 		do {
 			let prefs = await AppPrefs.saved()
 			let provider = await MainActor.run { LocationProvider() }
-			let heading = try await provider.currentHeading()
+			let heading = try await provider.currentHeading(allowCached: false)
 			let text = Self.spokenDirection(for: heading, prefs: prefs)
 			return .result(dialog: IntentDialog(stringLiteral: text))
 		} catch {

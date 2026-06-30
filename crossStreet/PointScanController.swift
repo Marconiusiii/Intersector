@@ -61,7 +61,7 @@ final class PointScanController: ObservableObject {
 			}
 
 			do {
-				let initialContext = try await locationProvider.currentContext()
+				let initialContext = try await locationProvider.currentContext(requiresFreshHeading: true)
 				let mapData = try await mapDataClient.mapData(
 					near: initialContext.coordinate,
 					radiusMeters: 450,

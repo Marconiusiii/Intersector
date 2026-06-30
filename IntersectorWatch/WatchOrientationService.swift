@@ -218,7 +218,7 @@ enum IntersectorWatchReporter {
 	@MainActor
 	static func directionText(prefs: WatchAppPrefs = WatchAppPrefs.saved()) async -> String {
 		do {
-			let heading = try await WatchLocationProvider().currentHeading()
+			let heading = try await WatchLocationProvider().currentHeading(allowCached: false)
 			return "Facing \(WatchGeo.localizedDirection(heading, prefs: prefs))."
 		} catch {
 			return error.localizedDescription
@@ -239,7 +239,7 @@ struct WatchOrientationService {
 			return try await report(kind, prefs: prefs).text(with: prefs)
 		}
 
-		let context = try await locationProvider.currentContext()
+		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming)
 		let requestedCount = prefs.spokenIntersectionCount.rawValue
 		let minimumCandidateCount = kind == .upcoming && context.headingDegrees == nil ? 1 : requestedCount
 		let mapData = try await mapData(
@@ -286,7 +286,7 @@ struct WatchOrientationService {
 
 	@MainActor
 	func report(_ kind: WatchReportKind, rank: Int = 1, prefs: WatchAppPrefs) async throws -> WatchOrientationReport {
-		let context = try await locationProvider.currentContext()
+		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming)
 		let mapData = try await mapData(
 			for: kind,
 			from: context,
@@ -987,6 +987,10 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 	}
 
 	func currentContext() async throws -> WatchDeviceContext {
+		try await currentContext(requiresFreshHeading: false)
+	}
+
+	func currentContext(requiresFreshHeading: Bool) async throws -> WatchDeviceContext {
 		switch manager.authorizationStatus {
 		case .notDetermined:
 			let status = await requestWhenInUseAuthorization()
@@ -1005,17 +1009,26 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 			manager.startUpdatingHeading()
 		}
 
+		if requiresFreshHeading {
+			do {
+				_ = try await currentHeading(timeout: 1.2, allowCached: false)
+			} catch {
+				clearHeading()
+			}
+		}
+
 		return try await withCheckedThrowingContinuation { continuation in
 			self.continuation = continuation
 			manager.startUpdatingLocation()
 		}
 	}
 
-	func currentHeading(timeout: TimeInterval = 1.5) async throws -> CLLocationDirection {
+	func currentHeading(timeout: TimeInterval = 1.5, allowCached: Bool = true) async throws -> CLLocationDirection {
 		guard CLLocationManager.headingAvailable() else {
 			throw WatchReportError.headingUnavailable
 		}
-		if let latestHeading,
+		if allowCached,
+		   let latestHeading,
 		   let latestHeadingDate,
 		   Date().timeIntervalSince(latestHeadingDate) < 2 {
 			return latestHeading
@@ -1062,9 +1075,9 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 		}
 		finish(
 			.success(
-				WatchDeviceContext(
-					coordinate: location.coordinate,
-					headingDegrees: latestHeading,
+					WatchDeviceContext(
+						coordinate: location.coordinate,
+						headingDegrees: latestHeading,
 					courseDegrees: location.course >= 0 ? location.course : nil,
 					courseAccuracy: location.courseAccuracy >= 0 ? location.courseAccuracy : nil,
 					speedMetersPerSecond: location.speed >= 0 ? location.speed : nil,
@@ -1127,6 +1140,11 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 		if headingContinuation == nil {
 			manager.stopUpdatingHeading()
 		}
+	}
+
+	private func clearHeading() {
+		latestHeading = nil
+		latestHeadingDate = nil
 	}
 }
 

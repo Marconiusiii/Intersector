@@ -27,6 +27,13 @@ enum OrientError: LocalizedError {
 
 protocol LocationProviding {
 	func currentContext() async throws -> DeviceContext
+	func currentContext(requiresFreshHeading: Bool) async throws -> DeviceContext
+}
+
+extension LocationProviding {
+	func currentContext(requiresFreshHeading: Bool) async throws -> DeviceContext {
+		try await currentContext()
+	}
 }
 
 protocol MapDataFetching {
@@ -86,7 +93,7 @@ struct OrientSvc {
 		{
 			return cachedReport
 		}
-		let context = try await locationProvider.currentContext()
+		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming || kind == .scan)
 		let mapData = try await mapData(
 			for: kind,
 			from: context,
@@ -123,7 +130,7 @@ struct OrientSvc {
 			return try await report(kind, prefs: prefs).text(with: prefs)
 		}
 
-		let context = try await locationProvider.currentContext()
+		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming || kind == .scan)
 		let requestedCount = prefs.spokenIntersectionCount.rawValue
 		let minimumCandidateCount = kind == .upcoming && context.headingDegrees == nil
 			? 1
