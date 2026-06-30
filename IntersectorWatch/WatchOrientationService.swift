@@ -287,11 +287,10 @@ struct WatchOrientationService {
 	@MainActor
 	func report(_ kind: WatchReportKind, rank: Int = 1, prefs: WatchAppPrefs) async throws -> WatchOrientationReport {
 		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming)
-		let minimumCandidateCount = kind == .upcoming ? max(rank, 3) : rank
 		let mapData = try await mapData(
 			for: kind,
 			from: context,
-			minimumCandidateCount: minimumCandidateCount,
+			minimumCandidateCount: rank,
 			prefs: prefs
 		)
 		let match = if kind == .nearest {

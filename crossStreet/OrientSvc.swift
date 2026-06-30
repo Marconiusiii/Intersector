@@ -94,11 +94,10 @@ struct OrientSvc {
 			return cachedReport
 		}
 		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming || kind == .scan)
-		let minimumCandidateCount = kind == .upcoming ? max(rank, 3) : rank
 		let mapData = try await mapData(
 			for: kind,
 			from: context,
-			minimumCandidateCount: minimumCandidateCount,
+			minimumCandidateCount: rank,
 			prefs: prefs
 		)
 		if kind == .upcoming {

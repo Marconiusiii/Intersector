@@ -1575,6 +1575,48 @@ struct IntersectorTests {
 		#expect(report.cross == "Oak Street and Third Street")
 		#expect(await mapClient.requestedRadii == [225, 375, 750])
 	}
+
+	@Test func firstUpcomingDoesNotExpandRadiusToPrefetchRankedFollowups() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		let mapClient = AdaptiveMapDataClient()
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(
+					coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0),
+					headingDegrees: 0
+				)
+			),
+			mapDataClient: mapClient,
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+
+		let report = try await service.report(.upcoming, prefs: prefs)
+
+		#expect(report.cross == "Oak Street and First Street")
+		#expect(await mapClient.requestedRadii == [225])
+	}
+
+	@Test func thirdUpcomingStillExpandsRadiusWhenCacheIsMissing() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		let mapClient = AdaptiveMapDataClient()
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(
+					coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0),
+					headingDegrees: 0
+				)
+			),
+			mapDataClient: mapClient,
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+
+		let report = try await service.report(.upcoming, rank: 3, prefs: prefs)
+
+		#expect(report.cross == "Oak Street and Third Street")
+		#expect(await mapClient.requestedRadii == [225, 375, 750])
+	}
 }
 
 actor FetchCounter {
@@ -1726,7 +1768,26 @@ actor AdaptiveMapDataClient: MapDataFetching {
 				)
 			)
 		}
-		return MapDataSet(intersections: candidates, roads: [])
+		return MapDataSet(
+			intersections: candidates,
+			roads: [
+				MapRoad(
+					id: "oak",
+					name: "Oak Street",
+					nodeIDs: [1, 2],
+					coordinates: [
+						CLLocationCoordinate2D(
+							latitude: coordinate.latitude - 0.005,
+							longitude: coordinate.longitude
+						),
+						CLLocationCoordinate2D(
+							latitude: coordinate.latitude + 0.005,
+							longitude: coordinate.longitude
+						)
+					]
+				)
+			]
+		)
 	}
 }
 
