@@ -504,21 +504,50 @@ struct IntersectionBuilder {
 					return nil
 				}
 
-				let candidate = IntersectionCandidate(
-					id: "crossing-\(element.id)",
-					names: ["Crossing on \(roadName)"],
-					coordinate: coordinate,
-					associatedRoadNames: [roadName]
-				)
 				let duplicatesStreetIntersection = streetIntersections.contains {
 					Geo.distanceMeters(from: $0.coordinate, to: coordinate) < 30
 				}
-				return duplicatesStreetIntersection ? nil : candidate
+				guard !duplicatesStreetIntersection else {
+					return nil
+				}
+				guard let anchor = nearestIntersection(
+					to: coordinate,
+					on: roadName,
+					in: streetIntersections
+				) else {
+					return nil
+				}
+				let anchorName = anchor.contextLabel(on: roadName, minimal: true)
+				let candidate = IntersectionCandidate(
+					id: "crossing-\(element.id)",
+					names: ["Crossing on \(roadName) near \(anchorName)"],
+					coordinate: coordinate,
+					associatedRoadNames: [roadName]
+				)
+				return candidate
 			}
 			intersections.append(contentsOf: crossingCandidates)
 		}
 
 		return MapDataSet(intersections: intersections, roads: roads)
+	}
+
+	private func nearestIntersection(
+		to coordinate: CLLocationCoordinate2D,
+		on roadName: String,
+		in intersections: [IntersectionCandidate]
+	) -> IntersectionCandidate? {
+		intersections
+			.filter { $0.roadNames.contains(roadName) }
+			.compactMap { intersection -> (intersection: IntersectionCandidate, distance: CLLocationDistance)? in
+				let distance = Geo.distanceMeters(from: coordinate, to: intersection.coordinate)
+				guard distance <= 100 else {
+					return nil
+				}
+				return (intersection, distance)
+			}
+			.min { $0.distance < $1.distance }?
+			.intersection
 	}
 
 	private func isAllowedWay(_ tags: [String: String]?, options: MapDetailOptions) -> Bool {

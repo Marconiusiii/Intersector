@@ -67,7 +67,7 @@ struct WatchAppPrefs: Equatable, Hashable {
 	var mapDetails = WatchMapDetailOptions()
 	var manhattanSnobMode = false
 
-	static func saved(from defaults: UserDefaults = .standard) -> WatchAppPrefs {
+	nonisolated static func saved(from defaults: UserDefaults = .standard) -> WatchAppPrefs {
 		let announcementOptions = WatchAnnouncementOptions.saved(from: defaults)
 		return WatchAppPrefs(
 			areaMode: WatchAreaMode(rawValue: defaults.string(forKey: "areaMode") ?? "") ?? .near,
@@ -94,7 +94,17 @@ struct WatchAnnouncementOptions: Equatable, Hashable {
 	var includeDirection = true
 	var includeNeighborhood = true
 
-	static func saved(from defaults: UserDefaults) -> WatchAnnouncementOptions {
+	nonisolated init(
+		includeDistance: Bool = true,
+		includeDirection: Bool = true,
+		includeNeighborhood: Bool = true
+	) {
+		self.includeDistance = includeDistance
+		self.includeDirection = includeDirection
+		self.includeNeighborhood = includeNeighborhood
+	}
+
+	nonisolated static func saved(from defaults: UserDefaults) -> WatchAnnouncementOptions {
 		let hasExplicitOptions =
 			defaults.object(forKey: "includeAnnouncementDistance") != nil ||
 			defaults.object(forKey: "includeAnnouncementDirection") != nil ||
@@ -714,6 +724,11 @@ struct WatchIntersectionCandidate: Identifiable, Equatable {
 	var roadNames: [String] {
 		associatedRoadNames.isEmpty ? names : associatedRoadNames
 	}
+
+	func contextLabel(on streetName: String) -> String {
+		let otherNames = names.filter { $0 != streetName }
+		return otherNames.isEmpty ? title : otherNames.joined(separator: " and ")
+	}
 }
 
 struct WatchMapRoad: Identifiable, Equatable {
@@ -1323,20 +1338,49 @@ struct WatchIntersectionBuilder {
 				else {
 					return nil
 				}
-				let candidate = WatchIntersectionCandidate(
-					id: "crossing-\(element.id)",
-					names: ["Crossing on \(roadName)"],
-					coordinate: coordinate,
-					associatedRoadNames: [roadName]
-				)
 				let duplicatesStreetIntersection = streetIntersections.contains {
 					WatchGeo.distanceMeters(from: $0.coordinate, to: coordinate) < 30
 				}
-				return duplicatesStreetIntersection ? nil : candidate
+				guard !duplicatesStreetIntersection else {
+					return nil
+				}
+				guard let anchor = nearestIntersection(
+					to: coordinate,
+					on: roadName,
+					in: streetIntersections
+				) else {
+					return nil
+				}
+				let anchorName = anchor.contextLabel(on: roadName)
+				let candidate = WatchIntersectionCandidate(
+					id: "crossing-\(element.id)",
+					names: ["Crossing on \(roadName) near \(anchorName)"],
+					coordinate: coordinate,
+					associatedRoadNames: [roadName]
+				)
+				return candidate
 			}
 			intersections.append(contentsOf: crossingCandidates)
 		}
 		return WatchMapDataSet(intersections: intersections, roads: roads)
+	}
+
+	private func nearestIntersection(
+		to coordinate: CLLocationCoordinate2D,
+		on roadName: String,
+		in intersections: [WatchIntersectionCandidate]
+	) -> WatchIntersectionCandidate? {
+		intersections
+			.filter { $0.roadNames.contains(roadName) }
+			.compactMap { intersection -> (intersection: WatchIntersectionCandidate, distance: CLLocationDistance)? in
+				let distance = WatchGeo.distanceMeters(from: coordinate, to: intersection.coordinate)
+				guard distance <= 100 else {
+					return nil
+				}
+				return (intersection, distance)
+			}
+			.min { $0.distance < $1.distance }?
+			.intersection
 	}
 
 	private func isAllowedWay(_ tags: [String: String]?, options: WatchMapDetailOptions) -> Bool {
@@ -1362,7 +1406,7 @@ struct WatchIntersectionBuilder {
 }
 
 struct WatchIntersectionFinder {
-	static let upcomingConeDegrees: CLLocationDirection = 45
+	static let upcomingConeDegrees: CLLocationDirection = 35
 
 	func bestMatch(
 		for kind: WatchReportKind,

@@ -52,6 +52,21 @@ struct OrientSvc {
 	var neighborhoodProvider: NeighborhoodProviding
 	var finder = IntersectionFinder()
 	var neighborhoodResolver = NeighborhoodResolver()
+	private var upcomingCache = UpcomingReportCache()
+
+	init(
+		locationProvider: LocationProviding,
+		mapDataClient: MapDataFetching,
+		neighborhoodProvider: NeighborhoodProviding,
+		finder: IntersectionFinder = IntersectionFinder(),
+		neighborhoodResolver: NeighborhoodResolver = NeighborhoodResolver()
+	) {
+		self.locationProvider = locationProvider
+		self.mapDataClient = mapDataClient
+		self.neighborhoodProvider = neighborhoodProvider
+		self.finder = finder
+		self.neighborhoodResolver = neighborhoodResolver
+	}
 
 	static let shared = OrientSvc(
 		locationProvider: LocationProvider(),
@@ -64,6 +79,13 @@ struct OrientSvc {
 		rank: Int = 1,
 		prefs: AppPrefs = AppPrefs()
 	) async throws -> OrientReport {
+		if
+			kind == .upcoming,
+			rank > 1,
+			let cachedReport = await upcomingCache.report(rank: rank, prefs: prefs)
+		{
+			return cachedReport
+		}
 		let context = try await locationProvider.currentContext()
 		let mapData = try await mapData(
 			for: kind,
@@ -71,6 +93,19 @@ struct OrientSvc {
 			minimumCandidateCount: rank,
 			prefs: prefs
 		)
+		if kind == .upcoming {
+			let reports = await upcomingReports(
+				from: context,
+				mapData: mapData,
+				prefs: prefs,
+				maxCount: 3
+			)
+			await upcomingCache.store(reports: reports, prefs: prefs)
+			guard reports.indices.contains(rank - 1) else {
+				throw OrientError.noIntersections
+			}
+			return reports[rank - 1]
+		}
 		return try await makeReport(
 			kind,
 			rank: rank,
@@ -134,7 +169,43 @@ struct OrientSvc {
 		guard !reports.isEmpty else {
 			throw OrientError.noIntersections
 		}
+		if kind == .upcoming {
+			await upcomingCache.store(reports: reports, prefs: prefs)
+		}
 		return IntersectionReportList(reports: reports).text(with: prefs)
+	}
+
+	private func upcomingReports(
+		from context: DeviceContext,
+		mapData: MapDataSet,
+		prefs: AppPrefs,
+		maxCount: Int
+	) async -> [OrientReport] {
+		let ranked: [IntersectionCandidate]
+		if context.headingDegrees == nil {
+			ranked = finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
+		} else {
+			ranked = finder.rankedUpcoming(from: context, in: mapData.intersections)
+		}
+		let neighborhoodContext = await neighborhoodContext(for: prefs.areaMode, from: context)
+		var reports: [OrientReport] = []
+		for match in ranked {
+			let report = makeReport(
+				.upcoming,
+				match: match,
+				context: context,
+				mapData: mapData,
+				prefs: prefs,
+				neighborhoodContext: neighborhoodContext
+			)
+			if !reports.containsSpokenIntersection(matching: report) {
+				reports.append(report)
+			}
+			if reports.count == maxCount {
+				break
+			}
+		}
+		return reports
 	}
 
 	private func makeReport(
@@ -364,6 +435,61 @@ private extension Array where Element == OrientReport {
 			}
 			return existing.cross == report.cross
 		}
+	}
+}
+
+actor UpcomingReportCache {
+	private var entry: Entry?
+	private let timeToLive: TimeInterval = 60
+
+	func store(reports: [OrientReport], prefs: AppPrefs, now: Date = .now) {
+		guard !reports.isEmpty else {
+			return
+		}
+		entry = Entry(
+			reports: reports,
+			prefsKey: UpcomingPrefsKey(prefs),
+			storedAt: now
+		)
+	}
+
+	func report(rank: Int, prefs: AppPrefs, now: Date = .now) -> OrientReport? {
+		guard
+			rank > 1,
+			let entry,
+			now.timeIntervalSince(entry.storedAt) <= timeToLive,
+			entry.prefsKey == UpcomingPrefsKey(prefs),
+			entry.reports.indices.contains(rank - 1)
+		else {
+			return nil
+		}
+		return entry.reports[rank - 1]
+	}
+
+	private struct Entry {
+		var reports: [OrientReport]
+		var prefsKey: UpcomingPrefsKey
+		var storedAt: Date
+	}
+}
+
+private struct UpcomingPrefsKey: Equatable {
+	var areaMode: AreaMode
+	var measurementUnit: MeasurementUnit
+	var directionStyle: DirectionStyle
+	var intersectionWording: IntersectionWording
+	var announcementOptions: AnnouncementOptions
+	var mapDetails: MapDetailOptions
+	var manhattanSnobMode: Bool
+
+	init(_ prefs: AppPrefs) {
+		areaMode = prefs.areaMode
+		measurementUnit = prefs.measurementUnit
+		directionStyle = prefs.directionStyle
+		intersectionWording = prefs.intersectionWording
+		announcementOptions = prefs.announcementOptions
+		mapDetails = prefs.mapDetails
+		manhattanSnobMode = prefs.manhattanSnobMode
 	}
 }
 

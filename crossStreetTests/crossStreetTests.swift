@@ -723,6 +723,27 @@ struct IntersectorTests {
 		#expect(ranked.map(\.id) == ["ahead"])
 	}
 
+	@Test func rankedUpcomingUsesThirtyFiveDegreeForwardCone() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 0, longitude: 0)
+		let context = DeviceContext(coordinate: origin, headingDegrees: 0)
+		let candidates = [
+			IntersectionCandidate(
+				id: "forty-degrees",
+				names: ["Oak Street", "Wide Street"],
+				coordinate: CLLocationCoordinate2D(latitude: 0.001, longitude: 0.00084)
+			),
+			IntersectionCandidate(
+				id: "ahead",
+				names: ["Oak Street", "Ahead Street"],
+				coordinate: CLLocationCoordinate2D(latitude: 0.002, longitude: 0)
+			)
+		]
+
+		let ranked = IntersectionFinder().rankedUpcoming(from: context, in: candidates)
+
+		#expect(ranked.map(\.id) == ["ahead"])
+	}
+
 	@Test func scanMatchIgnoresAlignedIntersectionsBeyondImmediateRange() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let context = DeviceContext(coordinate: origin, headingDegrees: 0)
@@ -1004,6 +1025,53 @@ struct IntersectorTests {
 		#expect(!text.contains("Third Street"))
 	}
 
+	@Test func rankedUpcomingReusesLastUpcomingSnapshotForFollowupRanks() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapData = MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: "first-ahead",
+					names: ["Oak Street", "First Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "second-ahead",
+					names: ["Oak Street", "Second Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "east",
+					names: ["Oak Street", "East Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -121.999)
+				)
+			],
+			roads: []
+		)
+		let locationProvider = SequentialLocationProvider(contexts: [
+			DeviceContext(coordinate: origin, headingDegrees: 0),
+			DeviceContext(coordinate: origin, headingDegrees: 90)
+		])
+		let service = OrientSvc(
+			locationProvider: locationProvider,
+			mapDataClient: StaticMapDataClient(data: mapData),
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.announcementOptions = AnnouncementOptions(
+			includeDistance: false,
+			includeDirection: false,
+			includeNeighborhood: false
+		)
+
+		let firstReport = try await service.report(.upcoming, prefs: prefs)
+		let secondReport = try await service.report(.upcoming, rank: 2, prefs: prefs)
+
+		#expect(firstReport.cross == "Oak Street and First Street")
+		#expect(secondReport.cross == "Oak Street and Second Street")
+		#expect(await locationProvider.requestCount == 1)
+	}
+
 	@Test func rankedNearestReturnsRequestedDistanceOrder() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let candidates = [
@@ -1207,7 +1275,7 @@ struct IntersectorTests {
 		#expect(data.intersections.isEmpty)
 	}
 
-	@Test func intersectionBuilderIncludesCrossingsWhenEnabled() async throws {
+	@Test func intersectionBuilderSuppressesUnanchoredCrossingsWhenEnabled() async throws {
 		let response = OverpassResponse(
 			elements: [
 				OverpassElement(type: "node", id: 1, lat: 37.0, lon: -122.0, nodes: nil, tags: nil),
@@ -1220,7 +1288,28 @@ struct IntersectorTests {
 
 		let data = IntersectionBuilder().mapData(from: response, options: options)
 
-		#expect(data.intersections.map(\.title) == ["Crossing on Oak Street"])
+		#expect(data.intersections.isEmpty)
+	}
+
+	@Test func intersectionBuilderAnchorsCrossingsToNearbyIntersections() async throws {
+		let response = OverpassResponse(
+			elements: [
+				OverpassElement(type: "node", id: 1, lat: 37.0, lon: -122.0, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 2, lat: 37.0005, lon: -122.0, nodes: nil, tags: ["highway": "crossing"]),
+				OverpassElement(type: "node", id: 3, lat: 37.001, lon: -122.0, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 4, lat: 37.001, lon: -122.001, nodes: nil, tags: nil),
+				OverpassElement(type: "way", id: 10, lat: nil, lon: nil, nodes: [1, 2, 3], tags: ["highway": "residential", "name": "Oak Street"]),
+				OverpassElement(type: "way", id: 11, lat: nil, lon: nil, nodes: [4, 3], tags: ["highway": "residential", "name": "Pine Street"])
+			]
+		)
+		let options = MapDetailOptions(includeCrossings: true)
+
+		let data = IntersectionBuilder().mapData(from: response, options: options)
+
+		#expect(data.intersections.map(\.title) == [
+			"Oak Street and Pine Street",
+			"Crossing on Oak Street near Pine Street"
+		])
 	}
 
 	@Test func intersectionBuilderSuppressesCrossingBesideStreetIntersection() async throws {
@@ -1403,6 +1492,26 @@ struct FakeLocationProvider: LocationProviding {
 
 	func currentContext() async throws -> DeviceContext {
 		context
+	}
+}
+
+actor SequentialLocationProvider: LocationProviding {
+	private let contexts: [DeviceContext]
+	private var index = 0
+	private(set) var requestCount = 0
+
+	init(contexts: [DeviceContext]) {
+		self.contexts = contexts
+	}
+
+	func currentContext() async throws -> DeviceContext {
+		requestCount += 1
+		guard !contexts.isEmpty else {
+			throw OrientError.locationUnavailable
+		}
+		let context = contexts[min(index, contexts.count - 1)]
+		index += 1
+		return context
 	}
 }
 
