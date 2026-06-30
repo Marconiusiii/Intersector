@@ -35,10 +35,6 @@ final class LocationProvider: NSObject, LocationProviding {
 	}
 
 	func currentContext() async throws -> DeviceContext {
-		if CLLocationManager.headingAvailable() {
-			manager.startUpdatingHeading()
-		}
-
 		switch manager.authorizationStatus {
 		case .notDetermined:
 			let status = await requestWhenInUseAuthorization()
@@ -53,11 +49,17 @@ final class LocationProvider: NSObject, LocationProviding {
 			throw CLError(.denied)
 		}
 
+		if CLLocationManager.headingAvailable() {
+			manager.startUpdatingHeading()
+		}
+
 		if let location = latestLocation, isRecentEnough(location), isIdeal(location) {
-			return DeviceContext(
+			let context = DeviceContext(
 				coordinate: location.coordinate,
 				headingDegrees: latestHeading
 			)
+			stopHeadingIfIdle()
+			return context
 		}
 
 		return try await withCheckedThrowingContinuation { continuation in
@@ -139,6 +141,7 @@ final class LocationProvider: NSObject, LocationProviding {
 		manager.stopUpdatingLocation()
 		locationTimeoutTask?.cancel()
 		locationTimeoutTask = nil
+		stopHeadingIfIdle()
 		switch result {
 		case .success(let context):
 			continuation.resume(returning: context)
@@ -204,15 +207,19 @@ final class LocationProvider: NSObject, LocationProviding {
 		headingTimeoutTask?.cancel()
 		headingTimeoutTask = nil
 
-		if headingContinuations.isEmpty {
-			manager.stopUpdatingHeading()
-		}
+		stopHeadingIfIdle()
 
 		switch result {
 		case .success(let heading):
 			headingContinuation.resume(returning: heading)
 		case .failure(let error):
 			headingContinuation.resume(throwing: error)
+		}
+	}
+
+	private func stopHeadingIfIdle() {
+		if headingContinuation == nil && headingContinuations.isEmpty {
+			manager.stopUpdatingHeading()
 		}
 	}
 }

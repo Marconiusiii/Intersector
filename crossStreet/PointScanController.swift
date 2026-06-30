@@ -35,6 +35,10 @@ final class PointScanController: ObservableObject {
 		}
 	}
 
+	func stopScanning() {
+		stop()
+	}
+
 	private func start(
 		prefs: AppPrefs,
 		onUpdate: @escaping (String) -> Void

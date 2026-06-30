@@ -987,10 +987,6 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 	}
 
 	func currentContext() async throws -> WatchDeviceContext {
-		if CLLocationManager.headingAvailable() {
-			manager.startUpdatingHeading()
-		}
-
 		switch manager.authorizationStatus {
 		case .notDetermined:
 			let status = await requestWhenInUseAuthorization()
@@ -1003,6 +999,10 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 			throw WatchReportError.locationUnavailable
 		@unknown default:
 			throw WatchReportError.locationUnavailable
+		}
+
+		if CLLocationManager.headingAvailable() {
+			manager.startUpdatingHeading()
 		}
 
 		return try await withCheckedThrowingContinuation { continuation in
@@ -1100,6 +1100,7 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 		}
 		self.continuation = nil
 		manager.stopUpdatingLocation()
+		stopHeadingIfIdle()
 		switch result {
 		case .success(let context):
 			continuation.resume(returning: context)
@@ -1113,11 +1114,18 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 			return
 		}
 		self.headingContinuation = nil
+		stopHeadingIfIdle()
 		switch result {
 		case .success(let heading):
 			headingContinuation.resume(returning: heading)
 		case .failure(let error):
 			headingContinuation.resume(throwing: error)
+		}
+	}
+
+	private func stopHeadingIfIdle() {
+		if headingContinuation == nil {
+			manager.stopUpdatingHeading()
 		}
 	}
 }

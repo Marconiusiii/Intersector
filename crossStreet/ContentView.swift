@@ -41,6 +41,7 @@ struct ContentView: View {
 	@AppStorage("showRankedControls") private var showRankedControls = true
 	@Environment(\.dynamicTypeSize) private var dynamicTypeSize
 	@Environment(\.openURL) private var openURL
+	@Environment(\.scenePhase) private var scenePhase
 	@ScaledMetric(relativeTo: .largeTitle) private var headerMinHeight: CGFloat = 88
 	@ScaledMetric(relativeTo: .body) private var statusMinHeight: CGFloat = 112
 	@ScaledMetric(relativeTo: .title2) private var actionMinHeight: CGFloat = 76
@@ -155,6 +156,11 @@ struct ContentView: View {
 			.onAppear {
 				loadInitialReportIfNeeded()
 				startRequestedPointScanIfNeeded()
+			}
+			.onChange(of: scenePhase) { _, phase in
+				if phase != .active {
+					pointScanner.stopScanning()
+				}
 			}
 		}
 	}
