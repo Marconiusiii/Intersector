@@ -30,6 +30,17 @@ struct WatchUpcomingIntersectionIntent: AppIntent {
 	}
 }
 
+struct WatchMyDirectionIntent: AppIntent {
+	static var title: LocalizedStringResource = "My Direction"
+	static var description = IntentDescription("Reports the direction you are facing.")
+	static var openAppWhenRun = false
+
+	func perform() async throws -> some IntentResult & ProvidesDialog {
+		let text = await IntersectorWatchReporter.directionText()
+		return .result(dialog: IntentDialog(stringLiteral: text))
+	}
+}
+
 struct IntersectorWatchShortcuts: AppShortcutsProvider {
 	static var appShortcuts: [AppShortcut] {
 		AppShortcut(
@@ -53,6 +64,16 @@ struct IntersectorWatchShortcuts: AppShortcutsProvider {
 			],
 			shortTitle: "Upcoming",
 			systemImageName: "arrow.up.circle.fill"
+		)
+		AppShortcut(
+			intent: WatchMyDirectionIntent(),
+			phrases: [
+				"My direction in \(.applicationName)",
+				"Which way am I facing with \(.applicationName)",
+				"What direction am I facing with \(.applicationName)"
+			],
+			shortTitle: "Direction",
+			systemImageName: "safari.fill"
 		)
 	}
 }

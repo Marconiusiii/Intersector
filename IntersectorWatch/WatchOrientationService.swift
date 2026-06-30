@@ -33,6 +33,7 @@ enum WatchReportKind {
 
 enum WatchReportError: LocalizedError {
 	case noIntersections
+	case headingUnavailable
 	case locationUnavailable
 	case invalidMapData
 	case invalidResponse
@@ -42,6 +43,8 @@ enum WatchReportError: LocalizedError {
 		switch self {
 		case .noIntersections:
 			"No nearby mapped intersections were found."
+		case .headingUnavailable:
+			"Direction is not available yet."
 		case .locationUnavailable:
 			"Location is not available yet. Try again."
 		case .invalidMapData:
@@ -54,14 +57,161 @@ enum WatchReportError: LocalizedError {
 	}
 }
 
+struct WatchAppPrefs: Equatable, Hashable {
+	var areaMode = WatchAreaMode.near
+	var measurementUnit = WatchMeasurementUnit.feet
+	var directionStyle = WatchDirectionStyle.words
+	var intersectionWording = WatchIntersectionWording.direct
+	var spokenIntersectionCount = WatchSpokenIntersectionCount.one
+	var announcementOptions = WatchAnnouncementOptions()
+	var mapDetails = WatchMapDetailOptions()
+	var manhattanSnobMode = false
+
+	static func saved(from defaults: UserDefaults = .standard) -> WatchAppPrefs {
+		let announcementOptions = WatchAnnouncementOptions.saved(from: defaults)
+		return WatchAppPrefs(
+			areaMode: WatchAreaMode(rawValue: defaults.string(forKey: "areaMode") ?? "") ?? .near,
+			measurementUnit: WatchMeasurementUnit(rawValue: defaults.string(forKey: "measurementUnit") ?? "") ?? .feet,
+			directionStyle: WatchDirectionStyle(rawValue: defaults.string(forKey: "directionStyle") ?? "") ?? .words,
+			intersectionWording: WatchIntersectionWording(
+				rawValue: defaults.string(forKey: "intersectionWording") ?? ""
+			) ?? .direct,
+			spokenIntersectionCount: WatchSpokenIntersectionCount(
+				rawValue: defaults.integer(forKey: "spokenIntersectionCount")
+			) ?? .one,
+			announcementOptions: announcementOptions,
+			mapDetails: WatchMapDetailOptions(
+				includeCrossings: defaults.object(forKey: "includeCrossings") as? Bool ?? false,
+				includeWalkingPaths: defaults.object(forKey: "includeWalkingPaths") as? Bool ?? false
+			),
+			manhattanSnobMode: defaults.object(forKey: "manhattanSnobMode") as? Bool ?? false
+		)
+	}
+}
+
+struct WatchAnnouncementOptions: Equatable, Hashable {
+	var includeDistance = true
+	var includeDirection = true
+	var includeNeighborhood = true
+
+	static func saved(from defaults: UserDefaults) -> WatchAnnouncementOptions {
+		let hasExplicitOptions =
+			defaults.object(forKey: "includeAnnouncementDistance") != nil ||
+			defaults.object(forKey: "includeAnnouncementDirection") != nil ||
+			defaults.object(forKey: "includeAnnouncementNeighborhood") != nil
+		guard hasExplicitOptions else {
+			return WatchAnnouncementOptions()
+		}
+		return WatchAnnouncementOptions(
+			includeDistance: defaults.object(forKey: "includeAnnouncementDistance") as? Bool ?? true,
+			includeDirection: defaults.object(forKey: "includeAnnouncementDirection") as? Bool ?? true,
+			includeNeighborhood: defaults.object(forKey: "includeAnnouncementNeighborhood") as? Bool ?? true
+		)
+	}
+
+	var speaksIntersectionNamesOnly: Bool {
+		!includeDistance && !includeDirection && !includeNeighborhood
+	}
+}
+
+struct WatchMapDetailOptions: Equatable, Hashable {
+	var includeCrossings = false
+	var includeWalkingPaths = false
+}
+
+enum WatchAreaMode: String, CaseIterable, Identifiable {
+	case off
+	case near
+	case toward
+
+	var id: String { rawValue }
+
+	var label: String {
+		switch self {
+		case .off:
+			"Off"
+		case .near:
+			"Nearby only"
+		case .toward:
+			"Nearby and toward"
+		}
+	}
+}
+
+enum WatchMeasurementUnit: String, CaseIterable, Identifiable {
+	case feet
+	case meters
+
+	var id: String { rawValue }
+
+	var label: String {
+		switch self {
+		case .feet:
+			"Feet"
+		case .meters:
+			"Meters"
+		}
+	}
+}
+
+enum WatchDirectionStyle: String, CaseIterable, Identifiable {
+	case words
+	case clockFace
+
+	var id: String { rawValue }
+
+	var label: String {
+		switch self {
+		case .words:
+			"Words"
+		case .clockFace:
+			"Clock Face"
+		}
+	}
+}
+
+enum WatchIntersectionWording: String, CaseIterable, Identifiable {
+	case direct
+	case streetContext
+
+	var id: String { rawValue }
+
+	var label: String {
+		switch self {
+		case .direct:
+			"Direct"
+		case .streetContext:
+			"Street Context"
+		}
+	}
+}
+
+enum WatchSpokenIntersectionCount: Int, CaseIterable, Identifiable {
+	case one = 1
+	case two = 2
+	case three = 3
+
+	var id: Int { rawValue }
+	var label: String { String(rawValue) }
+}
+
 enum IntersectorWatchReporter {
 	@MainActor
-	static func reportText(for kind: WatchReportKind) async -> String {
+	static func reportText(for kind: WatchReportKind, prefs: WatchAppPrefs = WatchAppPrefs.saved()) async -> String {
 		do {
-			let report = try await WatchOrientationService().report(kind)
-			return report.text
+			return try await WatchOrientationService().spokenText(kind, prefs: prefs)
 		} catch {
 			return "Unable to update \(kind.intentLabel). \(error.localizedDescription)"
+		}
+	}
+
+	@MainActor
+	static func directionText(prefs: WatchAppPrefs = WatchAppPrefs.saved()) async -> String {
+		do {
+			let heading = try await WatchLocationProvider().currentHeading()
+			return "Facing \(WatchGeo.localizedDirection(heading, prefs: prefs))."
+		} catch {
+			return error.localizedDescription
 		}
 	}
 }
@@ -69,31 +219,192 @@ enum IntersectorWatchReporter {
 struct WatchOrientationService {
 	private let locationProvider = WatchLocationProvider()
 	private let mapClient = WatchMapDataClient()
+	private let neighborhoodProvider = WatchNeighborhoodProvider()
 	private let finder = WatchIntersectionFinder()
+	private let neighborhoodResolver = WatchNeighborhoodResolver()
 
 	@MainActor
-	func report(_ kind: WatchReportKind) async throws -> WatchOrientationReport {
+	func spokenText(_ kind: WatchReportKind, prefs: WatchAppPrefs) async throws -> String {
+		guard prefs.spokenIntersectionCount != .one else {
+			return try await report(kind, prefs: prefs).text(with: prefs)
+		}
+
 		let context = try await locationProvider.currentContext()
-		let intersections = try await mapClient.intersections(
-			near: context.coordinate,
-			radiusMeters: kind == .upcoming ? 375 : 225
+		let requestedCount = prefs.spokenIntersectionCount.rawValue
+		let minimumCandidateCount = kind == .upcoming && context.headingDegrees == nil ? 1 : requestedCount
+		let mapData = try await mapData(
+			for: kind,
+			from: context,
+			minimumCandidateCount: minimumCandidateCount,
+			prefs: prefs
 		)
-		guard let match = finder.bestMatch(for: kind, from: context, in: intersections) else {
+		let ranked: [WatchIntersectionCandidate]
+		switch kind {
+		case .nearest:
+			ranked = finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
+		case .upcoming:
+			if context.headingDegrees == nil {
+				ranked = finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
+			} else {
+				ranked = finder.rankedUpcoming(from: context, in: mapData.intersections)
+			}
+		}
+		let resultCount = kind == .upcoming && context.headingDegrees == nil ? 1 : requestedCount
+		let neighborhoodContext = await neighborhoodContext(for: prefs.areaMode, from: context)
+		var reports: [WatchOrientationReport] = []
+		for match in ranked {
+			let report = makeReport(
+				kind,
+				match: match,
+				context: context,
+				mapData: mapData,
+				prefs: prefs,
+				neighborhoodContext: neighborhoodContext
+			)
+			if !reports.containsSpokenIntersection(matching: report) {
+				reports.append(report)
+			}
+			if reports.count == resultCount {
+				break
+			}
+		}
+		guard !reports.isEmpty else {
 			throw WatchReportError.noIntersections
 		}
+		return WatchIntersectionReportList(reports: reports).text(with: prefs)
+	}
+
+	@MainActor
+	func report(_ kind: WatchReportKind, rank: Int = 1, prefs: WatchAppPrefs) async throws -> WatchOrientationReport {
+		let context = try await locationProvider.currentContext()
+		let mapData = try await mapData(
+			for: kind,
+			from: context,
+			minimumCandidateCount: rank,
+			prefs: prefs
+		)
+		let match = if kind == .nearest {
+			finder.nearest(rank: rank, from: context.coordinate, in: mapData.intersections)
+		} else if rank > 1 {
+			finder.upcoming(rank: rank, from: context, in: mapData.intersections)
+		} else {
+			finder.bestMatch(for: kind, from: context, in: mapData.intersections)
+		}
+		guard let match else {
+			throw WatchReportError.noIntersections
+		}
+		let neighborhoodContext = await neighborhoodContext(for: prefs.areaMode, from: context)
+		return makeReport(
+			kind,
+			match: match,
+			context: context,
+			mapData: mapData,
+			prefs: prefs,
+			neighborhoodContext: neighborhoodContext
+		)
+	}
+
+	private func makeReport(
+		_ kind: WatchReportKind,
+		match: WatchIntersectionCandidate,
+		context: WatchDeviceContext,
+		mapData: WatchMapDataSet,
+		prefs: WatchAppPrefs,
+		neighborhoodContext: WatchNeighborhoodContext
+	) -> WatchOrientationReport {
 		let distance = WatchGeo.distanceMeters(from: context.coordinate, to: match.coordinate)
 		let bearing = WatchGeo.bearingDegrees(from: context.coordinate, to: match.coordinate)
-		let direction = relativeDirection(
-			bearing: bearing,
-			heading: context.headingDegrees,
-			kind: kind
-		)
+		let relDegrees = relativeDegrees(bearing: bearing, heading: context.headingDegrees)
+		let relDir = relativeDirection(bearing: bearing, heading: context.headingDegrees, kind: kind)
+		let currentStreet = mapData.nearestRoadName(to: context.coordinate, matching: match.roadNames)
+		let crossStreet: String? = currentStreet.flatMap { roadName in
+			let otherNames = mapData.crossStreetNames(
+				for: match,
+				on: roadName,
+				heading: context.dependableTravelDirection
+			)
+			return otherNames.isEmpty ? nil : otherNames.joined(separator: " and ")
+		}
+		let cross = currentStreet.flatMap { roadName in
+			crossStreet.map { "\(roadName) and \($0)" }
+		} ?? match.title
+
 		return WatchOrientationReport(
 			kind: kind,
-			title: match.title,
-			distance: WatchGeo.spokenDistance(distance),
-			direction: direction
+			cross: cross,
+			dist: WatchGeo.spokenDistance(distance, unit: prefs.measurementUnit),
+			relDir: relDir,
+			relDegrees: relDegrees,
+			street: currentStreet,
+			crossStreet: crossStreet,
+			head: WatchGeo.compassDirection(bearing),
+			area: neighborhoodContext.area,
+			toward: neighborhoodContext.toward
 		)
+	}
+
+	private func mapData(
+		for kind: WatchReportKind,
+		from context: WatchDeviceContext,
+		minimumCandidateCount: Int,
+		prefs: WatchAppPrefs
+	) async throws -> WatchMapDataSet {
+		let radii: [CLLocationDistance] = [225, 375, 750, 1_200]
+		var latestData = WatchMapDataSet(intersections: [], roads: [])
+		for radius in radii {
+			latestData = try await mapClient.mapData(
+				near: context.coordinate,
+				radiusMeters: radius,
+				options: prefs.mapDetails
+			)
+			if hasEnoughCandidates(
+				for: kind,
+				from: context,
+				minimumCandidateCount: minimumCandidateCount,
+				intersections: latestData.intersections
+			) {
+				return latestData
+			}
+		}
+		return latestData
+	}
+
+	private func hasEnoughCandidates(
+		for kind: WatchReportKind,
+		from context: WatchDeviceContext,
+		minimumCandidateCount: Int,
+		intersections: [WatchIntersectionCandidate]
+	) -> Bool {
+		if kind == .nearest {
+			return finder.rankedNearest(from: context.coordinate, in: intersections).count >= minimumCandidateCount
+		}
+		guard context.headingDegrees != nil else {
+			return !intersections.isEmpty
+		}
+		return finder.rankedUpcoming(from: context, in: intersections).count >= minimumCandidateCount
+	}
+
+	private func neighborhoodContext(
+		for mode: WatchAreaMode,
+		from context: WatchDeviceContext
+	) async -> WatchNeighborhoodContext {
+		guard mode != .off else {
+			return WatchNeighborhoodContext(area: nil, toward: nil)
+		}
+		do {
+			let neighborhoods = try await neighborhoodProvider.neighborhoods(
+				near: context.coordinate,
+				radiusMeters: 1_500
+			)
+			return neighborhoodResolver.context(
+				from: neighborhoods,
+				origin: context.coordinate,
+				heading: context.headingDegrees,
+				mode: mode
+			)
+		} catch {
+			return WatchNeighborhoodContext(area: nil, toward: nil)
+		}
 	}
 
 	private func relativeDirection(
@@ -124,35 +435,522 @@ struct WatchOrientationService {
 			return "ahead and left"
 		}
 	}
+
+	private func relativeDegrees(
+		bearing: CLLocationDirection,
+		heading: CLLocationDirection?
+	) -> CLLocationDirection? {
+		guard let heading else {
+			return nil
+		}
+		return WatchGeo.normalizedDegrees(bearing - heading)
+	}
 }
 
-struct WatchOrientationReport {
+struct WatchOrientationReport: Equatable {
 	var kind: WatchReportKind
-	var title: String
-	var distance: String
-	var direction: String?
+	var cross: String
+	var dist: String
+	var relDir: String?
+	var relDegrees: CLLocationDirection?
+	var street: String?
+	var crossStreet: String?
+	var head: String?
+	var area: String?
+	var toward: String?
 
-	var text: String {
-		var text = "\(kind.leadText): \(title), about \(distance)"
-		if let direction {
-			text += " \(direction)"
+	func text(with prefs: WatchAppPrefs) -> String {
+		text(with: prefs, includeLead: true, rank: nil, includeNeighborhood: true)
+	}
+
+	func text(with prefs: WatchAppPrefs, rank: Int) -> String {
+		text(with: prefs, includeLead: true, rank: rank, includeNeighborhood: true)
+	}
+
+	func text(with prefs: WatchAppPrefs, includeLead: Bool, includeNeighborhood: Bool) -> String {
+		text(with: prefs, includeLead: includeLead, rank: nil, includeNeighborhood: includeNeighborhood)
+	}
+
+	func neighborhoodText(with prefs: WatchAppPrefs) -> String? {
+		areaText(prefs)
+	}
+
+	private func text(
+		with prefs: WatchAppPrefs,
+		includeLead: Bool,
+		rank: Int?,
+		includeNeighborhood: Bool
+	) -> String {
+		var text: String
+		if prefs.announcementOptions.speaksIntersectionNamesOnly {
+			text = nameOnlyText()
+		} else if
+			prefs.intersectionWording == .streetContext,
+			let street,
+			let crossStreet
+		{
+			text = streetContextText(street: street, crossStreet: crossStreet, prefs: prefs)
+		} else {
+			text = directText(with: prefs)
+		}
+		let shouldIncludeLead = includeLead &&
+			(!prefs.announcementOptions.speaksIntersectionNamesOnly || rank != nil)
+		if shouldIncludeLead {
+			text = "\(leadText(rank: rank)): \(text)"
+		}
+		if includeNeighborhood, let area = areaText(prefs) {
+			text += " \(area)"
 		}
 		return text + "."
+	}
+
+	private func nameOnlyText() -> String {
+		guard let street, let crossStreet else {
+			return cross
+		}
+		return "\(street) and \(crossStreet)"
+	}
+
+	private func leadText(rank: Int? = nil) -> String {
+		if let rank, rank > 1 {
+			return "\(Self.ordinal(rank)) \(kind.leadText)"
+		}
+		return kind.leadText
+	}
+
+	private static func ordinal(_ value: Int) -> String {
+		switch value {
+		case 2:
+			"2nd"
+		case 3:
+			"3rd"
+		default:
+			"\(value)th"
+		}
+	}
+
+	private func directText(with prefs: WatchAppPrefs) -> String {
+		var text = cross
+		let details = reportDetails(with: prefs)
+		if !details.isEmpty {
+			text += ", \(details.joined(separator: " "))"
+		}
+		return text
+	}
+
+	private func streetContextText(
+		street: String,
+		crossStreet: String,
+		prefs: WatchAppPrefs
+	) -> String {
+		let details = reportDetails(with: prefs)
+		guard !details.isEmpty else {
+			return "On \(street) at \(crossStreet)"
+		}
+		return "On \(street) at \(crossStreet), \(details.joined(separator: " "))"
+	}
+
+	private func reportDetails(with prefs: WatchAppPrefs) -> [String] {
+		var details: [String] = []
+		if prefs.announcementOptions.includeDistance {
+			details.append("about \(dist)")
+		}
+		if
+			prefs.announcementOptions.includeDirection,
+			let direction = directionText(with: prefs)
+		{
+			details.append(direction)
+		}
+		return details
+	}
+
+	private func areaText(_ prefs: WatchAppPrefs) -> String? {
+		guard prefs.announcementOptions.includeNeighborhood else {
+			return nil
+		}
+		return switch prefs.areaMode {
+		case .off:
+			nil
+		case .near:
+			area.map { "in \($0)" }
+		case .toward:
+			if let toward {
+				"toward \(toward)"
+			} else {
+				area.map { "in \($0)" }
+			}
+		}
+	}
+
+	private func directionText(with prefs: WatchAppPrefs) -> String? {
+		switch prefs.directionStyle {
+		case .words:
+			if prefs.manhattanSnobMode {
+				return head.map { "towards \(WatchGeo.manhattanDirection(for: $0))" }
+			}
+			return relDir
+		case .clockFace:
+			return relDegrees.map { Self.clockFaceDirection(from: $0) }
+		}
+	}
+
+	private static func clockFaceDirection(from degrees: CLLocationDirection) -> String {
+		let hour = Int((WatchGeo.normalizedDegrees(degrees) + 15) / 30) % 12
+		return "at \(hour == 0 ? 12 : hour) o'clock"
+	}
+}
+
+struct WatchIntersectionReportList: Equatable {
+	var reports: [WatchOrientationReport]
+
+	func text(with prefs: WatchAppPrefs) -> String {
+		guard let first = reports.first else {
+			return ""
+		}
+		if prefs.announcementOptions.speaksIntersectionNamesOnly {
+			let sharedStreet = first.street.flatMap { streetName in
+				reports.allSatisfy { $0.street == streetName && $0.crossStreet != nil } ? streetName : nil
+			}
+			let labels: [String]
+			if let sharedStreet {
+				labels = reports.enumerated().map { index, report in
+					guard let crossStreet = report.crossStreet else {
+						return report.cross
+					}
+					return index == 0 ? "\(sharedStreet) and \(crossStreet)" : crossStreet
+				}
+			} else {
+				labels = reports.map(\.cross)
+			}
+			return labels.joined(separator: ", ") + "."
+		}
+
+		let sharedNeighborhood = sharedNeighborhoodText(with: prefs)
+		let text = reports.enumerated().map { index, report in
+			report.text(
+				with: prefs,
+				includeLead: index == 0,
+				includeNeighborhood: sharedNeighborhood == nil
+			)
+		}.joined(separator: " ")
+		guard let sharedNeighborhood else {
+			return text
+		}
+		return text.dropTrailingPeriod() + " \(sharedNeighborhood)."
+	}
+
+	private func sharedNeighborhoodText(with prefs: WatchAppPrefs) -> String? {
+		guard reports.count > 1, prefs.announcementOptions.includeNeighborhood else {
+			return nil
+		}
+		let neighborhoodTexts = reports.map { $0.neighborhoodText(with: prefs) }
+		guard
+			let first = neighborhoodTexts.first,
+			let shared = first,
+			neighborhoodTexts.allSatisfy({ $0 == shared })
+		else {
+			return nil
+		}
+		return shared
+	}
+}
+
+private extension String {
+	func dropTrailingPeriod() -> String {
+		hasSuffix(".") ? String(dropLast()) : self
+	}
+}
+
+private extension Array where Element == WatchOrientationReport {
+	func containsSpokenIntersection(matching report: WatchOrientationReport) -> Bool {
+		contains { existing in
+			if
+				let existingStreet = existing.street,
+				let existingCrossStreet = existing.crossStreet,
+				let reportStreet = report.street,
+				let reportCrossStreet = report.crossStreet
+			{
+				return existingStreet == reportStreet && existingCrossStreet == reportCrossStreet
+			}
+			return existing.cross == report.cross
+		}
 	}
 }
 
 struct WatchDeviceContext {
 	var coordinate: CLLocationCoordinate2D
 	var headingDegrees: CLLocationDirection?
+	var courseDegrees: CLLocationDirection? = nil
+	var courseAccuracy: CLLocationDirection? = nil
+	var speedMetersPerSecond: CLLocationSpeed? = nil
+	var horizontalAccuracy: CLLocationAccuracy? = nil
+
+	var dependableTravelDirection: CLLocationDirection? {
+		if
+			let courseDegrees,
+			let courseAccuracy,
+			let speedMetersPerSecond,
+			courseDegrees >= 0,
+			courseAccuracy >= 0,
+			courseAccuracy <= 45,
+			speedMetersPerSecond >= 0.7
+		{
+			return courseDegrees
+		}
+		return headingDegrees
+	}
 }
 
-struct WatchIntersectionCandidate: Identifiable {
+struct WatchIntersectionCandidate: Identifiable, Equatable {
 	var id: String
 	var names: [String]
 	var coordinate: CLLocationCoordinate2D
+	var associatedRoadNames: [String] = []
 
 	var title: String {
 		names.prefix(2).joined(separator: " and ")
+	}
+
+	var roadNames: [String] {
+		associatedRoadNames.isEmpty ? names : associatedRoadNames
+	}
+}
+
+struct WatchMapRoad: Identifiable, Equatable {
+	var id: String
+	var name: String
+	var nodeIDs: [Int64]
+	var coordinates: [CLLocationCoordinate2D]
+}
+
+struct WatchMapDataSet: Equatable {
+	var intersections: [WatchIntersectionCandidate]
+	var roads: [WatchMapRoad]
+
+	func nearestRoadName(
+		to coordinate: CLLocationCoordinate2D,
+		matching roadNames: [String]
+	) -> String? {
+		let allowedNames = Set(roadNames)
+		return roads
+			.filter { allowedNames.contains($0.name) }
+			.min {
+				$0.minimumDistance(to: coordinate) < $1.minimumDistance(to: coordinate)
+			}?
+			.name
+	}
+
+	func crossStreetNames(
+		for match: WatchIntersectionCandidate,
+		on roadName: String,
+		heading: CLLocationDirection?
+	) -> [String] {
+		guard !match.id.hasPrefix("crossing-") else {
+			return []
+		}
+		let candidates = splitIntersectionCandidates(for: match, on: roadName)
+		let orderedCandidates = orderedSplitCandidates(candidates, roadName: roadName, heading: heading)
+		return orderedCandidates.reduce(into: []) { names, candidate in
+			for name in candidate.names where name != roadName && !names.contains(name) {
+				names.append(name)
+			}
+		}
+	}
+
+	private func splitIntersectionCandidates(
+		for match: WatchIntersectionCandidate,
+		on roadName: String
+	) -> [WatchIntersectionCandidate] {
+		let sameStreetCandidates = intersections.filter {
+			!$0.id.hasPrefix("crossing-") && $0.roadNames.contains(roadName)
+		}
+		let nearbyCandidates = sameStreetCandidates.filter { candidate in
+			candidate.id == match.id || isSameSplitIntersection(candidate, as: match, on: roadName)
+		}
+		return nearbyCandidates.isEmpty ? [match] : nearbyCandidates
+	}
+
+	private func isSameSplitIntersection(
+		_ candidate: WatchIntersectionCandidate,
+		as match: WatchIntersectionCandidate,
+		on roadName: String
+	) -> Bool {
+		guard candidate.id != match.id else {
+			return true
+		}
+		let straightLineDistance = WatchGeo.distanceMeters(from: candidate.coordinate, to: match.coordinate)
+		guard straightLineDistance <= 45 else {
+			return false
+		}
+		guard
+			let road = roads.first(where: { $0.name == roadName }),
+			let candidatePosition = road.signedDistanceAlongRoad(
+				from: match.coordinate,
+				to: candidate.coordinate
+			)
+		else {
+			return straightLineDistance <= 30
+		}
+		return abs(candidatePosition) <= 30
+	}
+
+	private func orderedSplitCandidates(
+		_ candidates: [WatchIntersectionCandidate],
+		roadName: String,
+		heading: CLLocationDirection?
+	) -> [WatchIntersectionCandidate] {
+		guard let heading else {
+			return candidates.sorted {
+				WatchGeo.distanceMeters(from: candidates[0].coordinate, to: $0.coordinate)
+					< WatchGeo.distanceMeters(from: candidates[0].coordinate, to: $1.coordinate)
+			}
+		}
+		return candidates.enumerated().sorted { lhs, rhs in
+			let lhsSide = sideScore(for: lhs.element, roadName: roadName, heading: heading)
+			let rhsSide = sideScore(for: rhs.element, roadName: roadName, heading: heading)
+			if lhsSide != rhsSide {
+				return lhsSide > rhsSide
+			}
+			return lhs.offset < rhs.offset
+		}.map(\.element)
+	}
+
+	private func sideScore(
+		for candidate: WatchIntersectionCandidate,
+		roadName: String,
+		heading: CLLocationDirection
+	) -> Double {
+		let vectors = candidate.names
+			.filter { $0 != roadName }
+			.compactMap { crossStreetVector(for: $0, from: candidate.coordinate) }
+		guard let vector = vectors.first else {
+			return 0
+		}
+		let radians = heading * Double.pi / 180
+		let headingX = sin(radians)
+		let headingY = cos(radians)
+		return headingX * vector.y - headingY * vector.x
+	}
+
+	private func crossStreetVector(
+		for roadName: String,
+		from coordinate: CLLocationCoordinate2D
+	) -> (x: Double, y: Double)? {
+		roads
+			.filter { $0.name == roadName }
+			.compactMap { road -> (distance: CLLocationDistance, vector: (x: Double, y: Double))? in
+				guard let vector = road.vectorAway(from: coordinate) else {
+					return nil
+				}
+				return (road.minimumDistance(to: coordinate), vector)
+			}
+			.min { $0.distance < $1.distance }?
+			.vector
+	}
+}
+
+extension WatchMapRoad {
+	func minimumDistance(to coordinate: CLLocationCoordinate2D) -> CLLocationDistance {
+		guard coordinates.count > 1 else {
+			return coordinates.first.map {
+				WatchGeo.distanceMeters(from: coordinate, to: $0)
+			} ?? .greatestFiniteMagnitude
+		}
+		return zip(coordinates, coordinates.dropFirst())
+			.map { start, end in
+				Self.distance(from: coordinate, toSegmentFrom: start, to: end)
+			}
+			.min() ?? .greatestFiniteMagnitude
+	}
+
+	func signedDistanceAlongRoad(
+		from origin: CLLocationCoordinate2D,
+		to target: CLLocationCoordinate2D
+	) -> CLLocationDistance? {
+		guard let reference = nearestSegmentReference(to: origin) else {
+			return nil
+		}
+		let targetVector = Self.localVector(from: origin, to: target)
+		return targetVector.x * reference.tangentX + targetVector.y * reference.tangentY
+	}
+
+	func vectorAway(from coordinate: CLLocationCoordinate2D) -> (x: Double, y: Double)? {
+		coordinates
+			.map { Self.localVector(from: coordinate, to: $0) }
+			.filter { hypot($0.x, $0.y) > 1 }
+			.min { hypot($0.x, $0.y) < hypot($1.x, $1.y) }
+	}
+
+	private func nearestSegmentReference(to coordinate: CLLocationCoordinate2D) -> SegmentReference? {
+		zip(coordinates, coordinates.dropFirst())
+			.compactMap { start, end in
+				Self.segmentReference(from: coordinate, start: start, end: end)
+			}
+			.min { $0.distance < $1.distance }
+	}
+
+	private struct SegmentReference {
+		var distance: CLLocationDistance
+		var tangentX: Double
+		var tangentY: Double
+	}
+
+	private static func segmentReference(
+		from coordinate: CLLocationCoordinate2D,
+		start: CLLocationCoordinate2D,
+		end: CLLocationCoordinate2D
+	) -> SegmentReference? {
+		let startVector = localVector(from: coordinate, to: start)
+		let endVector = localVector(from: coordinate, to: end)
+		let segmentX = endVector.x - startVector.x
+		let segmentY = endVector.y - startVector.y
+		let segmentLength = hypot(segmentX, segmentY)
+		guard segmentLength > 0 else {
+			return nil
+		}
+		let segmentLengthSquared = segmentLength * segmentLength
+		let projection = -(startVector.x * segmentX + startVector.y * segmentY) / segmentLengthSquared
+		let clampedProjection = min(1, max(0, projection))
+		let closestX = startVector.x + clampedProjection * segmentX
+		let closestY = startVector.y + clampedProjection * segmentY
+		return SegmentReference(
+			distance: hypot(closestX, closestY),
+			tangentX: segmentX / segmentLength,
+			tangentY: segmentY / segmentLength
+		)
+	}
+
+	private static func localVector(
+		from origin: CLLocationCoordinate2D,
+		to target: CLLocationCoordinate2D
+	) -> (x: Double, y: Double) {
+		let earthRadius = 6_371_000.0
+		let latitudeScale = Double.pi / 180
+		let longitudeScale = latitudeScale * cos(origin.latitude * latitudeScale)
+		return (
+			(target.longitude - origin.longitude) * longitudeScale * earthRadius,
+			(target.latitude - origin.latitude) * latitudeScale * earthRadius
+		)
+	}
+
+	private static func distance(
+		from coordinate: CLLocationCoordinate2D,
+		toSegmentFrom start: CLLocationCoordinate2D,
+		to end: CLLocationCoordinate2D
+	) -> CLLocationDistance {
+		let startVector = localVector(from: coordinate, to: start)
+		let endVector = localVector(from: coordinate, to: end)
+		let segmentX = endVector.x - startVector.x
+		let segmentY = endVector.y - startVector.y
+		let segmentLengthSquared = segmentX * segmentX + segmentY * segmentY
+		guard segmentLengthSquared > 0 else {
+			return hypot(startVector.x, startVector.y)
+		}
+		let projection = -(startVector.x * segmentX + startVector.y * segmentY) / segmentLengthSquared
+		let clampedProjection = min(1, max(0, projection))
+		let closestX = startVector.x + clampedProjection * segmentX
+		let closestY = startVector.y + clampedProjection * segmentY
+		return hypot(closestX, closestY)
 	}
 }
 
@@ -161,7 +959,9 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 	private let manager = CLLocationManager()
 	private var continuation: CheckedContinuation<WatchDeviceContext, Error>?
 	private var authorizationContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
+	private var headingContinuation: CheckedContinuation<CLLocationDirection, Error>?
 	private var latestHeading: CLLocationDirection?
+	private var latestHeadingDate: Date?
 
 	override init() {
 		super.init()
@@ -196,6 +996,28 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 		}
 	}
 
+	func currentHeading(timeout: TimeInterval = 1.5) async throws -> CLLocationDirection {
+		guard CLLocationManager.headingAvailable() else {
+			throw WatchReportError.headingUnavailable
+		}
+		if let latestHeading,
+		   let latestHeadingDate,
+		   Date().timeIntervalSince(latestHeadingDate) < 2 {
+			return latestHeading
+		}
+		manager.startUpdatingHeading()
+		return try await withCheckedThrowingContinuation { continuation in
+			headingContinuation = continuation
+			Task { [weak self] in
+				let nanoseconds = UInt64(timeout * 1_000_000_000)
+				try? await Task.sleep(nanoseconds: nanoseconds)
+				await MainActor.run {
+					self?.finishHeading(with: .failure(WatchReportError.headingUnavailable))
+				}
+			}
+		}
+	}
+
 	private func requestWhenInUseAuthorization() async -> CLAuthorizationStatus {
 		switch manager.authorizationStatus {
 		case .notDetermined:
@@ -227,7 +1049,11 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 			.success(
 				WatchDeviceContext(
 					coordinate: location.coordinate,
-					headingDegrees: latestHeading
+					headingDegrees: latestHeading,
+					courseDegrees: location.course >= 0 ? location.course : nil,
+					courseAccuracy: location.courseAccuracy >= 0 ? location.courseAccuracy : nil,
+					speedMetersPerSecond: location.speed >= 0 ? location.speed : nil,
+					horizontalAccuracy: location.horizontalAccuracy >= 0 ? location.horizontalAccuracy : nil
 				)
 			)
 		)
@@ -245,7 +1071,12 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 		didUpdateHeading newHeading: CLHeading
 	) {
 		let heading = newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading
-		latestHeading = heading >= 0 ? heading : nil
+		guard heading >= 0 else {
+			return
+		}
+		latestHeading = heading
+		latestHeadingDate = Date()
+		finishHeading(with: .success(heading))
 	}
 
 	private func finish(_ result: Result<WatchDeviceContext, Error>) {
@@ -261,24 +1092,57 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 			continuation.resume(throwing: error)
 		}
 	}
+
+	private func finishHeading(with result: Result<CLLocationDirection, Error>) {
+		guard let headingContinuation else {
+			return
+		}
+		self.headingContinuation = nil
+		switch result {
+		case .success(let heading):
+			headingContinuation.resume(returning: heading)
+		case .failure(let error):
+			headingContinuation.resume(throwing: error)
+		}
+	}
 }
 
 struct WatchMapDataClient {
 	private let endpoint = URL(string: "https://overpass-api.de/api/interpreter")!
+	private let fallbackEndpoints = [
+		URL(string: "https://overpass.kumi.systems/api/interpreter")!
+	]
 	private let session: URLSession = .shared
 
-	func intersections(
+	func mapData(
 		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance
-	) async throws -> [WatchIntersectionCandidate] {
+		radiusMeters: CLLocationDistance,
+		options: WatchMapDetailOptions
+	) async throws -> WatchMapDataSet {
+		let endpoints = ([endpoint] + fallbackEndpoints).removingDuplicates()
+		for endpoint in endpoints {
+			do {
+				return try await mapData(from: endpoint, near: coordinate, radiusMeters: radiusMeters, options: options)
+			} catch {
+				guard isTemporary(error), endpoint != endpoints.last else {
+					throw error
+				}
+			}
+		}
+		throw WatchReportError.invalidResponse
+	}
+
+	private func mapData(
+		from endpoint: URL,
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: WatchMapDetailOptions
+	) async throws -> WatchMapDataSet {
 		var request = URLRequest(url: endpoint)
 		request.httpMethod = "POST"
 		request.timeoutInterval = 10
 		request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
-		request.httpBody = query(
-			near: coordinate,
-			radiusMeters: radiusMeters
-		).data(using: .utf8)
+		request.httpBody = query(near: coordinate, radiusMeters: radiusMeters, options: options).data(using: .utf8)
 
 		let (data, urlResponse) = try await session.data(for: request)
 		guard let httpResponse = urlResponse as? HTTPURLResponse else {
@@ -287,23 +1151,58 @@ struct WatchMapDataClient {
 		guard (200..<300).contains(httpResponse.statusCode) else {
 			throw WatchReportError.serverError(httpResponse.statusCode)
 		}
-		let response: WatchOverpassResponse
 		do {
-			response = try JSONDecoder().decode(WatchOverpassResponse.self, from: data)
+			let response = try JSONDecoder().decode(WatchOverpassResponse.self, from: data)
+			return WatchIntersectionBuilder().mapData(from: response, options: options)
 		} catch {
 			throw WatchReportError.invalidMapData
 		}
-		return WatchIntersectionBuilder().candidates(from: response)
+	}
+
+	private func isTemporary(_ error: Error) -> Bool {
+		if let mapError = error as? WatchReportError {
+			switch mapError {
+			case .serverError(let statusCode):
+				return [429, 500, 502, 503, 504].contains(statusCode)
+			default:
+				return false
+			}
+		}
+		if let urlError = error as? URLError {
+			switch urlError.code {
+			case .timedOut, .cannotFindHost, .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .dnsLookupFailed:
+				return true
+			default:
+				return false
+			}
+		}
+		return false
 	}
 
 	private func query(
 		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance
+		radiusMeters: CLLocationDistance,
+		options: WatchMapDetailOptions
 	) -> String {
 		let radius = Int(radiusMeters.rounded())
+		var highwayTypes = [
+			"primary", "primary_link", "secondary", "secondary_link", "tertiary", "tertiary_link",
+			"unclassified", "residential", "living_street", "pedestrian", "road"
+		]
+		if options.includeWalkingPaths {
+			highwayTypes += ["footway", "path", "steps", "bridleway"]
+		}
+		let highwayPattern = highwayTypes.joined(separator: "|")
+		let crossingQueries = options.includeCrossings ? """
+		  node(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"="crossing"];
+		  node(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["crossing"];
+		""" : ""
 		let body = """
 		[out:json][timeout:8];
-		way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"~"^(primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|unclassified|residential|living_street|pedestrian|road)$"]["name"];
+		(
+		  way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"~"^(\(highwayPattern))$"]["name"];
+		\(crossingQueries)
+		);
 		(._;>;);
 		out body;
 		"""
@@ -324,10 +1223,52 @@ struct WatchOverpassElement: Decodable {
 	var lon: Double?
 	var nodes: [Int64]?
 	var tags: [String: String]?
+
+	enum CodingKeys: String, CodingKey {
+		case type
+		case id
+		case lat
+		case lon
+		case nodes
+		case tags
+	}
+
+	init(from decoder: Decoder) throws {
+		let container = try decoder.container(keyedBy: CodingKeys.self)
+		type = try container.decode(String.self, forKey: .type)
+		id = try container.decode(Int64.self, forKey: .id)
+		lat = try container.decodeIfPresent(Double.self, forKey: .lat)
+		lon = try container.decodeIfPresent(Double.self, forKey: .lon)
+		nodes = try container.decodeIfPresent([Int64].self, forKey: .nodes)
+		tags = try container.decodeIfPresent([String: WatchFlexibleString].self, forKey: .tags)?
+			.mapValues(\.value)
+	}
+}
+
+private struct WatchFlexibleString: Decodable {
+	var value: String
+
+	init(from decoder: Decoder) throws {
+		let container = try decoder.singleValueContainer()
+		if let string = try? container.decode(String.self) {
+			value = string
+		} else if let int = try? container.decode(Int.self) {
+			value = String(int)
+		} else if let double = try? container.decode(Double.self) {
+			value = String(double)
+		} else if let bool = try? container.decode(Bool.self) {
+			value = String(bool)
+		} else {
+			value = ""
+		}
+	}
 }
 
 struct WatchIntersectionBuilder {
-	func candidates(from response: WatchOverpassResponse) -> [WatchIntersectionCandidate] {
+	func mapData(
+		from response: WatchOverpassResponse,
+		options: WatchMapDetailOptions
+	) -> WatchMapDataSet {
 		let nodes = Dictionary(
 			uniqueKeysWithValues: response.elements.compactMap { element -> (Int64, CLLocationCoordinate2D)? in
 				guard element.type == "node", let lat = element.lat, let lon = element.lon else {
@@ -337,19 +1278,28 @@ struct WatchIntersectionBuilder {
 			}
 		)
 		var namesByNode: [Int64: Set<String>] = [:]
+		var roads = [WatchMapRoad]()
 		for way in response.elements where way.type == "way" {
 			guard
 				let name = way.tags?["name"],
 				let wayNodes = way.nodes,
-				isStreet(way.tags)
+				isAllowedWay(way.tags, options: options)
 			else {
 				continue
 			}
 			for nodeID in wayNodes {
 				namesByNode[nodeID, default: []].insert(name)
 			}
+			roads.append(
+				WatchMapRoad(
+					id: String(way.id),
+					name: name,
+					nodeIDs: wayNodes,
+					coordinates: wayNodes.compactMap { nodes[$0] }
+				)
+			)
 		}
-		return namesByNode.compactMap { entry -> WatchIntersectionCandidate? in
+		var intersections = namesByNode.compactMap { entry -> WatchIntersectionCandidate? in
 			let (nodeID, names) = entry
 			guard names.count >= 2, let coordinate = nodes[nodeID] else {
 				return nil
@@ -360,29 +1310,60 @@ struct WatchIntersectionBuilder {
 				coordinate: coordinate
 			)
 		}
+		if options.includeCrossings {
+			let streetIntersections = intersections
+			let crossingCandidates = response.elements.compactMap { element -> WatchIntersectionCandidate? in
+				guard
+					element.type == "node",
+					isCrossing(element.tags),
+					let coordinate = nodes[element.id],
+					let roadNames = namesByNode[element.id]?.sorted(),
+					roadNames.count == 1,
+					let roadName = roadNames.first
+				else {
+					return nil
+				}
+				let candidate = WatchIntersectionCandidate(
+					id: "crossing-\(element.id)",
+					names: ["Crossing on \(roadName)"],
+					coordinate: coordinate,
+					associatedRoadNames: [roadName]
+				)
+				let duplicatesStreetIntersection = streetIntersections.contains {
+					WatchGeo.distanceMeters(from: $0.coordinate, to: coordinate) < 30
+				}
+				return duplicatesStreetIntersection ? nil : candidate
+			}
+			intersections.append(contentsOf: crossingCandidates)
+		}
+		return WatchMapDataSet(intersections: intersections, roads: roads)
 	}
 
-	private func isStreet(_ tags: [String: String]?) -> Bool {
+	private func isAllowedWay(_ tags: [String: String]?, options: WatchMapDetailOptions) -> Bool {
 		guard let highway = tags?["highway"] else {
 			return false
 		}
-		return [
-			"primary",
-			"primary_link",
-			"secondary",
-			"secondary_link",
-			"tertiary",
-			"tertiary_link",
-			"unclassified",
-			"residential",
-			"living_street",
-			"pedestrian",
-			"road"
-		].contains(highway)
+		let streetHighways = [
+			"primary", "primary_link", "secondary", "secondary_link", "tertiary", "tertiary_link",
+			"unclassified", "residential", "living_street", "pedestrian", "road"
+		]
+		if streetHighways.contains(highway) {
+			return true
+		}
+		guard options.includeWalkingPaths else {
+			return false
+		}
+		return ["footway", "path", "steps", "bridleway"].contains(highway)
+	}
+
+	private func isCrossing(_ tags: [String: String]?) -> Bool {
+		tags?["highway"] == "crossing" || tags?["crossing"] != nil || tags?["crossing_ref"] != nil
 	}
 }
 
 struct WatchIntersectionFinder {
+	static let upcomingConeDegrees: CLLocationDirection = 45
+
 	func bestMatch(
 		for kind: WatchReportKind,
 		from context: WatchDeviceContext,
@@ -390,35 +1371,356 @@ struct WatchIntersectionFinder {
 	) -> WatchIntersectionCandidate? {
 		switch kind {
 		case .nearest:
-			return candidates.min {
-				WatchGeo.distanceMeters(from: context.coordinate, to: $0.coordinate)
-					< WatchGeo.distanceMeters(from: context.coordinate, to: $1.coordinate)
-			}
+			return rankedNearest(from: context.coordinate, in: candidates).first
 		case .upcoming:
-			guard let heading = context.headingDegrees else {
-				return candidates.min {
-					WatchGeo.distanceMeters(from: context.coordinate, to: $0.coordinate)
-						< WatchGeo.distanceMeters(from: context.coordinate, to: $1.coordinate)
-				}
+			guard context.headingDegrees != nil else {
+				return nearestCandidate(from: context.coordinate, in: candidates)
 			}
-			let ahead = candidates.filter { candidate in
-				let bearing = WatchGeo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
-				return angleDelta(from: heading, to: bearing) <= 60
+			return rankedUpcoming(from: context, in: candidates).first
+				?? nearestCandidate(from: context.coordinate, in: candidates)
+		}
+	}
+
+	func nearest(
+		rank: Int,
+		from coordinate: CLLocationCoordinate2D,
+		in candidates: [WatchIntersectionCandidate]
+	) -> WatchIntersectionCandidate? {
+		let ranked = rankedNearest(from: coordinate, in: candidates)
+		guard rank > 0, ranked.indices.contains(rank - 1) else {
+			return nil
+		}
+		return ranked[rank - 1]
+	}
+
+	func rankedNearest(
+		from coordinate: CLLocationCoordinate2D,
+		in candidates: [WatchIntersectionCandidate]
+	) -> [WatchIntersectionCandidate] {
+		let sorted = candidates.sorted {
+			WatchGeo.distanceMeters(from: coordinate, to: $0.coordinate)
+				< WatchGeo.distanceMeters(from: coordinate, to: $1.coordinate)
+		}
+		return sorted.reduce(into: []) { unique, candidate in
+			let isDuplicate = unique.contains { existing in
+				normalizedNames(existing.names) == normalizedNames(candidate.names) &&
+					WatchGeo.distanceMeters(from: existing.coordinate, to: candidate.coordinate) < 30
 			}
-			return (ahead.isEmpty ? candidates : ahead).min {
-				WatchGeo.distanceMeters(from: context.coordinate, to: $0.coordinate)
-					< WatchGeo.distanceMeters(from: context.coordinate, to: $1.coordinate)
+			if !isDuplicate {
+				unique.append(candidate)
 			}
 		}
 	}
 
-	private func angleDelta(
+	func rankedUpcoming(
+		from context: WatchDeviceContext,
+		in candidates: [WatchIntersectionCandidate]
+	) -> [WatchIntersectionCandidate] {
+		guard let heading = context.headingDegrees else {
+			return []
+		}
+		let forwardCandidates = candidates.filter { candidate in
+			let bearing = WatchGeo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
+			return angleDelta(from: heading, to: bearing) <= Self.upcomingConeDegrees
+		}
+		return rankedNearest(from: context.coordinate, in: forwardCandidates)
+	}
+
+	func upcoming(
+		rank: Int,
+		from context: WatchDeviceContext,
+		in candidates: [WatchIntersectionCandidate]
+	) -> WatchIntersectionCandidate? {
+		let ranked = rankedUpcoming(from: context, in: candidates)
+		guard rank > 0, ranked.indices.contains(rank - 1) else {
+			return nil
+		}
+		return ranked[rank - 1]
+	}
+
+	func angleDelta(
 		from heading: CLLocationDirection,
 		to bearing: CLLocationDirection
 	) -> CLLocationDirection {
 		let delta = abs(WatchGeo.normalizedDegrees(bearing - heading))
 		return min(delta, 360 - delta)
 	}
+
+	private func nearestCandidate(
+		from coordinate: CLLocationCoordinate2D,
+		in candidates: [WatchIntersectionCandidate]
+	) -> WatchIntersectionCandidate? {
+		candidates.min {
+			WatchGeo.distanceMeters(from: coordinate, to: $0.coordinate)
+				< WatchGeo.distanceMeters(from: coordinate, to: $1.coordinate)
+		}
+	}
+
+	private func normalizedNames(_ names: [String]) -> Set<String> {
+		Set(names.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
+	}
+}
+
+struct WatchNeighborhoodProvider {
+	private let endpoint = URL(string: "https://overpass-api.de/api/interpreter")!
+	private let fallbackEndpoints = [
+		URL(string: "https://overpass.kumi.systems/api/interpreter")!
+	]
+	private let session: URLSession = .shared
+
+	func neighborhoods(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance
+	) async throws -> [WatchNeighborhoodCandidate] {
+		let endpoints = ([endpoint] + fallbackEndpoints).removingDuplicates()
+		for endpoint in endpoints {
+			do {
+				return try await neighborhoods(from: endpoint, near: coordinate, radiusMeters: radiusMeters)
+			} catch {
+				guard endpoint != endpoints.last else {
+					throw error
+				}
+			}
+		}
+		return []
+	}
+
+	private func neighborhoods(
+		from endpoint: URL,
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance
+	) async throws -> [WatchNeighborhoodCandidate] {
+		var request = URLRequest(url: endpoint)
+		request.httpMethod = "POST"
+		request.timeoutInterval = 6
+		request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
+		request.httpBody = query(near: coordinate, radiusMeters: radiusMeters).data(using: .utf8)
+
+		let (data, urlResponse) = try await session.data(for: request)
+		guard let httpResponse = urlResponse as? HTTPURLResponse else {
+			throw WatchReportError.invalidResponse
+		}
+		guard (200..<300).contains(httpResponse.statusCode) else {
+			throw WatchReportError.serverError(httpResponse.statusCode)
+		}
+		let response = try JSONDecoder().decode(WatchOverpassPlaceResponse.self, from: data)
+		return WatchNeighborhoodBuilder().candidates(from: response)
+	}
+
+	private func query(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance
+	) -> String {
+		let radius = Int(radiusMeters.rounded())
+		let body = """
+		[out:json][timeout:5];
+		(
+		  node(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["place"~"^(neighbourhood|quarter|suburb|locality)$"]["name"];
+		  way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["place"~"^(neighbourhood|quarter|suburb|locality)$"]["name"];
+		  relation(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["place"~"^(neighbourhood|quarter|suburb|locality)$"]["name"];
+		  relation(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["boundary"~"^(place|administrative)$"]["name"]["admin_level"~"^(8|9|10|11)$"];
+		);
+		out center tags;
+		"""
+		let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&+"))
+		let encoded = body.addingPercentEncoding(withAllowedCharacters: allowed) ?? body
+		return "data=\(encoded)"
+	}
+}
+
+struct WatchNeighborhoodCandidate: Equatable, Identifiable {
+	var id: String
+	var name: String
+	var coordinate: CLLocationCoordinate2D
+	var kind: WatchNeighborhoodKind
+
+	var priority: Int {
+		kind.priority
+	}
+}
+
+enum WatchNeighborhoodKind: String, Equatable {
+	case neighbourhood
+	case quarter
+	case suburb
+	case locality
+	case administrative
+	case placeBoundary
+
+	var priority: Int {
+		switch self {
+		case .neighbourhood:
+			0
+		case .quarter:
+			1
+		case .placeBoundary:
+			2
+		case .suburb:
+			3
+		case .locality:
+			4
+		case .administrative:
+			5
+		}
+	}
+}
+
+struct WatchNeighborhoodBuilder {
+	func candidates(from response: WatchOverpassPlaceResponse) -> [WatchNeighborhoodCandidate] {
+		var seen = Set<String>()
+		return response.elements.compactMap { element -> WatchNeighborhoodCandidate? in
+			guard
+				let name = element.tags?["name"],
+				let coordinate = element.coordinate,
+				let kind = kind(for: element.tags)
+			else {
+				return nil
+			}
+			let dedupeKey = "\(name.lowercased())-\(kind.rawValue)"
+			guard seen.insert(dedupeKey).inserted else {
+				return nil
+			}
+			return WatchNeighborhoodCandidate(
+				id: "\(element.type)-\(element.id)",
+				name: name,
+				coordinate: coordinate,
+				kind: kind
+			)
+		}
+	}
+
+	private func kind(for tags: [String: String]?) -> WatchNeighborhoodKind? {
+		if let place = tags?["place"], let kind = WatchNeighborhoodKind(rawValue: place) {
+			return kind
+		}
+		switch tags?["boundary"] {
+		case "place":
+			return .placeBoundary
+		case "administrative":
+			return .administrative
+		default:
+			return nil
+		}
+	}
+}
+
+struct WatchNeighborhoodResolver {
+	func context(
+		from candidates: [WatchNeighborhoodCandidate],
+		origin: CLLocationCoordinate2D,
+		heading: CLLocationDirection?,
+		mode: WatchAreaMode
+	) -> WatchNeighborhoodContext {
+		guard mode != .off else {
+			return WatchNeighborhoodContext(area: nil, toward: nil)
+		}
+		let area = bestNearbyCandidate(from: candidates, origin: origin)?.name
+		let toward: String?
+		if mode == .toward, let heading {
+			toward = bestTowardCandidate(from: candidates, origin: origin, heading: heading)?.name
+		} else {
+			toward = nil
+		}
+		return WatchNeighborhoodContext(area: area, toward: toward)
+	}
+
+	private func bestNearbyCandidate(
+		from candidates: [WatchNeighborhoodCandidate],
+		origin: CLLocationCoordinate2D
+	) -> WatchNeighborhoodCandidate? {
+		candidates.min {
+			nearbyScore($0, origin: origin) < nearbyScore($1, origin: origin)
+		}
+	}
+
+	private func bestTowardCandidate(
+		from candidates: [WatchNeighborhoodCandidate],
+		origin: CLLocationCoordinate2D,
+		heading: CLLocationDirection
+	) -> WatchNeighborhoodCandidate? {
+		let matches = candidates.map { candidate in
+			let bearing = WatchGeo.bearingDegrees(from: origin, to: candidate.coordinate)
+			let delta = WatchIntersectionFinder().angleDelta(from: heading, to: bearing)
+			return (candidate: candidate, delta: delta)
+		}
+		return matches
+			.filter { $0.delta <= 70 }
+			.min {
+				towardScore($0.candidate, origin: origin, delta: $0.delta)
+					< towardScore($1.candidate, origin: origin, delta: $1.delta)
+			}?
+			.candidate
+	}
+
+	private func nearbyScore(
+		_ candidate: WatchNeighborhoodCandidate,
+		origin: CLLocationCoordinate2D
+	) -> CLLocationDistance {
+		let distance = WatchGeo.distanceMeters(from: origin, to: candidate.coordinate)
+		return distance + CLLocationDistance(candidate.priority * 350)
+	}
+
+	private func towardScore(
+		_ candidate: WatchNeighborhoodCandidate,
+		origin: CLLocationCoordinate2D,
+		delta: CLLocationDirection
+	) -> CLLocationDistance {
+		let distance = WatchGeo.distanceMeters(from: origin, to: candidate.coordinate)
+		return distance + CLLocationDistance(candidate.priority * 300) + (delta * 20)
+	}
+}
+
+struct WatchNeighborhoodContext: Equatable {
+	var area: String?
+	var toward: String?
+}
+
+struct WatchOverpassPlaceResponse: Decodable {
+	var elements: [WatchOverpassPlaceElement]
+}
+
+struct WatchOverpassPlaceElement: Decodable {
+	var type: String
+	var id: Int64
+	var lat: Double?
+	var lon: Double?
+	var center: WatchOverpassCenter?
+	var tags: [String: String]?
+
+	var coordinate: CLLocationCoordinate2D? {
+		if let lat, let lon {
+			return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+		}
+		if let center {
+			return CLLocationCoordinate2D(latitude: center.lat, longitude: center.lon)
+		}
+		return nil
+	}
+
+	enum CodingKeys: String, CodingKey {
+		case type
+		case id
+		case lat
+		case lon
+		case center
+		case tags
+	}
+
+	init(from decoder: Decoder) throws {
+		let container = try decoder.container(keyedBy: CodingKeys.self)
+		type = try container.decode(String.self, forKey: .type)
+		id = try container.decode(Int64.self, forKey: .id)
+		lat = try container.decodeIfPresent(Double.self, forKey: .lat)
+		lon = try container.decodeIfPresent(Double.self, forKey: .lon)
+		center = try container.decodeIfPresent(WatchOverpassCenter.self, forKey: .center)
+		tags = try container.decodeIfPresent([String: WatchFlexibleString].self, forKey: .tags)?
+			.mapValues(\.value)
+	}
+}
+
+struct WatchOverpassCenter: Decodable, Equatable {
+	var lat: Double
+	var lon: Double
 }
 
 enum WatchGeo {
@@ -456,7 +1758,47 @@ enum WatchGeo {
 		return names[index]
 	}
 
-	static func spokenDistance(_ meters: CLLocationDistance) -> String {
+	static func localizedDirection(_ degrees: CLLocationDirection, prefs: WatchAppPrefs) -> String {
+		let direction = compassDirection(degrees)
+		guard prefs.manhattanSnobMode else {
+			return direction
+		}
+		return manhattanDirection(for: direction)
+	}
+
+	static func manhattanDirection(for direction: String) -> String {
+		switch direction {
+		case "north":
+			"uptown"
+		case "south":
+			"downtown"
+		case "east":
+			"East Side"
+		case "west":
+			"West Side"
+		case "northeast":
+			"uptown toward the East Side"
+		case "northwest":
+			"uptown toward the West Side"
+		case "southeast":
+			"downtown toward the East Side"
+		case "southwest":
+			"downtown toward the West Side"
+		default:
+			direction
+		}
+	}
+
+	static func spokenDistance(_ meters: CLLocationDistance, unit: WatchMeasurementUnit = .feet) -> String {
+		switch unit {
+		case .feet:
+			spokenFeetDistance(meters)
+		case .meters:
+			spokenMeterDistance(meters)
+		}
+	}
+
+	private static func spokenFeetDistance(_ meters: CLLocationDistance) -> String {
 		let feet = meters * 3.28084
 		if feet < 500 {
 			let rounded = (feet / 10).rounded() * 10
@@ -464,5 +1806,27 @@ enum WatchGeo {
 		}
 		let miles = feet / 5280
 		return String(format: "%.1f miles", miles)
+	}
+
+	private static func spokenMeterDistance(_ meters: CLLocationDistance) -> String {
+		if meters < 500 {
+			let rounded = (meters / 10).rounded() * 10
+			return "\(Int(rounded)) meters"
+		}
+		let kilometers = meters / 1_000
+		return String(format: "%.1f kilometers", kilometers)
+	}
+}
+
+private extension Array where Element: Hashable {
+	func removingDuplicates() -> [Element] {
+		var seen = Set<Element>()
+		return filter { seen.insert($0).inserted }
+	}
+}
+
+extension CLLocationCoordinate2D: @retroactive Equatable {
+	public static func == (lhs: CLLocationCoordinate2D, rhs: CLLocationCoordinate2D) -> Bool {
+		lhs.latitude == rhs.latitude && lhs.longitude == rhs.longitude
 	}
 }
