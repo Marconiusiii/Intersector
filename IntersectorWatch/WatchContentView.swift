@@ -7,6 +7,8 @@
 
 import SwiftUI
 
+private let watchLookupLoadingText = "Intersecting..."
+
 struct WatchContentView: View {
 	@AppStorage("areaMode") private var areaModeRaw = WatchAreaMode.near.rawValue
 	@AppStorage("measurementUnit") private var measurementUnitRaw = WatchMeasurementUnit.feet.rawValue
@@ -179,30 +181,38 @@ struct WatchContentView: View {
 							}
 						}
 					}
+					Toggle("Street Context", isOn: streetContextBinding)
+					Text("Spoken Intersections")
+						.foregroundStyle(Color.watchCrossText)
+					Slider(
+						value: spokenIntersectionSliderBinding,
+						in: 1...3,
+						step: 1
+					) {
+						Text("Spoken Intersections")
+					} minimumValueLabel: {
+						Text("1")
+					} maximumValueLabel: {
+						Text("3")
+					}
+					.accessibilityLabel("Spoken Intersections")
+					.accessibilityValue(spokenIntersectionAccessibilityLabel(prefs.spokenIntersectionCount))
+					Text(spokenIntersectionDescription)
+						.font(.footnote)
+						.foregroundStyle(Color.watchCrossText)
+						.lineLimit(nil)
+						.fixedSize(horizontal: false, vertical: true)
+					Text("Sample Announcement")
+						.font(.headline)
+						.foregroundStyle(Color.watchCrossText)
+						.accessibilityAddTraits(.isHeader)
 					Text(announcementSampleText)
 						.font(.footnote)
-						.foregroundStyle(.secondary)
+						.foregroundStyle(Color.watchCrossText)
 						.lineLimit(nil)
 						.fixedSize(horizontal: false, vertical: true)
 				} header: {
 					Text("Announcements")
-				}
-
-				Section {
-					Picker("Intersection Wording", selection: $intersectionWordingRaw) {
-						ForEach(WatchIntersectionWording.allCases) { wording in
-							Text(wording.label).tag(wording.rawValue)
-						}
-					}
-					Picker("Spoken Intersections", selection: $spokenIntersectionCountRaw) {
-						ForEach(WatchSpokenIntersectionCount.allCases) { count in
-							Text(count.label)
-								.accessibilityLabel(spokenIntersectionAccessibilityLabel(count))
-								.tag(count.rawValue)
-						}
-					}
-				} header: {
-					Text("Intersections")
 				}
 
 				Section {
@@ -222,6 +232,33 @@ struct WatchContentView: View {
 					}
 				}
 			}
+		}
+	}
+
+	private var streetContextBinding: Binding<Bool> {
+		Binding {
+			prefs.intersectionWording == .streetContext
+		} set: { isEnabled in
+			intersectionWordingRaw = (isEnabled ? WatchIntersectionWording.streetContext : .direct).rawValue
+		}
+	}
+
+	private var spokenIntersectionSliderBinding: Binding<Double> {
+		Binding {
+			Double(prefs.spokenIntersectionCount.rawValue)
+		} set: { value in
+			spokenIntersectionCountRaw = min(3, max(1, Int(value.rounded())))
+		}
+	}
+
+	private var spokenIntersectionDescription: String {
+		switch prefs.spokenIntersectionCount {
+		case .one:
+			"Speaks one intersection."
+		case .two:
+			"Nearest speaks the two closest intersections. Upcoming speaks the first two intersections ahead."
+		case .three:
+			"Nearest speaks the three closest intersections. Upcoming speaks the first three intersections ahead."
 		}
 	}
 
@@ -291,7 +328,7 @@ struct WatchContentView: View {
 			return
 		}
 		isLoading = true
-		statusText = "Updating \(reportLabel(kind, rank: rank))."
+		statusText = watchLookupLoadingText
 		do {
 			let text = if rank == 1 {
 				try await WatchOrientationService().spokenText(kind, prefs: prefs)
@@ -310,7 +347,7 @@ struct WatchContentView: View {
 			return
 		}
 		isDirectionLoading = true
-		statusText = "Updating direction."
+		statusText = "Checking direction."
 		statusText = await IntersectorWatchReporter.directionText(prefs: prefs)
 		isDirectionLoading = false
 	}

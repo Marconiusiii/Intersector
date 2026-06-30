@@ -24,6 +24,8 @@ private enum SettingsFocusTarget: Hashable {
 	case haptics
 }
 
+private let lookupLoadingText = "Intersecting..."
+
 struct ContentView: View {
 	@AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 	@AppStorage("areaMode") private var areaModeRaw = AreaMode.near.rawValue
@@ -443,11 +445,12 @@ struct ContentView: View {
 		return "Sample: \(report.text(with: prefs))"
 	}
 
-	private var spokenIntersectionCountBinding: Binding<SpokenIntersectionCount> {
+	private var spokenIntersectionSliderBinding: Binding<Double> {
 		Binding {
-			prefs.spokenIntersectionCount
-		} set: { count in
-			spokenIntersectionCountRaw = count.rawValue
+			Double(prefs.spokenIntersectionCount.rawValue)
+		} set: { value in
+			let rawValue = min(3, max(1, Int(value.rounded())))
+			spokenIntersectionCountRaw = rawValue
 			settingsFocusTarget = .spokenIntersections
 		}
 	}
@@ -563,35 +566,36 @@ struct ContentView: View {
 						.pickerStyle(.menu)
 						.accessibilityFocused($settingsFocusTarget, equals: .neighborhood)
 					}
-					settingsHelperText(announcementSampleText)
-				} header: {
-					settingsHeader("Announcements")
-				}
-
-				Section {
 					Toggle("Street Context", isOn: streetContextBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .intersectionWording)
 					settingsHelperText(intersectionWordingDescription)
-				} header: {
-					settingsHeader("Street Context")
-				}
-
-				Section {
-					Picker("Spoken Intersections", selection: spokenIntersectionCountBinding) {
-						ForEach(SpokenIntersectionCount.allCases) { count in
-							Text(count.label)
-								.accessibilityLabel(spokenIntersectionAccessibilityLabel(count))
-								.tag(count)
-						}
+					Text("Spoken Intersections")
+						.foregroundStyle(Color.crossText)
+					Slider(
+						value: spokenIntersectionSliderBinding,
+						in: 1...3,
+						step: 1
+					) {
+						Text("Spoken Intersections")
+					} minimumValueLabel: {
+						Text("1")
+					} maximumValueLabel: {
+						Text("3")
 					}
-					.pickerStyle(.menu)
 					.accessibilityFocused($settingsFocusTarget, equals: .spokenIntersections)
+					.accessibilityLabel("Spoken Intersections")
+					.accessibilityValue(spokenIntersectionAccessibilityLabel(prefs.spokenIntersectionCount))
 					settingsHelperText(spokenIntersectionCountDescription)
 					Toggle("Show 2nd and 3rd Controls", isOn: rankedControlsBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .rankedControls)
 						.accessibilityHint("Toggles the visibility of the menu chevrons")
+					Text("Sample Announcement")
+						.font(.headline)
+						.foregroundStyle(Color.crossText)
+						.accessibilityAddTraits(.isHeader)
+					settingsHelperText(announcementSampleText)
 				} header: {
-					settingsHeader("Spoken Intersections")
+					settingsHeader("Announcements")
 				}
 
 				Section {
@@ -748,7 +752,8 @@ struct ContentView: View {
 			return
 		}
 		isLoading = true
-		statusText = "Updating \(reportLabel(kind, rank: rank))."
+		statusText = lookupLoadingText
+		VoiceOverAnnouncer.reportUpdated(lookupLoadingText)
 
 		do {
 			let text = if rank == 1 {
@@ -790,7 +795,9 @@ struct ContentView: View {
 			return
 		}
 		isDirectionLoading = true
-		statusText = "Updating direction."
+		let loadingText = "Checking direction."
+		statusText = loadingText
+		VoiceOverAnnouncer.reportUpdated(loadingText)
 
 		do {
 			let heading = try await directionLocationProvider.currentHeading(allowCached: false)
