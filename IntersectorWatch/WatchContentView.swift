@@ -227,48 +227,11 @@ struct WatchContentView: View {
 		NavigationStack {
 			Form {
 				Section {
-					Toggle("Distance", isOn: $includeAnnouncementDistance)
-					if includeAnnouncementDistance {
-						Picker("Measurement Unit", selection: $measurementUnitRaw) {
-							ForEach(WatchMeasurementUnit.allCases) { unit in
-								Text(unit.label).tag(unit.rawValue)
-							}
-						}
-					}
-					Toggle("Direction", isOn: $includeAnnouncementDirection)
-					if includeAnnouncementDirection {
-						Picker("Direction Style", selection: $directionStyleRaw) {
-							ForEach(WatchDirectionStyle.allCases) { style in
-								Text(style.label).tag(style.rawValue)
-							}
-						}
-						if prefs.directionStyle == .words {
-							Toggle("Manhattan Snob Mode", isOn: $manhattanSnobMode)
-						}
-					}
-					Toggle("Neighborhood", isOn: $includeAnnouncementNeighborhood)
-					if includeAnnouncementNeighborhood {
-						Picker("Neighborhood Context", selection: $areaModeRaw) {
-							ForEach(WatchAreaMode.allCases) { mode in
-								Text(mode.label).tag(mode.rawValue)
-							}
-						}
-					}
-					Toggle("Street Context", isOn: streetContextBinding)
-					VStack(alignment: .leading, spacing: 8) {
-						Text("Spoken Intersections")
-							.foregroundStyle(Color.watchCrossText)
-						Slider(
-							value: spokenIntersectionSliderBinding,
-							in: 1...3,
-							step: 1
-						)
-					}
-					.accessibilityElement(children: .ignore)
-					.accessibilityLabel("Spoken Intersections")
-					.accessibilityValue(spokenIntersectionAccessibilityLabel(prefs.spokenIntersectionCount))
-					.accessibilityAdjustableAction(adjustSpokenIntersections)
-					Text(spokenIntersectionDescription)
+					Text("Settings sync from iPhone")
+						.font(.headline)
+						.foregroundStyle(Color.watchCrossText)
+						.accessibilityAddTraits(.isHeader)
+					Text("Open Intersector on iPhone to change announcement settings.")
 						.font(.footnote)
 						.foregroundStyle(Color.watchCrossText)
 						.lineLimit(nil)
@@ -285,13 +248,6 @@ struct WatchContentView: View {
 				} header: {
 					Text("Announcements")
 				}
-
-				Section {
-					Toggle("Include crossings", isOn: $includeCrossings)
-					Toggle("Include walking paths", isOn: $includeWalkingPaths)
-				} header: {
-					Text("Map Detail")
-				}
 			}
 			.scrollContentBackground(.hidden)
 			.background(Color.watchCrossBg)
@@ -303,33 +259,6 @@ struct WatchContentView: View {
 					}
 				}
 			}
-		}
-	}
-
-	private var streetContextBinding: Binding<Bool> {
-		Binding {
-			prefs.intersectionWording == .streetContext
-		} set: { isEnabled in
-			intersectionWordingRaw = (isEnabled ? WatchIntersectionWording.streetContext : .direct).rawValue
-		}
-	}
-
-	private var spokenIntersectionSliderBinding: Binding<Double> {
-		Binding {
-			Double(prefs.spokenIntersectionCount.rawValue)
-		} set: { value in
-			spokenIntersectionCountRaw = min(3, max(1, Int(value.rounded())))
-		}
-	}
-
-	private var spokenIntersectionDescription: String {
-		switch prefs.spokenIntersectionCount {
-		case .one:
-			"Speaks one intersection."
-		case .two:
-			"Nearest speaks the two closest intersections. Upcoming speaks the first two intersections ahead."
-		case .three:
-			"Nearest speaks the three closest intersections. Upcoming speaks the first three intersections ahead."
 		}
 	}
 
@@ -347,29 +276,6 @@ struct WatchContentView: View {
 			toward: "Manhattan Valley"
 		)
 		return "Sample: \(report.text(with: prefs))"
-	}
-
-	private func spokenIntersectionAccessibilityLabel(_ count: WatchSpokenIntersectionCount) -> String {
-		switch count {
-		case .one:
-			"One intersection"
-		case .two:
-			"Two intersections"
-		case .three:
-			"Three intersections"
-		}
-	}
-
-	private func adjustSpokenIntersections(_ direction: AccessibilityAdjustmentDirection) {
-		let rawValue = prefs.spokenIntersectionCount.rawValue
-		switch direction {
-		case .increment:
-			spokenIntersectionCountRaw = min(3, rawValue + 1)
-		case .decrement:
-			spokenIntersectionCountRaw = max(1, rawValue - 1)
-		@unknown default:
-			break
-		}
 	}
 
 	private func actionButton(

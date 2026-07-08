@@ -898,6 +898,101 @@ struct IntersectorTests {
 		#expect(thirdReport.cross == "Oak Street and Third Street")
 	}
 
+	@Test func currentRoadUpcomingRejectsRoadProgressBehindPhoneHeading() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapData = MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: "behind-progress",
+					names: ["Oak Street", "Behind Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 36.999, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "ahead",
+					names: ["Oak Street", "Ahead Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+				)
+			],
+			roads: [
+				MapRoad(
+					id: "oak",
+					name: "Oak Street",
+					nodeIDs: [1, 2],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 37.005, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 36.995, longitude: -122.0)
+					]
+				)
+			]
+		)
+
+		let ranked = IntersectionFinder().rankedUpcoming(
+			from: DeviceContext(coordinate: origin, headingDegrees: 0),
+			in: mapData
+		)
+
+		#expect(ranked.map(\.id) == ["ahead"])
+	}
+
+	@Test func cachedRankedUpcomingDoesNotSurviveHeadingChange() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapData = MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: "north-first",
+					names: ["Oak Street", "North First Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "north-second",
+					names: ["Oak Street", "North Second Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "south-first",
+					names: ["Oak Street", "South First Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 36.999, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "south-second",
+					names: ["Oak Street", "South Second Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 36.998, longitude: -122.0)
+				)
+			],
+			roads: [
+				MapRoad(
+					id: "oak",
+					name: "Oak Street",
+					nodeIDs: [1, 2],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 36.995, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 37.005, longitude: -122.0)
+					]
+				)
+			]
+		)
+		let service = OrientSvc(
+			locationProvider: SequentialLocationProvider(contexts: [
+				DeviceContext(coordinate: origin, headingDegrees: 0),
+				DeviceContext(coordinate: origin, headingDegrees: 180)
+			]),
+			mapDataClient: StaticMapDataClient(data: mapData),
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.announcementOptions = AnnouncementOptions(
+			includeDistance: false,
+			includeDirection: false,
+			includeNeighborhood: false
+		)
+
+		_ = try await service.report(.upcoming, prefs: prefs)
+		let secondReport = try await service.report(.upcoming, rank: 2, prefs: prefs)
+
+		#expect(secondReport.cross == "Oak Street and South Second Street")
+	}
+
 	@Test func splitCrossStreetsUseHeadingToSpeakLeftThenRight() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let mapData = MapDataSet(
@@ -1104,7 +1199,7 @@ struct IntersectorTests {
 		#expect(!text.contains("Third Street"))
 	}
 
-	@Test func rankedUpcomingReusesLastUpcomingSnapshotForFollowupRanks() async throws {
+	@Test func rankedUpcomingReusesLastUpcomingSnapshotWhenHeadingStillMatches() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let mapData = MapDataSet(
 			intersections: [
@@ -1128,7 +1223,7 @@ struct IntersectorTests {
 		)
 		let locationProvider = SequentialLocationProvider(contexts: [
 			DeviceContext(coordinate: origin, headingDegrees: 0),
-			DeviceContext(coordinate: origin, headingDegrees: 90)
+			DeviceContext(coordinate: origin, headingDegrees: 0)
 		])
 		let service = OrientSvc(
 			locationProvider: locationProvider,
@@ -1148,7 +1243,7 @@ struct IntersectorTests {
 
 		#expect(firstReport.cross == "Oak Street and First Street")
 		#expect(secondReport.cross == "Oak Street and Second Street")
-		#expect(await locationProvider.requestCount == 1)
+		#expect(await locationProvider.requestCount == 2)
 	}
 
 	@Test func upcomingRequestsFreshHeadingButNearestDoesNot() async throws {

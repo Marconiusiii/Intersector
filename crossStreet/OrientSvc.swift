@@ -86,14 +86,14 @@ struct OrientSvc {
 		rank: Int = 1,
 		prefs: AppPrefs = AppPrefs()
 	) async throws -> OrientReport {
+		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming || kind == .scan)
 		if
 			kind == .upcoming,
 			rank > 1,
-			let cachedReport = await upcomingCache.report(rank: rank, prefs: prefs)
+			let cachedReport = await upcomingCache.report(rank: rank, prefs: prefs, context: context)
 		{
 			return cachedReport
 		}
-		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming || kind == .scan)
 		let mapData = try await mapData(
 			for: kind,
 			from: context,
@@ -107,7 +107,7 @@ struct OrientSvc {
 				prefs: prefs,
 				maxCount: 3
 			)
-			await upcomingCache.store(reports: reports, prefs: prefs)
+			await upcomingCache.store(reports: reports, prefs: prefs, context: context)
 			guard reports.indices.contains(rank - 1) else {
 				throw OrientError.noIntersections
 			}
@@ -177,7 +177,7 @@ struct OrientSvc {
 			throw OrientError.noIntersections
 		}
 		if kind == .upcoming {
-			await upcomingCache.store(reports: reports, prefs: prefs)
+			await upcomingCache.store(reports: reports, prefs: prefs, context: context)
 		}
 		return IntersectionReportList(reports: reports).text(with: prefs)
 	}
@@ -449,33 +449,49 @@ actor UpcomingReportCache {
 	private var entry: Entry?
 	private let timeToLive: TimeInterval = 60
 
-	func store(reports: [OrientReport], prefs: AppPrefs, now: Date = .now) {
+	func store(reports: [OrientReport], prefs: AppPrefs, context: DeviceContext, now: Date = .now) {
 		guard !reports.isEmpty else {
 			return
 		}
 		entry = Entry(
 			reports: reports,
 			prefsKey: UpcomingPrefsKey(prefs),
+			coordinate: context.coordinate,
+			headingDegrees: context.headingDegrees,
 			storedAt: now
 		)
 	}
 
-	func report(rank: Int, prefs: AppPrefs, now: Date = .now) -> OrientReport? {
+	func report(rank: Int, prefs: AppPrefs, context: DeviceContext, now: Date = .now) -> OrientReport? {
 		guard
 			rank > 1,
 			let entry,
 			now.timeIntervalSince(entry.storedAt) <= timeToLive,
 			entry.prefsKey == UpcomingPrefsKey(prefs),
-			entry.reports.indices.contains(rank - 1)
+			entry.reports.indices.contains(rank - 1),
+			matches(entry, context: context)
 		else {
 			return nil
 		}
 		return entry.reports[rank - 1]
 	}
 
+	private func matches(_ entry: Entry, context: DeviceContext) -> Bool {
+		guard
+			Geo.distanceMeters(from: entry.coordinate, to: context.coordinate) <= 25,
+			let cachedHeading = entry.headingDegrees,
+			let currentHeading = context.headingDegrees
+		else {
+			return false
+		}
+		return IntersectionFinder().angleDelta(from: cachedHeading, to: currentHeading) <= 20
+	}
+
 	private struct Entry {
 		var reports: [OrientReport]
 		var prefsKey: UpcomingPrefsKey
+		var coordinate: CLLocationCoordinate2D
+		var headingDegrees: CLLocationDirection?
 		var storedAt: Date
 	}
 }

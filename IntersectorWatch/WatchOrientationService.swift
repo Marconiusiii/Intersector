@@ -753,6 +753,12 @@ struct WatchMapDataSet: Equatable {
 		let positioned = intersections
 			.filter { $0.roadNames.contains(road.name) }
 			.compactMap { candidate -> (candidate: WatchIntersectionCandidate, progress: CLLocationDistance)? in
+				if let heading = context.headingDegrees {
+					let bearing = WatchGeo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
+					guard WatchIntersectionFinder().angleDelta(from: heading, to: bearing) <= WatchIntersectionFinder.upcomingConeDegrees else {
+						return nil
+					}
+				}
 				guard let distance = road.signedDistanceAlongRoad(
 					from: context.coordinate,
 					to: candidate.coordinate

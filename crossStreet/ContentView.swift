@@ -8,6 +8,7 @@
 import MessageUI
 import SwiftUI
 import WatchConnectivity
+import AudioToolbox
 
 private enum SettingsFocusTarget: Hashable {
 	case neighborhood
@@ -26,6 +27,12 @@ private enum SettingsFocusTarget: Hashable {
 }
 
 private let lookupLoadingText = "Intersecting..."
+
+private enum LoadingTone {
+	static func play() {
+		AudioServicesPlaySystemSound(1104)
+	}
+}
 
 private struct WatchSettingsPayload {
 	let areaMode: String
@@ -675,12 +682,10 @@ struct ContentView: View {
 						}
 						.pickerStyle(.segmented)
 						.accessibilityFocused($settingsFocusTarget, equals: .direction)
-						if prefs.directionStyle == .words {
-							Toggle("Manhattan Snob Mode", isOn: manhattanSnobModeBinding)
-								.accessibilityFocused($settingsFocusTarget, equals: .manhattanSnobMode)
-							settingsHelperText("Uses Uptown, Downtown, East Side, and West Side for cardinal direction wording.")
-						}
 					}
+					Toggle("Manhattan Snob Mode", isOn: manhattanSnobModeBinding)
+						.accessibilityFocused($settingsFocusTarget, equals: .manhattanSnobMode)
+					settingsHelperText("Uses Uptown, Downtown, East Side, and West Side when direction wording supports it.")
 					Toggle("Neighborhood", isOn: announcementNeighborhoodBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .announcementNeighborhood)
 					if includeAnnouncementNeighborhood {
@@ -880,7 +885,7 @@ struct ContentView: View {
 			do {
 				try await Task.sleep(for: .milliseconds(800))
 				statusText = lookupLoadingText
-				VoiceOverAnnouncer.reportUpdated(lookupLoadingText)
+				LoadingTone.play()
 			} catch {}
 		}
 
