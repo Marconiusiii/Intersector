@@ -173,7 +173,17 @@ struct WatchContentView: View {
 				.padding(.bottom, 8)
 			}
 			.background(Color.watchCrossBg)
-			.toolbar(.hidden, for: .navigationBar)
+			.toolbar {
+				ToolbarItem(placement: .automatic) {
+					Button {
+						isShowingSettings = true
+					} label: {
+						Image(systemName: "gearshape")
+					}
+					.accessibilityLabel("Settings")
+					.accessibilityHint("Shows settings synced from iPhone.")
+				}
+			}
 			.sheet(isPresented: $isShowingSettings) {
 				settingsView
 			}
@@ -190,11 +200,6 @@ struct WatchContentView: View {
 				.lineLimit(nil)
 				.fixedSize(horizontal: false, vertical: true)
 				.accessibilityAddTraits(.isHeader)
-			Button("Settings") {
-				isShowingSettings = true
-			}
-			.font(.caption)
-			.foregroundStyle(Color.watchCrossText)
 		}
 		.frame(maxWidth: .infinity, alignment: .leading)
 		.padding(.horizontal, 10)

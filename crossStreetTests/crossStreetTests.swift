@@ -1246,6 +1246,65 @@ struct IntersectorTests {
 		#expect(await locationProvider.requestCount == 2)
 	}
 
+	@Test func secondAndThirdUpcomingDoNotReturnSameIntersection() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapData = MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: "first-ahead",
+					names: ["Oak Street", "First Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "second-ahead",
+					names: ["Oak Street", "Second Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "third-ahead",
+					names: ["Oak Street", "Third Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.003, longitude: -122.0)
+				)
+			],
+			roads: [
+				MapRoad(
+					id: "oak",
+					name: "Oak Street",
+					nodeIDs: [1, 2],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 36.999, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 37.004, longitude: -122.0)
+					]
+				)
+			]
+		)
+		let locationProvider = SequentialLocationProvider(contexts: [
+			DeviceContext(coordinate: origin, headingDegrees: 0),
+			DeviceContext(coordinate: origin, headingDegrees: 0),
+			DeviceContext(coordinate: origin, headingDegrees: 0)
+		])
+		let service = OrientSvc(
+			locationProvider: locationProvider,
+			mapDataClient: StaticMapDataClient(data: mapData),
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.announcementOptions = AnnouncementOptions(
+			includeDistance: false,
+			includeDirection: false,
+			includeNeighborhood: false
+		)
+
+		_ = try await service.report(.upcoming, prefs: prefs)
+		let secondReport = try await service.report(.upcoming, rank: 2, prefs: prefs)
+		let thirdReport = try await service.report(.upcoming, rank: 3, prefs: prefs)
+
+		#expect(secondReport.cross != thirdReport.cross)
+		#expect(secondReport.cross == "Oak Street and Second Street")
+		#expect(thirdReport.cross == "Oak Street and Third Street")
+	}
+
 	@Test func upcomingRequestsFreshHeadingButNearestDoesNot() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let locationProvider = FreshHeadingRecordingLocationProvider(
@@ -1348,6 +1407,63 @@ struct IntersectorTests {
 		let currentStreetIntersections = data.currentStreetIntersections(from: origin)
 
 		#expect(currentStreetIntersections.map(\.title) == ["Oak Street and Pine Street"])
+	}
+
+	@Test func pointScanCanIncludeCurrentStreetCrossingsWhenEnabled() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0002, longitude: -122.0)
+		let mapData = MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: "street-intersection",
+					names: ["Oak Street", "Pine Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "crossing-10",
+					names: ["Crossing on Oak Street near Pine Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.0004, longitude: -122.0),
+					associatedRoadNames: ["Oak Street"]
+				),
+				IntersectionCandidate(
+					id: "crossing-20",
+					names: ["Crossing on Distant Street near Far Avenue"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.0005, longitude: -122.0),
+					associatedRoadNames: ["Distant Street"]
+				)
+			],
+			roads: [
+				MapRoad(
+					id: "oak",
+					name: "Oak Street",
+					nodeIDs: [1, 2],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+					]
+				),
+				MapRoad(
+					id: "distant",
+					name: "Distant Street",
+					nodeIDs: [3, 4],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 37.01, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 37.012, longitude: -122.0)
+					]
+				)
+			]
+		)
+
+		let withoutCrossings = mapData.currentStreetScanTargets(
+			from: origin,
+			includeCrossings: false
+		)
+		let withCrossings = mapData.currentStreetScanTargets(
+			from: origin,
+			includeCrossings: true
+		)
+
+		#expect(withoutCrossings.map(\.id) == ["street-intersection"])
+		#expect(withCrossings.map(\.id) == ["crossing-10", "street-intersection"])
 	}
 
 	@Test func mapDataCacheReusesNearbyResults() async throws {

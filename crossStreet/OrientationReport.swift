@@ -387,11 +387,23 @@ struct MapDataSet: Equatable {
 	var roads: [MapRoad]
 
 	func currentStreetIntersections(from coordinate: CLLocationCoordinate2D) -> [IntersectionCandidate] {
+		currentStreetScanTargets(from: coordinate, includeCrossings: false)
+	}
+
+	func currentStreetScanTargets(
+		from coordinate: CLLocationCoordinate2D,
+		includeCrossings: Bool
+	) -> [IntersectionCandidate] {
 		guard let road = nearestRoad(to: coordinate) else {
 			return []
 		}
 		return intersections
-			.filter { !$0.id.hasPrefix("crossing-") && $0.roadNames.contains(road.name) }
+			.filter {
+				if $0.id.hasPrefix("crossing-") {
+					return includeCrossings && $0.roadNames.contains(road.name)
+				}
+				return $0.roadNames.contains(road.name)
+			}
 			.sorted {
 				Geo.distanceMeters(from: coordinate, to: $0.coordinate)
 					< Geo.distanceMeters(from: coordinate, to: $1.coordinate)

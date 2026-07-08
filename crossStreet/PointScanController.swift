@@ -67,8 +67,9 @@ final class PointScanController: ObservableObject {
 					radiusMeters: 450,
 					options: prefs.mapDetails
 				)
-				let intersections = mapData.currentStreetIntersections(
-					from: initialContext.coordinate
+				let intersections = mapData.currentStreetScanTargets(
+					from: initialContext.coordinate,
+					includeCrossings: prefs.mapDetails.includeCrossings
 				)
 
 				guard !intersections.isEmpty else {
