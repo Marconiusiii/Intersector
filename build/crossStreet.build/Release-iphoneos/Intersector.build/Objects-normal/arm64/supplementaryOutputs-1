@@ -1,0 +1,12 @@
+{
+  "/Users/pallas/Documents/coding/crossStreet/crossStreet/AppPrefs.swift" : {
+    "abi-baseline-json" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/Intersector.abi.json",
+    "const-values" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/Intersector-primary.swiftconstvalues",
+    "dependencies" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/Intersector-primary.d",
+    "diagnostics" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/Intersector-primary.dia",
+    "objc-header" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/Intersector-Swift.h",
+    "swiftdoc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/Intersector.swiftdoc",
+    "swiftmodule" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/Intersector.swiftmodule",
+    "swiftsourceinfo" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/Intersector.swiftsourceinfo"
+  }
+}

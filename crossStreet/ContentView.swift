@@ -28,14 +28,16 @@ private enum SettingsFocusTarget: Hashable {
 
 private let lookupLoadingText = "Intersecting..."
 
-private enum LoadingTone {
+@MainActor
+private enum LoadingThrobber {
 	private static var player: AVAudioPlayer?
 
-	static func play() {
+	static func start() {
 		do {
 			if player == nil {
 				player = try AVAudioPlayer(data: cueData())
-				player?.volume = 0.18
+				player?.volume = 0.14
+				player?.numberOfLoops = -1
 				player?.prepareToPlay()
 			}
 			player?.currentTime = 0
@@ -43,9 +45,14 @@ private enum LoadingTone {
 		} catch {}
 	}
 
+	static func stop() {
+		player?.stop()
+		player?.currentTime = 0
+	}
+
 	private static func cueData() -> Data {
 		let sampleRate = 22_050
-		let duration = 0.14
+		let duration = 2.20
 		let frameCount = Int(Double(sampleRate) * duration)
 		let dataSize = frameCount * MemoryLayout<Int16>.size
 		var data = Data()
@@ -63,14 +70,70 @@ private enum LoadingTone {
 		data.append(UInt32(dataSize).littleEndianData)
 
 		for index in 0..<frameCount {
-			let progress = Double(index) / Double(frameCount)
-			let envelope = sin(progress * .pi)
-			let angle = 2 * Double.pi * 660 * Double(index) / Double(sampleRate)
-			let sample = Int16(sin(angle) * envelope * 4_000)
+			let time = Double(index) / Double(sampleRate)
+			let pad = padValue(time: time, duration: duration) * 0.16
+			let pulses = pulseValue(
+				time: time,
+				start: 0.12,
+				attack: 0.025,
+				decay: 0.20,
+				sustain: 0.05,
+				frequency: 660
+			) + pulseValue(
+				time: time,
+				start: 0.48,
+				attack: 0.03,
+				decay: 0.24,
+				sustain: 0.07,
+				frequency: 330
+			) + pulseValue(
+				time: time,
+				start: 0.86,
+				attack: 0.03,
+				decay: 0.36,
+				sustain: 0.18,
+				frequency: 494
+			)
+			let sample = Int16(max(-1, min(1, pad + pulses)) * 2_300)
 			data.append(sample.littleEndianData)
 		}
 
 		return data
+	}
+
+	private static func padValue(time: Double, duration: Double) -> Double {
+		let fadeIn = min(1, time / 0.36)
+		let fadeOut = min(1, max(0, (1.55 - time) / 0.45))
+		let envelope = max(0, min(fadeIn, fadeOut))
+		let base = sin(2 * Double.pi * 247 * time)
+		let shimmer = sin(2 * Double.pi * 330 * time) * 0.35
+		return (base + shimmer) * envelope * 0.14
+	}
+
+	private static func pulseValue(
+		time: Double,
+		start: Double,
+		attack: Double,
+		decay: Double,
+		sustain: Double,
+		frequency: Double
+	) -> Double {
+		let duration = attack + decay + sustain
+		guard time >= start, time <= start + duration else {
+			return 0
+		}
+		let localTime = time - start
+		let envelope: Double
+		if localTime <= attack {
+			envelope = localTime / attack
+		} else if localTime <= attack + sustain {
+			envelope = 1
+		} else {
+			let decayProgress = (localTime - attack - sustain) / decay
+			envelope = max(0, 1 - decayProgress)
+		}
+		let angle = 2 * Double.pi * frequency * localTime
+		return sin(angle) * envelope * 0.78
 	}
 }
 
@@ -932,7 +995,7 @@ struct ContentView: View {
 			do {
 				try await Task.sleep(for: .milliseconds(800))
 				statusText = lookupLoadingText
-				LoadingTone.play()
+				LoadingThrobber.start()
 			} catch {}
 		}
 
@@ -943,10 +1006,12 @@ struct ContentView: View {
 				try await OrientSvc.shared.report(kind, rank: rank, prefs: prefs).text(with: prefs, rank: rank)
 			}
 			loadingTask.cancel()
+			LoadingThrobber.stop()
 			statusText = text
 			VoiceOverAnnouncer.reportUpdated(text)
 		} catch {
 			loadingTask.cancel()
+			LoadingThrobber.stop()
 			let text = "Unable to update \(reportLabel(kind, rank: rank)). \(error.localizedDescription)"
 			statusText = text
 			VoiceOverAnnouncer.reportUpdated(text)

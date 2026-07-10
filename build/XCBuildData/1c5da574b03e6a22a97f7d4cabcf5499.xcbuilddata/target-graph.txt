@@ -1,0 +1,4 @@
+Target dependency graph (2 targets)
+Target 'Intersector' in project 'crossStreet'
+➜ Explicit dependency on target 'Intersector Watch App' in project 'crossStreet'
+Target 'Intersector Watch App' in project 'crossStreet' (no dependencies)

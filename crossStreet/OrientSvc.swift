@@ -105,7 +105,7 @@ struct OrientSvc {
 				from: context,
 				mapData: mapData,
 				prefs: prefs,
-				maxCount: 3
+				maxCount: rank == 1 ? 1 : 3
 			)
 			await upcomingCache.store(reports: reports, prefs: prefs, context: context)
 			guard reports.indices.contains(rank - 1) else {
@@ -155,7 +155,7 @@ struct OrientSvc {
 			ranked = finder.scanMatch(from: context, in: mapData.intersections).map { [$0.candidate] } ?? []
 		}
 		let resultCount = kind == .upcoming && context.headingDegrees == nil ? 1 : requestedCount
-		let neighborhoodContext = await neighborhoodContext(for: prefs.areaMode, from: context)
+		let neighborhoodContext = await neighborhoodContext(for: prefs, from: context)
 		var reports: [OrientReport] = []
 		for match in ranked {
 			let report = makeReport(
@@ -194,7 +194,7 @@ struct OrientSvc {
 		} else {
 			ranked = finder.rankedUpcoming(from: context, in: mapData)
 		}
-		let neighborhoodContext = await neighborhoodContext(for: prefs.areaMode, from: context)
+		let neighborhoodContext = await neighborhoodContext(for: prefs, from: context)
 		var reports: [OrientReport] = []
 		for match in ranked {
 			let report = makeReport(
@@ -242,7 +242,7 @@ struct OrientSvc {
 		guard let match else {
 			throw OrientError.noIntersections
 		}
-		let neighborhoodContext = await neighborhoodContext(for: prefs.areaMode, from: context)
+		let neighborhoodContext = await neighborhoodContext(for: prefs, from: context)
 		return makeReport(
 			kind,
 			match: match,
@@ -354,10 +354,10 @@ struct OrientSvc {
 	}
 
 	private func neighborhoodContext(
-		for mode: AreaMode,
+		for prefs: AppPrefs,
 		from context: DeviceContext
 	) async -> NeighborhoodContext {
-		guard mode != .off else {
+		guard prefs.announcementOptions.includeNeighborhood, prefs.areaMode != .off else {
 			return NeighborhoodContext(area: nil, toward: nil)
 		}
 
@@ -370,7 +370,7 @@ struct OrientSvc {
 				from: neighborhoods,
 				origin: context.coordinate,
 				heading: context.headingDegrees,
-				mode: mode
+				mode: prefs.areaMode
 			)
 		} catch {
 			return NeighborhoodContext(area: nil, toward: nil)
