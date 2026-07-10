@@ -126,18 +126,25 @@ private enum LoadingThrobber {
 			return
 		}
 		hapticTask = Task { @MainActor in
+			let startTime = ContinuousClock.now
+			let clock = ContinuousClock()
+			let pulses: [(offset: Duration, intensity: Double)] = [
+				(.milliseconds(120), 0.95),
+				(.milliseconds(480), 0.55),
+				(.milliseconds(860), 0.25)
+			]
+			var loopIndex = 0
 			while !Task.isCancelled {
-				try? await Task.sleep(for: .milliseconds(120))
-				guard !Task.isCancelled else { return }
-				HapticFeedback().pulse(intensity: 0.95)
-				try? await Task.sleep(for: .milliseconds(360))
-				guard !Task.isCancelled else { return }
-				HapticFeedback().pulse(intensity: 0.55)
-				try? await Task.sleep(for: .milliseconds(380))
-				guard !Task.isCancelled else { return }
-				HapticFeedback().pulse(intensity: 0.25)
-				let remainingLoopMilliseconds = max(0, Int((loopDuration - 0.86) * 1_000))
-				try? await Task.sleep(for: .milliseconds(remainingLoopMilliseconds))
+				let loopOffset = Duration.milliseconds(Int(loopDuration * 1_000) * loopIndex)
+				for pulse in pulses {
+					let targetTime = startTime + loopOffset + pulse.offset
+					if clock.now < targetTime {
+						try? await Task.sleep(until: targetTime, clock: clock)
+					}
+					guard !Task.isCancelled else { return }
+					HapticFeedback().pulse(intensity: pulse.intensity)
+				}
+				loopIndex += 1
 			}
 		}
 	}

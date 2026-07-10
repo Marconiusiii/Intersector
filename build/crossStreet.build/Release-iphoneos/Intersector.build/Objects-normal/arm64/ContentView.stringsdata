@@ -7,7 +7,7 @@
         "key": "3rd Nearest Intersection",
         "location": {
           "startingColumn": 36,
-          "startingLine": 549
+          "startingLine": 556
         }
       },
       {
@@ -15,7 +15,7 @@
         "key": "2nd Nearest Intersection",
         "location": {
           "startingColumn": 36,
-          "startingLine": 554
+          "startingLine": 561
         }
       },
       {
@@ -23,7 +23,7 @@
         "key": "3rd Upcoming Intersection",
         "location": {
           "startingColumn": 36,
-          "startingLine": 570
+          "startingLine": 577
         }
       },
       {
@@ -31,7 +31,7 @@
         "key": "2nd Upcoming Intersection",
         "location": {
           "startingColumn": 36,
-          "startingLine": 575
+          "startingLine": 582
         }
       },
       {
@@ -39,7 +39,7 @@
         "key": "Point and Scan",
         "location": {
           "startingColumn": 23,
-          "startingLine": 603
+          "startingLine": 610
         }
       },
       {
@@ -47,7 +47,7 @@
         "key": "Intersector",
         "location": {
           "startingColumn": 8,
-          "startingLine": 481
+          "startingLine": 488
         }
       },
       {
@@ -55,7 +55,7 @@
         "key": "Settings",
         "location": {
           "startingColumn": 10,
-          "startingLine": 491
+          "startingLine": 498
         }
       },
       {
@@ -63,7 +63,7 @@
         "key": "Current Info",
         "location": {
           "startingColumn": 8,
-          "startingLine": 521
+          "startingLine": 528
         }
       },
       {
@@ -71,7 +71,7 @@
         "key": "Settings",
         "location": {
           "startingColumn": 21,
-          "startingLine": 959
+          "startingLine": 966
         }
       },
       {
@@ -79,7 +79,7 @@
         "key": "Haptic scan feedback",
         "location": {
           "startingColumn": 12,
-          "startingLine": 910
+          "startingLine": 917
         }
       },
       {
@@ -87,7 +87,7 @@
         "key": "Sample Announcement",
         "location": {
           "startingColumn": 11,
-          "startingLine": 891
+          "startingLine": 898
         }
       },
       {
@@ -95,7 +95,7 @@
         "key": "Distance",
         "location": {
           "startingColumn": 13,
-          "startingLine": 834
+          "startingLine": 841
         }
       },
       {
@@ -103,7 +103,7 @@
         "key": "Measurement Unit",
         "location": {
           "startingColumn": 14,
-          "startingLine": 837
+          "startingLine": 844
         }
       },
       {
@@ -111,7 +111,7 @@
         "key": "Direction",
         "location": {
           "startingColumn": 13,
-          "startingLine": 845
+          "startingLine": 852
         }
       },
       {
@@ -119,7 +119,7 @@
         "key": "Direction Style",
         "location": {
           "startingColumn": 14,
-          "startingLine": 848
+          "startingLine": 855
         }
       },
       {
@@ -127,7 +127,7 @@
         "key": "Manhattan Snob Mode",
         "location": {
           "startingColumn": 13,
-          "startingLine": 856
+          "startingLine": 863
         }
       },
       {
@@ -135,7 +135,7 @@
         "key": "Neighborhood",
         "location": {
           "startingColumn": 13,
-          "startingLine": 859
+          "startingLine": 866
         }
       },
       {
@@ -143,7 +143,7 @@
         "key": "Neighborhood Context",
         "location": {
           "startingColumn": 14,
-          "startingLine": 862
+          "startingLine": 869
         }
       },
       {
@@ -151,7 +151,7 @@
         "key": "Street Context",
         "location": {
           "startingColumn": 13,
-          "startingLine": 870
+          "startingLine": 877
         }
       },
       {
@@ -159,7 +159,7 @@
         "key": "Spoken Intersections",
         "location": {
           "startingColumn": 26,
-          "startingLine": 884
+          "startingLine": 891
         }
       },
       {
@@ -167,7 +167,7 @@
         "key": "Show 2nd and 3rd Controls",
         "location": {
           "startingColumn": 13,
-          "startingLine": 888
+          "startingLine": 895
         }
       },
       {
@@ -175,7 +175,7 @@
         "key": "Toggles the visibility of the menu chevrons",
         "location": {
           "startingColumn": 26,
-          "startingLine": 890
+          "startingLine": 897
         }
       },
       {
@@ -183,7 +183,7 @@
         "key": "Spoken Intersections",
         "location": {
           "startingColumn": 12,
-          "startingLine": 874
+          "startingLine": 881
         }
       },
       {
@@ -191,7 +191,7 @@
         "key": "Include crossings",
         "location": {
           "startingColumn": 13,
-          "startingLine": 901
+          "startingLine": 908
         }
       },
       {
@@ -199,7 +199,7 @@
         "key": "Include walking paths",
         "location": {
           "startingColumn": 13,
-          "startingLine": 903
+          "startingLine": 910
         }
       },
       {
@@ -207,7 +207,7 @@
         "key": "Opens Mail so you can send feedback about Intersector.",
         "location": {
           "startingColumn": 25,
-          "startingLine": 925
+          "startingLine": 932
         }
       },
       {
@@ -215,7 +215,7 @@
         "key": "Acknowledgements",
         "location": {
           "startingColumn": 22,
-          "startingLine": 929
+          "startingLine": 936
         }
       },
       {
@@ -223,7 +223,7 @@
         "key": "Send Intersector Feedback",
         "location": {
           "startingColumn": 12,
-          "startingLine": 921
+          "startingLine": 928
         }
       },
       {
@@ -231,7 +231,7 @@
         "key": "Opens in external browser",
         "location": {
           "startingColumn": 23,
-          "startingLine": 1030
+          "startingLine": 1037
         }
       },
       {
@@ -239,7 +239,7 @@
         "key": "Special thanks to Jen Walz for inspiring the creation of this app!",
         "location": {
           "startingColumn": 13,
-          "startingLine": 931
+          "startingLine": 938
         }
       },
       {
@@ -247,7 +247,7 @@
         "key": "Map data from OpenStreetMap, available under the Open Database License.",
         "location": {
           "startingColumn": 13,
-          "startingLine": 934
+          "startingLine": 941
         }
       },
       {
@@ -255,7 +255,7 @@
         "key": "OpenStreetMap copyright and licence",
         "location": {
           "startingColumn": 9,
-          "startingLine": 938
+          "startingLine": 945
         }
       },
       {
@@ -263,7 +263,7 @@
         "key": "Done",
         "location": {
           "startingColumn": 13,
-          "startingLine": 962
+          "startingLine": 969
         }
       }
     ]
