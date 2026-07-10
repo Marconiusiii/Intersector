@@ -2,23 +2,6 @@
   "tables" : {
     "AppShortcuts" : [
       {
-        "appShortcutMetadata" : [
-          {
-            "index" : 0,
-            "parameterTypes" : {
-
-            },
-            "actionIdentifier" : "NearestIntersectionIntent",
-            "parameterDisplayRepresentations" : {
-
-            },
-            "title" : "Nearest Intersection"
-          }
-        ],
-        "location" : {
-          "startingLine" : 168,
-          "startingColumn" : 0
-        },
         "values" : [
           "Nearest intersection in ${applicationName}",
           "Where is the nearest intersection with ${applicationName}",
@@ -27,26 +10,26 @@
           "What's the nearest intersection with ${applicationName}",
           "What intersection am I near with ${applicationName}"
         ],
-        "key" : "Nearest intersection in ${applicationName}"
-      },
-      {
         "appShortcutMetadata" : [
           {
-            "index" : 1,
+            "index" : 0,
+            "title" : "Nearest Intersection",
             "parameterTypes" : {
 
             },
-            "actionIdentifier" : "UpcomingIntersectionIntent",
             "parameterDisplayRepresentations" : {
 
             },
-            "title" : "Upcoming Intersection"
+            "actionIdentifier" : "NearestIntersectionIntent"
           }
         ],
+        "key" : "Nearest intersection in ${applicationName}",
         "location" : {
-          "startingLine" : 168,
-          "startingColumn" : 0
-        },
+          "startingColumn" : 0,
+          "startingLine" : 168
+        }
+      },
+      {
         "values" : [
           "Upcoming intersection in ${applicationName}",
           "What intersection is ahead with ${applicationName}",
@@ -55,26 +38,26 @@
           "What's the next intersection with ${applicationName}",
           "What intersection is coming up with ${applicationName}"
         ],
-        "key" : "Upcoming intersection in ${applicationName}"
-      },
-      {
         "appShortcutMetadata" : [
           {
-            "index" : 2,
+            "index" : 1,
+            "title" : "Upcoming Intersection",
             "parameterTypes" : {
 
             },
-            "actionIdentifier" : "SecondNearestIntersectionIntent",
             "parameterDisplayRepresentations" : {
 
             },
-            "title" : "2nd Nearest Intersection"
+            "actionIdentifier" : "UpcomingIntersectionIntent"
           }
         ],
+        "key" : "Upcoming intersection in ${applicationName}",
         "location" : {
-          "startingLine" : 168,
-          "startingColumn" : 0
-        },
+          "startingColumn" : 0,
+          "startingLine" : 168
+        }
+      },
+      {
         "values" : [
           "2nd nearest intersection in ${applicationName}",
           "Second nearest intersection in ${applicationName}",
@@ -85,26 +68,26 @@
           "What is my second nearest intersection with ${applicationName}",
           "Find my second nearest intersection with ${applicationName}"
         ],
-        "key" : "2nd nearest intersection in ${applicationName}"
-      },
-      {
         "appShortcutMetadata" : [
           {
-            "index" : 3,
+            "index" : 2,
+            "title" : "2nd Nearest Intersection",
             "parameterTypes" : {
 
             },
-            "actionIdentifier" : "ThirdNearestIntersectionIntent",
             "parameterDisplayRepresentations" : {
 
             },
-            "title" : "3rd Nearest Intersection"
+            "actionIdentifier" : "SecondNearestIntersectionIntent"
           }
         ],
+        "key" : "2nd nearest intersection in ${applicationName}",
         "location" : {
-          "startingLine" : 168,
-          "startingColumn" : 0
-        },
+          "startingColumn" : 0,
+          "startingLine" : 168
+        }
+      },
+      {
         "values" : [
           "3rd nearest intersection in ${applicationName}",
           "Third nearest intersection in ${applicationName}",
@@ -115,26 +98,26 @@
           "What is my third nearest intersection with ${applicationName}",
           "Find my third nearest intersection with ${applicationName}"
         ],
-        "key" : "3rd nearest intersection in ${applicationName}"
-      },
-      {
         "appShortcutMetadata" : [
           {
-            "index" : 4,
+            "index" : 3,
+            "title" : "3rd Nearest Intersection",
             "parameterTypes" : {
 
             },
-            "actionIdentifier" : "SecondUpcomingIntersectionIntent",
             "parameterDisplayRepresentations" : {
 
             },
-            "title" : "2nd Upcoming Intersection"
+            "actionIdentifier" : "ThirdNearestIntersectionIntent"
           }
         ],
+        "key" : "3rd nearest intersection in ${applicationName}",
         "location" : {
-          "startingLine" : 168,
-          "startingColumn" : 0
-        },
+          "startingColumn" : 0,
+          "startingLine" : 168
+        }
+      },
+      {
         "values" : [
           "2nd upcoming intersection in ${applicationName}",
           "Second upcoming intersection in ${applicationName}",
@@ -145,26 +128,26 @@
           "What is my second upcoming intersection with ${applicationName}",
           "Find my second upcoming intersection with ${applicationName}"
         ],
-        "key" : "2nd upcoming intersection in ${applicationName}"
-      },
-      {
         "appShortcutMetadata" : [
           {
-            "index" : 5,
+            "index" : 4,
+            "title" : "2nd Upcoming Intersection",
             "parameterTypes" : {
 
             },
-            "actionIdentifier" : "ThirdUpcomingIntersectionIntent",
             "parameterDisplayRepresentations" : {
 
             },
-            "title" : "3rd Upcoming Intersection"
+            "actionIdentifier" : "SecondUpcomingIntersectionIntent"
           }
         ],
+        "key" : "2nd upcoming intersection in ${applicationName}",
         "location" : {
-          "startingLine" : 168,
-          "startingColumn" : 0
-        },
+          "startingColumn" : 0,
+          "startingLine" : 168
+        }
+      },
+      {
         "values" : [
           "3rd upcoming intersection in ${applicationName}",
           "Third upcoming intersection in ${applicationName}",
@@ -175,26 +158,26 @@
           "What is my third upcoming intersection with ${applicationName}",
           "Find my third upcoming intersection with ${applicationName}"
         ],
-        "key" : "3rd upcoming intersection in ${applicationName}"
-      },
-      {
         "appShortcutMetadata" : [
           {
-            "index" : 6,
+            "index" : 5,
+            "title" : "3rd Upcoming Intersection",
             "parameterTypes" : {
 
             },
-            "actionIdentifier" : "MyDirectionIntent",
             "parameterDisplayRepresentations" : {
 
             },
-            "title" : "My Direction"
+            "actionIdentifier" : "ThirdUpcomingIntersectionIntent"
           }
         ],
+        "key" : "3rd upcoming intersection in ${applicationName}",
         "location" : {
-          "startingLine" : 168,
-          "startingColumn" : 0
-        },
+          "startingColumn" : 0,
+          "startingLine" : 168
+        }
+      },
+      {
         "values" : [
           "My direction in ${applicationName}",
           "Which way am I facing with ${applicationName}",
@@ -202,34 +185,51 @@
           "What way am I facing with ${applicationName}",
           "Where am I facing with ${applicationName}"
         ],
-        "key" : "My direction in ${applicationName}"
-      },
-      {
         "appShortcutMetadata" : [
           {
-            "index" : 7,
+            "index" : 6,
+            "title" : "My Direction",
             "parameterTypes" : {
 
             },
-            "actionIdentifier" : "StartPointScanIntent",
             "parameterDisplayRepresentations" : {
 
             },
-            "title" : "Start Point and Scan"
+            "actionIdentifier" : "MyDirectionIntent"
           }
         ],
+        "key" : "My direction in ${applicationName}",
         "location" : {
-          "startingLine" : 168,
-          "startingColumn" : 0
-        },
+          "startingColumn" : 0,
+          "startingLine" : 168
+        }
+      },
+      {
         "values" : [
           "Start Point and Scan in ${applicationName}",
           "Scan for intersections with ${applicationName}"
         ],
-        "key" : "Start Point and Scan in ${applicationName}"
+        "appShortcutMetadata" : [
+          {
+            "index" : 7,
+            "title" : "Start Point and Scan",
+            "parameterTypes" : {
+
+            },
+            "parameterDisplayRepresentations" : {
+
+            },
+            "actionIdentifier" : "StartPointScanIntent"
+          }
+        ],
+        "key" : "Start Point and Scan in ${applicationName}",
+        "location" : {
+          "startingColumn" : 0,
+          "startingLine" : 168
+        }
       }
     ]
   },
-  "source" : "\/Users\/pallas\/Documents\/coding\/crossStreet\/crossStreet\/CrossStreetIntents.swift",
-  "version" : 2
+  "version" : 2,
+  "source" : "\/Users\/pallas\/Documents\/coding\/crossStreet\/crossStreet\/CrossStreetIntents.swift"
 }

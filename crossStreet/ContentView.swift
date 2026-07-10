@@ -31,8 +31,10 @@ private let lookupLoadingText = "Intersecting..."
 @MainActor
 private enum LoadingThrobber {
 	private static var player: AVAudioPlayer?
+	private static var hapticTask: Task<Void, Never>?
+	private static let loopDuration: TimeInterval = 2.20
 
-	static func start() {
+	static func start(hapticsEnabled: Bool) {
 		do {
 			if player == nil {
 				player = try AVAudioPlayer(data: cueData())
@@ -43,16 +45,19 @@ private enum LoadingThrobber {
 			player?.currentTime = 0
 			player?.play()
 		} catch {}
+		startHapticsIfNeeded(hapticsEnabled)
 	}
 
 	static func stop() {
 		player?.stop()
 		player?.currentTime = 0
+		hapticTask?.cancel()
+		hapticTask = nil
 	}
 
 	private static func cueData() -> Data {
 		let sampleRate = 22_050
-		let duration = 2.20
+		let duration = loopDuration
 		let frameCount = Int(Double(sampleRate) * duration)
 		let dataSize = frameCount * MemoryLayout<Int16>.size
 		var data = Data()
@@ -69,6 +74,8 @@ private enum LoadingThrobber {
 		data.append(contentsOf: "data".utf8)
 		data.append(UInt32(dataSize).littleEndianData)
 
+		var samples: [Double] = []
+		samples.reserveCapacity(frameCount)
 		for index in 0..<frameCount {
 			let time = Double(index) / Double(sampleRate)
 			let pad = padValue(time: time, duration: duration) * 0.16
@@ -91,14 +98,48 @@ private enum LoadingThrobber {
 				start: 0.86,
 				attack: 0.03,
 				decay: 0.36,
-				sustain: 0.18,
+				sustain: 0,
 				frequency: 494
 			)
-			let sample = Int16(max(-1, min(1, pad + pulses)) * 2_300)
+			samples.append(pad + pulses)
+		}
+
+		let echoedSamples = samples.addingEcho(
+			sampleRate: sampleRate,
+			taps: [
+				(delay: 0.14, gain: 0.24),
+				(delay: 0.31, gain: 0.11)
+			]
+		)
+		for value in echoedSamples {
+			let sample = Int16(max(-1, min(1, value)) * 2_300)
 			data.append(sample.littleEndianData)
 		}
 
 		return data
+	}
+
+	private static func startHapticsIfNeeded(_ isEnabled: Bool) {
+		hapticTask?.cancel()
+		guard isEnabled else {
+			hapticTask = nil
+			return
+		}
+		hapticTask = Task { @MainActor in
+			while !Task.isCancelled {
+				try? await Task.sleep(for: .milliseconds(120))
+				guard !Task.isCancelled else { return }
+				HapticFeedback().pulse(intensity: 0.95)
+				try? await Task.sleep(for: .milliseconds(360))
+				guard !Task.isCancelled else { return }
+				HapticFeedback().pulse(intensity: 0.55)
+				try? await Task.sleep(for: .milliseconds(380))
+				guard !Task.isCancelled else { return }
+				HapticFeedback().pulse(intensity: 0.25)
+				let remainingLoopMilliseconds = max(0, Int((loopDuration - 0.86) * 1_000))
+				try? await Task.sleep(for: .milliseconds(remainingLoopMilliseconds))
+			}
+		}
 	}
 
 	private static func padValue(time: Double, duration: Double) -> Double {
@@ -141,6 +182,25 @@ private extension FixedWidthInteger {
 	var littleEndianData: Data {
 		var value = littleEndian
 		return Data(bytes: &value, count: MemoryLayout<Self>.size)
+	}
+}
+
+private extension Array where Element == Double {
+	func addingEcho(
+		sampleRate: Int,
+		taps: [(delay: Double, gain: Double)]
+	) -> [Double] {
+		var echoed = self
+		for tap in taps {
+			let delayFrames = Int(tap.delay * Double(sampleRate))
+			guard delayFrames > 0 else {
+				continue
+			}
+			for index in delayFrames..<count {
+				echoed[index] += self[index - delayFrames] * tap.gain
+			}
+		}
+		return echoed
 	}
 }
 
@@ -995,7 +1055,7 @@ struct ContentView: View {
 			do {
 				try await Task.sleep(for: .milliseconds(800))
 				statusText = lookupLoadingText
-				LoadingThrobber.start()
+				LoadingThrobber.start(hapticsEnabled: prefs.haptics)
 			} catch {}
 		}
 
