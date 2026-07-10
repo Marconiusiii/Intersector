@@ -1,0 +1,36 @@
+{
+  "" : {
+    "const-values" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/Intersector Watch App-primary.swiftconstvalues",
+    "dependencies" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/Intersector Watch App-primary.d",
+    "diagnostics" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/Intersector Watch App-primary.dia",
+    "emit-module-dependencies" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/Intersector Watch App-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/Intersector Watch App-primary-emit-module.dia",
+    "pch" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/Intersector Watch App-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/Intersector Watch App-primary.swiftdeps"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/IntersectorWatch/IntersectorWatchApp.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/IntersectorWatchApp.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/IntersectorWatchApp.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/IntersectorWatchApp.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/IntersectorWatch/WatchContentView.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/WatchContentView.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/WatchContentView.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/WatchContentView.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/IntersectorWatch/WatchIntents.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/WatchIntents.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/WatchIntents.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/WatchIntents.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/IntersectorWatch/WatchOrientationService.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/WatchOrientationService.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/WatchOrientationService.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/WatchOrientationService.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-watchos/Intersector Watch App.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/GeneratedAssetSymbols.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-watchos/Intersector Watch App.build/Objects-normal/arm64_32/GeneratedAssetSymbols.o"
+  }
+}

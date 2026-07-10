@@ -1,0 +1,24 @@
+{
+  "source": "/Users/pallas/Documents/coding/crossStreet/crossStreet/OnboardingView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Requesting...",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 95
+        }
+      },
+      {
+        "comment": "",
+        "key": "Next",
+        "location": {
+          "startingColumn": 53,
+          "startingLine": 95
+        }
+      }
+    ]
+  },
+  "version": 1
+}

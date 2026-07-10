@@ -1,0 +1,80 @@
+{
+  "source": "/Users/pallas/Documents/coding/crossStreet/IntersectorWatch/WatchIntents.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Nearest Intersection",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 12
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reports the closest mapped intersection.",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 13
+        }
+      },
+      {
+        "comment": "",
+        "key": "Upcoming Intersection",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 23
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reports the mapped intersection ahead.",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 24
+        }
+      },
+      {
+        "comment": "",
+        "key": "My Direction",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 34
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reports the direction you are facing.",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 35
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nearest",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 54
+        }
+      },
+      {
+        "comment": "",
+        "key": "Upcoming",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 65
+        }
+      },
+      {
+        "comment": "",
+        "key": "Direction",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 75
+        }
+      }
+    ]
+  },
+  "version": 1
+}

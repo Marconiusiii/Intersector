@@ -1,0 +1,120 @@
+{
+  "source": "/Users/pallas/Documents/coding/crossStreet/IntersectorWatch/WatchContentView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "3rd Nearest Intersection",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 135
+        }
+      },
+      {
+        "comment": "",
+        "key": "2nd Nearest Intersection",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 140
+        }
+      },
+      {
+        "comment": "",
+        "key": "3rd Upcoming Intersection",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 152
+        }
+      },
+      {
+        "comment": "",
+        "key": "2nd Upcoming Intersection",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 157
+        }
+      },
+      {
+        "comment": "",
+        "key": "Settings",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 183
+        }
+      },
+      {
+        "comment": "",
+        "key": "Shows settings synced from iPhone.",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 184
+        }
+      },
+      {
+        "comment": "",
+        "key": "Intersector",
+        "location": {
+          "startingColumn": 9,
+          "startingLine": 196
+        }
+      },
+      {
+        "comment": "",
+        "key": "Current Info",
+        "location": {
+          "startingColumn": 9,
+          "startingLine": 211
+        }
+      },
+      {
+        "comment": "",
+        "key": "Settings",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 259
+        }
+      },
+      {
+        "comment": "",
+        "key": "Settings sync from iPhone",
+        "location": {
+          "startingColumn": 11,
+          "startingLine": 235
+        }
+      },
+      {
+        "comment": "",
+        "key": "Open Intersector on iPhone to change announcement settings.",
+        "location": {
+          "startingColumn": 11,
+          "startingLine": 239
+        }
+      },
+      {
+        "comment": "",
+        "key": "Sample Announcement",
+        "location": {
+          "startingColumn": 11,
+          "startingLine": 244
+        }
+      },
+      {
+        "comment": "",
+        "key": "Announcements",
+        "location": {
+          "startingColumn": 11,
+          "startingLine": 254
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 13,
+          "startingLine": 262
+        }
+      }
+    ]
+  },
+  "version": 1
+}

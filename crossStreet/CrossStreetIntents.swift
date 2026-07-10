@@ -9,21 +9,23 @@ import AppIntents
 import CoreLocation
 import Foundation
 
+private func intersectorResult(_ text: String) -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
+	.result(value: text, dialog: IntentDialog(stringLiteral: text))
+}
+
 struct NearestIntersectionIntent: AppIntent {
 	static var title: LocalizedStringResource = "Nearest Intersection"
 	static var description = IntentDescription("Reports the closest mapped intersection.")
 	static var openAppWhenRun = false
 
-	func perform() async throws -> some IntentResult & ProvidesDialog {
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 		do {
 			let prefs = await AppPrefs.saved()
 			let text = try await OrientSvc.shared.spokenText(.nearest, prefs: prefs)
-			return .result(dialog: IntentDialog(stringLiteral: text))
+			return intersectorResult(text)
 		} catch {
-			return .result(
-				dialog: IntentDialog(
-					stringLiteral: "I couldn't get your nearest intersection. Make sure Location Services are enabled for Intersector and try again."
-				)
+			return intersectorResult(
+				"I couldn't get your nearest intersection. Make sure Location Services are enabled for Intersector and try again."
 			)
 		}
 	}
@@ -34,16 +36,14 @@ struct UpcomingIntersectionIntent: AppIntent {
 	static var description = IntentDescription("Reports the mapped intersection ahead.")
 	static var openAppWhenRun = false
 
-	func perform() async throws -> some IntentResult & ProvidesDialog {
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 		do {
 			let prefs = await AppPrefs.saved()
 			let text = try await OrientSvc.shared.spokenText(.upcoming, prefs: prefs)
-			return .result(dialog: IntentDialog(stringLiteral: text))
+			return intersectorResult(text)
 		} catch {
-			return .result(
-				dialog: IntentDialog(
-					stringLiteral: "I couldn't get your upcoming intersection. Make sure Location Services are enabled for Intersector and try again."
-				)
+			return intersectorResult(
+				"I couldn't get your upcoming intersection. Make sure Location Services are enabled for Intersector and try again."
 			)
 		}
 	}
@@ -54,15 +54,15 @@ struct SecondNearestIntersectionIntent: AppIntent {
 	static var description = IntentDescription("Reports the second closest mapped intersection.")
 	static var openAppWhenRun = false
 
-	func perform() async throws -> some IntentResult & ProvidesDialog {
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 		do {
 			let prefs = await AppPrefs.saved()
 			let report = try await OrientSvc.shared.report(.nearest, rank: 2, prefs: prefs)
 			let text = await report.text(with: prefs, rank: 2)
-			return .result(dialog: IntentDialog(stringLiteral: text))
+			return intersectorResult(text)
 		} catch {
-			return .result(
-				dialog: "I couldn't get your second nearest intersection. Make sure Location Services are enabled for Intersector and try again."
+			return intersectorResult(
+				"I couldn't get your second nearest intersection. Make sure Location Services are enabled for Intersector and try again."
 			)
 		}
 	}
@@ -73,15 +73,15 @@ struct ThirdNearestIntersectionIntent: AppIntent {
 	static var description = IntentDescription("Reports the third closest mapped intersection.")
 	static var openAppWhenRun = false
 
-	func perform() async throws -> some IntentResult & ProvidesDialog {
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 		do {
 			let prefs = await AppPrefs.saved()
 			let report = try await OrientSvc.shared.report(.nearest, rank: 3, prefs: prefs)
 			let text = await report.text(with: prefs, rank: 3)
-			return .result(dialog: IntentDialog(stringLiteral: text))
+			return intersectorResult(text)
 		} catch {
-			return .result(
-				dialog: "I couldn't get your third nearest intersection. Make sure Location Services are enabled for Intersector and try again."
+			return intersectorResult(
+				"I couldn't get your third nearest intersection. Make sure Location Services are enabled for Intersector and try again."
 			)
 		}
 	}
@@ -92,15 +92,15 @@ struct SecondUpcomingIntersectionIntent: AppIntent {
 	static var description = IntentDescription("Reports the second mapped intersection ahead.")
 	static var openAppWhenRun = false
 
-	func perform() async throws -> some IntentResult & ProvidesDialog {
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 		do {
 			let prefs = await AppPrefs.saved()
 			let report = try await OrientSvc.shared.report(.upcoming, rank: 2, prefs: prefs)
 			let text = await report.text(with: prefs, rank: 2)
-			return .result(dialog: IntentDialog(stringLiteral: text))
+			return intersectorResult(text)
 		} catch {
-			return .result(
-				dialog: "I couldn't get your second upcoming intersection. Make sure Location Services are enabled for Intersector and try again."
+			return intersectorResult(
+				"I couldn't get your second upcoming intersection. Make sure Location Services are enabled for Intersector and try again."
 			)
 		}
 	}
@@ -111,15 +111,15 @@ struct ThirdUpcomingIntersectionIntent: AppIntent {
 	static var description = IntentDescription("Reports the third mapped intersection ahead.")
 	static var openAppWhenRun = false
 
-	func perform() async throws -> some IntentResult & ProvidesDialog {
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 		do {
 			let prefs = await AppPrefs.saved()
 			let report = try await OrientSvc.shared.report(.upcoming, rank: 3, prefs: prefs)
 			let text = await report.text(with: prefs, rank: 3)
-			return .result(dialog: IntentDialog(stringLiteral: text))
+			return intersectorResult(text)
 		} catch {
-			return .result(
-				dialog: "I couldn't get your third upcoming intersection. Make sure Location Services are enabled for Intersector and try again."
+			return intersectorResult(
+				"I couldn't get your third upcoming intersection. Make sure Location Services are enabled for Intersector and try again."
 			)
 		}
 	}
@@ -130,16 +130,16 @@ struct MyDirectionIntent: AppIntent {
 	static var description = IntentDescription("Reports the cardinal direction the device is facing.")
 	static var openAppWhenRun = false
 
-	func perform() async throws -> some IntentResult & ProvidesDialog {
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 		do {
 			let prefs = await AppPrefs.saved()
 			let provider = await MainActor.run { LocationProvider() }
 			let heading = try await provider.currentHeading(allowCached: false)
 			let text = Self.spokenDirection(for: heading, prefs: prefs)
-			return .result(dialog: IntentDialog(stringLiteral: text))
+			return intersectorResult(text)
 		} catch {
-			return .result(
-				dialog: "I couldn't get your direction. Make sure Location Services are enabled for Intersector and try again."
+			return intersectorResult(
+				"I couldn't get your direction. Make sure Location Services are enabled for Intersector and try again."
 			)
 		}
 	}

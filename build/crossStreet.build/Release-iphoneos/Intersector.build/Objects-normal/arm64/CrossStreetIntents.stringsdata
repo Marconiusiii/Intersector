@@ -1,0 +1,208 @@
+{
+  "source": "/Users/pallas/Documents/coding/crossStreet/crossStreet/CrossStreetIntents.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Nearest Intersection",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 17
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reports the closest mapped intersection.",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 18
+        }
+      },
+      {
+        "comment": "",
+        "key": "Upcoming Intersection",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 35
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reports the mapped intersection ahead.",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 36
+        }
+      },
+      {
+        "comment": "",
+        "key": "2nd Nearest Intersection",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 53
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reports the second closest mapped intersection.",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 54
+        }
+      },
+      {
+        "comment": "",
+        "key": "3rd Nearest Intersection",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 72
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reports the third closest mapped intersection.",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 73
+        }
+      },
+      {
+        "comment": "",
+        "key": "2nd Upcoming Intersection",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 91
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reports the second mapped intersection ahead.",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 92
+        }
+      },
+      {
+        "comment": "",
+        "key": "3rd Upcoming Intersection",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 110
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reports the third mapped intersection ahead.",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 111
+        }
+      },
+      {
+        "comment": "",
+        "key": "My Direction",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 129
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reports the cardinal direction the device is facing.",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 130
+        }
+      },
+      {
+        "comment": "",
+        "key": "Start Point and Scan",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 157
+        }
+      },
+      {
+        "comment": "",
+        "key": "Opens Intersector and starts live Point and Scan mode.",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 158
+        }
+      },
+      {
+        "comment": "",
+        "key": "Opening Intersector with Point and Scan.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 163
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nearest",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 179
+        }
+      },
+      {
+        "comment": "",
+        "key": "Upcoming",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 192
+        }
+      },
+      {
+        "comment": "",
+        "key": "2nd Nearest",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 207
+        }
+      },
+      {
+        "comment": "",
+        "key": "3rd Nearest",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 222
+        }
+      },
+      {
+        "comment": "",
+        "key": "2nd Upcoming",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 237
+        }
+      },
+      {
+        "comment": "",
+        "key": "3rd Upcoming",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 252
+        }
+      },
+      {
+        "comment": "",
+        "key": "Direction",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 264
+        }
+      },
+      {
+        "comment": "",
+        "key": "Point Scan",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 273
+        }
+      }
+    ]
+  },
+  "version": 1
+}

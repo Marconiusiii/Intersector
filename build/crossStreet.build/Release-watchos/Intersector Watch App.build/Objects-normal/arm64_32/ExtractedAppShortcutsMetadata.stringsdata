@@ -1,0 +1,85 @@
+{
+  "source" : "\/Users\/pallas\/Documents\/coding\/crossStreet\/IntersectorWatch\/WatchIntents.swift",
+  "tables" : {
+    "AppShortcuts" : [
+      {
+        "appShortcutMetadata" : [
+          {
+            "parameterTypes" : {
+
+            },
+            "actionIdentifier" : "WatchNearestIntersectionIntent",
+            "parameterDisplayRepresentations" : {
+
+            },
+            "index" : 0,
+            "title" : "Nearest Intersection"
+          }
+        ],
+        "key" : "Nearest intersection in ${applicationName}",
+        "location" : {
+          "startingLine" : 45,
+          "startingColumn" : 0
+        },
+        "values" : [
+          "Nearest intersection in ${applicationName}",
+          "Where is the nearest intersection with ${applicationName}",
+          "What's my nearest intersection with ${applicationName}",
+          "What intersection am I near with ${applicationName}"
+        ]
+      },
+      {
+        "appShortcutMetadata" : [
+          {
+            "parameterTypes" : {
+
+            },
+            "actionIdentifier" : "WatchUpcomingIntersectionIntent",
+            "parameterDisplayRepresentations" : {
+
+            },
+            "index" : 1,
+            "title" : "Upcoming Intersection"
+          }
+        ],
+        "key" : "Upcoming intersection in ${applicationName}",
+        "location" : {
+          "startingLine" : 45,
+          "startingColumn" : 0
+        },
+        "values" : [
+          "Upcoming intersection in ${applicationName}",
+          "What intersection is ahead with ${applicationName}",
+          "What's my upcoming intersection with ${applicationName}",
+          "What intersection is coming up with ${applicationName}"
+        ]
+      },
+      {
+        "appShortcutMetadata" : [
+          {
+            "parameterTypes" : {
+
+            },
+            "actionIdentifier" : "WatchMyDirectionIntent",
+            "parameterDisplayRepresentations" : {
+
+            },
+            "index" : 2,
+            "title" : "My Direction"
+          }
+        ],
+        "key" : "My direction in ${applicationName}",
+        "location" : {
+          "startingLine" : 45,
+          "startingColumn" : 0
+        },
+        "values" : [
+          "My direction in ${applicationName}",
+          "Which way am I facing with ${applicationName}",
+          "What direction am I facing with ${applicationName}"
+        ]
+      }
+    ]
+  },
+  "version" : 2
+}

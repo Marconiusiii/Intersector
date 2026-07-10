@@ -1,0 +1,272 @@
+{
+  "source": "/Users/pallas/Documents/coding/crossStreet/crossStreet/ContentView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "3rd Nearest Intersection",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 426
+        }
+      },
+      {
+        "comment": "",
+        "key": "2nd Nearest Intersection",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 431
+        }
+      },
+      {
+        "comment": "",
+        "key": "3rd Upcoming Intersection",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 447
+        }
+      },
+      {
+        "comment": "",
+        "key": "2nd Upcoming Intersection",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 452
+        }
+      },
+      {
+        "comment": "",
+        "key": "Point and Scan",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 480
+        }
+      },
+      {
+        "comment": "",
+        "key": "Intersector",
+        "location": {
+          "startingColumn": 8,
+          "startingLine": 358
+        }
+      },
+      {
+        "comment": "",
+        "key": "Settings",
+        "location": {
+          "startingColumn": 10,
+          "startingLine": 368
+        }
+      },
+      {
+        "comment": "",
+        "key": "Current Info",
+        "location": {
+          "startingColumn": 8,
+          "startingLine": 398
+        }
+      },
+      {
+        "comment": "",
+        "key": "Settings",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 836
+        }
+      },
+      {
+        "comment": "",
+        "key": "Haptic scan feedback",
+        "location": {
+          "startingColumn": 12,
+          "startingLine": 787
+        }
+      },
+      {
+        "comment": "",
+        "key": "Sample Announcement",
+        "location": {
+          "startingColumn": 11,
+          "startingLine": 768
+        }
+      },
+      {
+        "comment": "",
+        "key": "Distance",
+        "location": {
+          "startingColumn": 13,
+          "startingLine": 711
+        }
+      },
+      {
+        "comment": "",
+        "key": "Measurement Unit",
+        "location": {
+          "startingColumn": 14,
+          "startingLine": 714
+        }
+      },
+      {
+        "comment": "",
+        "key": "Direction",
+        "location": {
+          "startingColumn": 13,
+          "startingLine": 722
+        }
+      },
+      {
+        "comment": "",
+        "key": "Direction Style",
+        "location": {
+          "startingColumn": 14,
+          "startingLine": 725
+        }
+      },
+      {
+        "comment": "",
+        "key": "Manhattan Snob Mode",
+        "location": {
+          "startingColumn": 13,
+          "startingLine": 733
+        }
+      },
+      {
+        "comment": "",
+        "key": "Neighborhood",
+        "location": {
+          "startingColumn": 13,
+          "startingLine": 736
+        }
+      },
+      {
+        "comment": "",
+        "key": "Neighborhood Context",
+        "location": {
+          "startingColumn": 14,
+          "startingLine": 739
+        }
+      },
+      {
+        "comment": "",
+        "key": "Street Context",
+        "location": {
+          "startingColumn": 13,
+          "startingLine": 747
+        }
+      },
+      {
+        "comment": "",
+        "key": "Spoken Intersections",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 761
+        }
+      },
+      {
+        "comment": "",
+        "key": "Show 2nd and 3rd Controls",
+        "location": {
+          "startingColumn": 13,
+          "startingLine": 765
+        }
+      },
+      {
+        "comment": "",
+        "key": "Toggles the visibility of the menu chevrons",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 767
+        }
+      },
+      {
+        "comment": "",
+        "key": "Spoken Intersections",
+        "location": {
+          "startingColumn": 12,
+          "startingLine": 751
+        }
+      },
+      {
+        "comment": "",
+        "key": "Include crossings",
+        "location": {
+          "startingColumn": 13,
+          "startingLine": 778
+        }
+      },
+      {
+        "comment": "",
+        "key": "Include walking paths",
+        "location": {
+          "startingColumn": 13,
+          "startingLine": 780
+        }
+      },
+      {
+        "comment": "",
+        "key": "Opens Mail so you can send feedback about Intersector.",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 802
+        }
+      },
+      {
+        "comment": "",
+        "key": "Acknowledgements",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 806
+        }
+      },
+      {
+        "comment": "",
+        "key": "Send Intersector Feedback",
+        "location": {
+          "startingColumn": 12,
+          "startingLine": 798
+        }
+      },
+      {
+        "comment": "",
+        "key": "Opens in external browser",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 907
+        }
+      },
+      {
+        "comment": "",
+        "key": "Special thanks to Jen Walz for inspiring the creation of this app!",
+        "location": {
+          "startingColumn": 13,
+          "startingLine": 808
+        }
+      },
+      {
+        "comment": "",
+        "key": "Map data from OpenStreetMap, available under the Open Database License.",
+        "location": {
+          "startingColumn": 13,
+          "startingLine": 811
+        }
+      },
+      {
+        "comment": "",
+        "key": "OpenStreetMap copyright and licence",
+        "location": {
+          "startingColumn": 9,
+          "startingLine": 815
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 13,
+          "startingLine": 839
+        }
+      }
+    ]
+  },
+  "version": 1
+}

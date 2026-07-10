@@ -5,10 +5,10 @@
 //  Created by Marco Salsiccia on 6/7/26.
 //
 
+import AVFoundation
 import MessageUI
 import SwiftUI
 import WatchConnectivity
-import AudioToolbox
 
 private enum SettingsFocusTarget: Hashable {
 	case neighborhood
@@ -29,8 +29,55 @@ private enum SettingsFocusTarget: Hashable {
 private let lookupLoadingText = "Intersecting..."
 
 private enum LoadingTone {
+	private static var player: AVAudioPlayer?
+
 	static func play() {
-		AudioServicesPlaySystemSound(1104)
+		do {
+			if player == nil {
+				player = try AVAudioPlayer(data: cueData())
+				player?.volume = 0.18
+				player?.prepareToPlay()
+			}
+			player?.currentTime = 0
+			player?.play()
+		} catch {}
+	}
+
+	private static func cueData() -> Data {
+		let sampleRate = 22_050
+		let duration = 0.14
+		let frameCount = Int(Double(sampleRate) * duration)
+		let dataSize = frameCount * MemoryLayout<Int16>.size
+		var data = Data()
+		data.append(contentsOf: "RIFF".utf8)
+		data.append(UInt32(36 + dataSize).littleEndianData)
+		data.append(contentsOf: "WAVEfmt ".utf8)
+		data.append(UInt32(16).littleEndianData)
+		data.append(UInt16(1).littleEndianData)
+		data.append(UInt16(1).littleEndianData)
+		data.append(UInt32(sampleRate).littleEndianData)
+		data.append(UInt32(sampleRate * MemoryLayout<Int16>.size).littleEndianData)
+		data.append(UInt16(MemoryLayout<Int16>.size).littleEndianData)
+		data.append(UInt16(16).littleEndianData)
+		data.append(contentsOf: "data".utf8)
+		data.append(UInt32(dataSize).littleEndianData)
+
+		for index in 0..<frameCount {
+			let progress = Double(index) / Double(frameCount)
+			let envelope = sin(progress * .pi)
+			let angle = 2 * Double.pi * 660 * Double(index) / Double(sampleRate)
+			let sample = Int16(sin(angle) * envelope * 4_000)
+			data.append(sample.littleEndianData)
+		}
+
+		return data
+	}
+}
+
+private extension FixedWidthInteger {
+	var littleEndianData: Data {
+		var value = littleEndian
+		return Data(bytes: &value, count: MemoryLayout<Self>.size)
 	}
 }
 

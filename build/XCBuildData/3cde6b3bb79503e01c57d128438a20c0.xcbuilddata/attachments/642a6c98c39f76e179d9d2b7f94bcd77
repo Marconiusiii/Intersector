@@ -1,0 +1,91 @@
+{
+  "" : {
+    "const-values" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/Intersector-primary.swiftconstvalues",
+    "dependencies" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/Intersector-primary.d",
+    "diagnostics" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/Intersector-primary.dia",
+    "emit-module-dependencies" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/Intersector-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/Intersector-primary-emit-module.dia",
+    "pch" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/Intersector-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/Intersector-primary.swiftdeps"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/GeneratedAssetSymbols.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/crossStreet/AppPrefs.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/AppPrefs.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/AppPrefs.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/AppPrefs.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/crossStreet/ContentView.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/ContentView.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/ContentView.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/ContentView.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/crossStreet/CrossStreetIntents.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/CrossStreetIntents.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/CrossStreetIntents.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/CrossStreetIntents.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/crossStreet/HapticFeedback.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/HapticFeedback.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/HapticFeedback.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/HapticFeedback.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/crossStreet/IntersectionFinder.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/IntersectionFinder.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/IntersectionFinder.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/IntersectionFinder.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/crossStreet/LocationProvider.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/LocationProvider.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/LocationProvider.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/LocationProvider.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/crossStreet/MailComposerView.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/MailComposerView.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/MailComposerView.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/MailComposerView.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/crossStreet/MapDataClient.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/MapDataClient.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/MapDataClient.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/MapDataClient.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/crossStreet/NeighborhoodProvider.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/NeighborhoodProvider.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/NeighborhoodProvider.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/NeighborhoodProvider.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/crossStreet/OnboardingView.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/OnboardingView.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/OnboardingView.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/OnboardingView.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/crossStreet/OrientSvc.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/OrientSvc.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/OrientSvc.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/OrientSvc.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/crossStreet/OrientationReport.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/OrientationReport.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/OrientationReport.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/OrientationReport.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/crossStreet/PointScanController.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/PointScanController.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/PointScanController.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/PointScanController.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/crossStreet/VoiceOverAnnouncer.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/VoiceOverAnnouncer.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/VoiceOverAnnouncer.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/VoiceOverAnnouncer.o"
+  },
+  "/Users/pallas/Documents/coding/crossStreet/crossStreet/crossStreetApp.swift" : {
+    "index-unit-output-path" : "/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/crossStreetApp.o",
+    "llvm-bc" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/crossStreetApp.bc",
+    "object" : "/Users/pallas/Documents/coding/crossStreet/build/crossStreet.build/Release-iphoneos/Intersector.build/Objects-normal/arm64/crossStreetApp.o"
+  }
+}
