@@ -145,25 +145,35 @@ private enum LoadingThrobber {
 			return
 		}
 		hapticTask = Task { @MainActor in
-			let startTime = ContinuousClock.now
-			let clock = ContinuousClock()
-			let pulses: [(offset: Duration, intensity: Double)] = [
-				(.milliseconds(120), 0.95),
-				(.milliseconds(480), 0.55),
-				(.milliseconds(860), 0.25)
+			let pulses: [(offset: TimeInterval, intensity: Double)] = [
+				(0.12, 0.95),
+				(0.48, 0.55),
+				(0.86, 0.25)
 			]
-			var loopIndex = 0
+			var firedPulseIndexes = Set<Int>()
+			var previousPlaybackTime: TimeInterval = 0
 			while !Task.isCancelled {
-				let loopOffset = Duration.milliseconds(Int(loopDuration * 1_000) * loopIndex)
-				for pulse in pulses {
-					let targetTime = startTime + loopOffset + pulse.offset
-					if clock.now < targetTime {
-						try? await Task.sleep(until: targetTime, clock: clock)
-					}
-					guard !Task.isCancelled else { return }
-					HapticFeedback().pulse(intensity: pulse.intensity)
+				guard
+					let player,
+					player.isPlaying
+				else {
+					try? await Task.sleep(for: .milliseconds(20))
+					continue
 				}
-				loopIndex += 1
+				let playbackTime = player.currentTime
+				if playbackTime < previousPlaybackTime || playbackTime < 0.08 {
+					firedPulseIndexes.removeAll()
+				}
+				for (index, pulse) in pulses.enumerated() where
+					playbackTime >= pulse.offset &&
+					previousPlaybackTime < pulse.offset &&
+					!firedPulseIndexes.contains(index)
+				{
+					HapticFeedback().pulse(intensity: pulse.intensity)
+					firedPulseIndexes.insert(index)
+				}
+				previousPlaybackTime = playbackTime
+				try? await Task.sleep(for: .milliseconds(16))
 			}
 		}
 	}
