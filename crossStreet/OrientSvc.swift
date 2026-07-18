@@ -28,11 +28,16 @@ enum OrientError: LocalizedError {
 protocol LocationProviding {
 	func currentContext() async throws -> DeviceContext
 	func currentContext(requiresFreshHeading: Bool) async throws -> DeviceContext
+	func prewarmContext(timeout: TimeInterval) async -> Bool
 }
 
 extension LocationProviding {
 	func currentContext(requiresFreshHeading: Bool) async throws -> DeviceContext {
 		try await currentContext()
+	}
+
+	func prewarmContext(timeout: TimeInterval) async -> Bool {
+		false
 	}
 }
 
@@ -80,6 +85,10 @@ struct OrientSvc {
 		mapDataClient: MapDataClient(),
 		neighborhoodProvider: NeighborhoodProvider()
 	)
+
+	func prewarmLocation(timeout: TimeInterval = 4) async -> Bool {
+		await locationProvider.prewarmContext(timeout: timeout)
+	}
 
 	func report(
 		_ kind: ReportKind,

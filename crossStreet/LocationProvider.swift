@@ -16,6 +16,8 @@ final class LocationProvider: NSObject, LocationProviding {
 	private var bestActiveLocation: CLLocation?
 	private var latestLocation: CLLocation?
 	private var authorizationContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
+	private var prewarmContinuation: CheckedContinuation<Bool, Never>?
+	private var prewarmTimeoutTask: Task<Void, Never>?
 	private var headingContinuation: CheckedContinuation<CLLocationDirection, Error>?
 	private var headingTimeoutTask: Task<Void, Never>?
 	private var latestHeading: CLLocationDirection?
@@ -65,7 +67,7 @@ final class LocationProvider: NSObject, LocationProviding {
 			}
 		}
 
-		if let location = latestLocation, isRecentEnough(location), isIdeal(location) {
+		if let location = latestLocation, isRecentEnough(location), isUsable(location) {
 			let context = DeviceContext(
 				coordinate: location.coordinate,
 				headingDegrees: latestHeading
@@ -97,6 +99,43 @@ final class LocationProvider: NSObject, LocationProviding {
 			}
 		default:
 			return manager.authorizationStatus
+		}
+	}
+
+	func prewarmContext(timeout: TimeInterval = 4) async -> Bool {
+		switch manager.authorizationStatus {
+		case .notDetermined:
+			let status = await requestWhenInUseAuthorization()
+			guard status == .authorizedAlways || status == .authorizedWhenInUse else {
+				return false
+			}
+		case .authorizedAlways, .authorizedWhenInUse:
+			break
+		case .denied, .restricted:
+			return false
+		@unknown default:
+			return false
+		}
+
+		if let location = latestLocation, isRecentEnough(location), isUsable(location) {
+			return true
+		}
+
+		return await withCheckedContinuation { continuation in
+			prewarmContinuation = continuation
+			prewarmTimeoutTask?.cancel()
+			prewarmTimeoutTask = Task { [weak self] in
+				let nanoseconds = UInt64(timeout * 1_000_000_000)
+				try? await Task.sleep(nanoseconds: nanoseconds)
+				await MainActor.run {
+					guard let self else {
+						return
+					}
+					let hasUsableLocation = bestActiveLocation.map(isUsable) ?? false
+					finishPrewarm(success: hasUsableLocation)
+				}
+			}
+			manager.startUpdatingLocation()
 		}
 	}
 
@@ -161,6 +200,19 @@ final class LocationProvider: NSObject, LocationProviding {
 		case .failure(let error):
 			continuation.resume(throwing: error)
 		}
+	}
+
+	private func finishPrewarm(success: Bool) {
+		guard let prewarmContinuation else {
+			return
+		}
+		self.prewarmContinuation = nil
+		prewarmTimeoutTask?.cancel()
+		prewarmTimeoutTask = nil
+		if continuation == nil {
+			manager.stopUpdatingLocation()
+		}
+		prewarmContinuation.resume(returning: success)
 	}
 
 	private func finishWithBestLocationOrFailure() {
@@ -251,11 +303,12 @@ extension LocationProvider: CLLocationManagerDelegate {
 
 		switch manager.authorizationStatus {
 		case .authorizedAlways, .authorizedWhenInUse:
-			if continuation != nil {
+			if continuation != nil || prewarmContinuation != nil {
 				manager.startUpdatingLocation()
 			}
 		case .denied, .restricted:
 			finish(with: .failure(CLError(.denied)))
+			finishPrewarm(success: false)
 		default:
 			break
 		}
@@ -272,6 +325,10 @@ extension LocationProvider: CLLocationManagerDelegate {
 
 		for location in locations {
 			consider(location)
+		}
+
+		if let bestActiveLocation, isUsable(bestActiveLocation) {
+			finishPrewarm(success: true)
 		}
 
 		if let bestActiveLocation, isIdeal(bestActiveLocation) {

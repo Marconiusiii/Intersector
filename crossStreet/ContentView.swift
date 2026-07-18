@@ -27,6 +27,7 @@ private enum SettingsFocusTarget: Hashable {
 }
 
 private let lookupLoadingText = "Intersecting..."
+private let readyText = "Intersector Ready."
 
 @MainActor
 private enum LoadingThrobber {
@@ -192,6 +193,100 @@ private extension FixedWidthInteger {
 	}
 }
 
+@MainActor
+private enum ReadyEarcon {
+	private static var player: AVAudioPlayer?
+
+	static func play() {
+		do {
+			player = try AVAudioPlayer(data: cueData())
+			player?.volume = 0.16
+			player?.prepareToPlay()
+			player?.play()
+		} catch {}
+	}
+
+	private static func cueData() -> Data {
+		let sampleRate = 22_050
+		let duration = 0.86
+		let frameCount = Int(Double(sampleRate) * duration)
+		let dataSize = frameCount * MemoryLayout<Int16>.size
+		var data = Data()
+		data.append(contentsOf: "RIFF".utf8)
+		data.append(UInt32(36 + dataSize).littleEndianData)
+		data.append(contentsOf: "WAVEfmt ".utf8)
+		data.append(UInt32(16).littleEndianData)
+		data.append(UInt16(1).littleEndianData)
+		data.append(UInt16(1).littleEndianData)
+		data.append(UInt32(sampleRate).littleEndianData)
+		data.append(UInt32(sampleRate * MemoryLayout<Int16>.size).littleEndianData)
+		data.append(UInt16(MemoryLayout<Int16>.size).littleEndianData)
+		data.append(UInt16(16).littleEndianData)
+		data.append(contentsOf: "data".utf8)
+		data.append(UInt32(dataSize).littleEndianData)
+
+		var samples: [Double] = []
+		samples.reserveCapacity(frameCount)
+		for index in 0..<frameCount {
+			let time = Double(index) / Double(sampleRate)
+			let pad = readyPadValue(time: time) * 0.09
+			let pulses = readyPulse(time: time, start: 0.08, frequency: 494, gain: 0.55)
+				+ readyPulse(time: time, start: 0.28, frequency: 660, gain: 0.62)
+				+ readyPulse(time: time, start: 0.50, frequency: 880, gain: 0.48)
+			samples.append(pad + pulses)
+		}
+
+		let echoedSamples = samples.addingEcho(
+			sampleRate: sampleRate,
+			taps: [
+				(delay: 0.12, gain: 0.18),
+				(delay: 0.25, gain: 0.08)
+			]
+		)
+		for value in echoedSamples {
+			let sample = Int16(max(-1, min(1, value)) * 2_100)
+			data.append(sample.littleEndianData)
+		}
+		return data
+	}
+
+	private static func readyPadValue(time: Double) -> Double {
+		let fadeIn = min(1, time / 0.18)
+		let fadeOut = min(1, max(0, (0.82 - time) / 0.28))
+		let envelope = max(0, min(fadeIn, fadeOut))
+		let base = sin(2 * Double.pi * 247 * time)
+		let shimmer = sin(2 * Double.pi * 330 * time) * 0.28
+		return (base + shimmer) * envelope * 0.12
+	}
+
+	private static func readyPulse(
+		time: Double,
+		start: Double,
+		frequency: Double,
+		gain: Double
+	) -> Double {
+		let attack = 0.02
+		let sustain = 0.05
+		let decay = 0.18
+		let duration = attack + sustain + decay
+		guard time >= start, time <= start + duration else {
+			return 0
+		}
+		let localTime = time - start
+		let envelope: Double
+		if localTime <= attack {
+			envelope = localTime / attack
+		} else if localTime <= attack + sustain {
+			envelope = 1
+		} else {
+			let decayProgress = (localTime - attack - sustain) / decay
+			envelope = max(0, 1 - decayProgress)
+		}
+		let angle = 2 * Double.pi * frequency * localTime
+		return sin(angle) * envelope * gain
+	}
+}
+
 private extension Array where Element == Double {
 	func addingEcho(
 		sampleRate: Int,
@@ -328,7 +423,7 @@ struct ContentView: View {
 	@State private var isDirectionLoading = false
 	@State private var isShowingSettings = false
 	@State private var isShowingMailComposer = false
-	@State private var hasLoadedInitialReport = false
+	@State private var hasPreparedInitialLocation = false
 	@State private var onboardingLocationProvider = LocationProvider()
 	@State private var directionLocationProvider = LocationProvider()
 	@StateObject private var pointScanner = PointScanController()
@@ -449,8 +544,9 @@ struct ContentView: View {
 				settingsView
 			}
 			.onAppear {
-				loadInitialReportIfNeeded()
-				startRequestedPointScanIfNeeded()
+				if !startRequestedPointScanIfNeeded() {
+					prepareInitialLocationIfNeeded()
+				}
 				watchSettingsSync.sync(watchSettingsPayload)
 			}
 			.onChange(of: watchSettingsPayload.signature) { _, _ in
@@ -1128,24 +1224,32 @@ struct ContentView: View {
 		isDirectionLoading = false
 	}
 
-	private func loadInitialReportIfNeeded() {
-		guard !hasLoadedInitialReport else {
+	private func prepareInitialLocationIfNeeded() {
+		guard !hasPreparedInitialLocation else {
 			return
 		}
-		hasLoadedInitialReport = true
+		hasPreparedInitialLocation = true
 		Task {
-			await updateReport(.nearest)
+			let isReady = await OrientSvc.shared.prewarmLocation()
+			guard isReady, statusText != readyText else {
+				return
+			}
+			ReadyEarcon.play()
+			statusText = readyText
+			VoiceOverAnnouncer.reportUpdated(readyText)
 		}
 	}
 
-	private func startRequestedPointScanIfNeeded() {
+	@discardableResult
+	private func startRequestedPointScanIfNeeded() -> Bool {
 		guard UserDefaults.standard.bool(forKey: LaunchKeys.startPointScan) else {
-			return
+			return false
 		}
 		UserDefaults.standard.set(false, forKey: LaunchKeys.startPointScan)
 		pointScanner.setScanning(true, prefs: prefs) { text in
 			statusText = text
 		}
+		return true
 	}
 
 	private var appFooterText: String {
