@@ -483,6 +483,7 @@ struct ContentView: View {
 	@State private var isLoading = false
 	@State private var isDirectionLoading = false
 	@State private var isStartupLoading = false
+	@State private var isLookupProgressVisible = false
 	@State private var isShowingSettings = false
 	@State private var isShowingMailComposer = false
 	@State private var hasPreparedInitialLocation = false
@@ -706,7 +707,7 @@ struct ContentView: View {
 
 	private var currentInfoBody: some View {
 		HStack(alignment: .firstTextBaseline, spacing: 10) {
-			if isStartupLoading {
+			if isStartupLoading || isLookupProgressVisible {
 				ProgressView()
 					.tint(Color.crossAccent)
 					.controlSize(.regular)
@@ -1249,6 +1250,7 @@ struct ContentView: View {
 			do {
 				try await Task.sleep(for: .milliseconds(800))
 				statusText = lookupLoadingText
+				isLookupProgressVisible = true
 				LoadingThrobber.start(hapticsEnabled: prefs.haptics)
 			} catch {}
 		}
@@ -1261,11 +1263,13 @@ struct ContentView: View {
 			}
 			loadingTask.cancel()
 			LoadingThrobber.stop()
+			isLookupProgressVisible = false
 			statusText = text
 			VoiceOverAnnouncer.reportUpdated(text)
 		} catch {
 			loadingTask.cancel()
 			LoadingThrobber.stop()
+			isLookupProgressVisible = false
 			let text = "Unable to update \(reportLabel(kind, rank: rank)). \(error.localizedDescription)"
 			statusText = text
 			VoiceOverAnnouncer.reportUpdated(text)
