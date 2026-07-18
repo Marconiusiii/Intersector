@@ -28,6 +28,7 @@ private enum SettingsFocusTarget: Hashable {
 }
 
 private let lookupLoadingText = "Intersecting..."
+private let startupLoadingText = "Loading Intersector."
 private let readyText = "Intersector Ready."
 
 @MainActor
@@ -201,7 +202,7 @@ private enum ReadyEarcon {
 	static func play() {
 		do {
 			player = try AVAudioPlayer(data: cueData())
-			player?.volume = 0.16
+			player?.volume = 0.24
 			player?.prepareToPlay()
 			player?.play()
 		} catch {}
@@ -426,6 +427,7 @@ struct ContentView: View {
 	@State private var statusText = "Choose an action."
 	@State private var isLoading = false
 	@State private var isDirectionLoading = false
+	@State private var isStartupLoading = false
 	@State private var isShowingSettings = false
 	@State private var isShowingMailComposer = false
 	@State private var hasPreparedInitialLocation = false
@@ -612,12 +614,12 @@ struct ContentView: View {
 			if dynamicTypeSize.isAccessibilitySize {
 				VStack(alignment: .leading, spacing: 8) {
 					currentInfoHeading
-					currentInfoText
+					currentInfoBody
 				}
 			} else {
 				HStack(alignment: .firstTextBaseline, spacing: 16) {
 					currentInfoHeading
-					currentInfoText
+					currentInfoBody
 				}
 			}
 		}
@@ -645,6 +647,18 @@ struct ContentView: View {
 			.lineLimit(nil)
 			.textSelection(.enabled)
 			.fixedSize(horizontal: false, vertical: true)
+	}
+
+	private var currentInfoBody: some View {
+		HStack(alignment: .firstTextBaseline, spacing: 10) {
+			if isStartupLoading {
+				ProgressView()
+					.tint(Color.crossAccent)
+					.controlSize(.regular)
+					.accessibilityHidden(true)
+			}
+			currentInfoText
+		}
 	}
 
 	private var nearestButton: some View {
@@ -1252,16 +1266,31 @@ struct ContentView: View {
 		}
 		hasPreparedInitialLocation = true
 		Task {
+			isStartupLoading = true
+			statusText = startupLoadingText
+			VoiceOverAnnouncer.reportUpdated(startupLoadingText)
+			LoadingThrobber.start(hapticsEnabled: prefs.haptics)
+
 			guard await OrientSvc.shared.prewarmLocation() else {
+				LoadingThrobber.stop()
+				isStartupLoading = false
+				statusText = "Choose an action."
 				return
 			}
 			let isReady = await OrientSvc.shared.prewarmInitialNearestMapData(prefs: prefs)
 			guard isReady, statusText != readyText else {
+				LoadingThrobber.stop()
+				isStartupLoading = false
 				return
 			}
+			LoadingThrobber.stop()
+			isStartupLoading = false
 			ReadyEarcon.play()
 			statusText = readyText
-			VoiceOverAnnouncer.reportUpdated(readyText)
+			Task { @MainActor in
+				try? await Task.sleep(for: .milliseconds(350))
+				VoiceOverAnnouncer.reportUpdated(readyText)
+			}
 		}
 	}
 
