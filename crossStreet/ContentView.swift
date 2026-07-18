@@ -32,6 +32,21 @@ private let startupLoadingText = "Loading Intersector."
 private let readyText = "Intersector Ready."
 
 @MainActor
+private enum IntersectorAudioSession {
+	static func prepareForFeedback() {
+		do {
+			let session = AVAudioSession.sharedInstance()
+			try session.setCategory(
+				.playback,
+				mode: .default,
+				options: [.duckOthers]
+			)
+			try session.setActive(true)
+		} catch {}
+	}
+}
+
+@MainActor
 private enum LoadingThrobber {
 	private static var player: AVAudioPlayer?
 	private static var hapticTask: Task<Void, Never>?
@@ -39,6 +54,7 @@ private enum LoadingThrobber {
 
 	static func start(hapticsEnabled: Bool) {
 		do {
+			IntersectorAudioSession.prepareForFeedback()
 			if player == nil {
 				player = try AVAudioPlayer(data: cueData())
 				player?.volume = 0.14
@@ -198,19 +214,23 @@ private extension FixedWidthInteger {
 @MainActor
 private enum ReadyEarcon {
 	private static var player: AVAudioPlayer?
+	private static var hapticTask: Task<Void, Never>?
+	private static let noteStarts: [TimeInterval] = [0.16, 0.52, 0.92]
 
-	static func play() {
+	static func play(hapticsEnabled: Bool) {
 		do {
+			IntersectorAudioSession.prepareForFeedback()
 			player = try AVAudioPlayer(data: cueData())
-			player?.volume = 0.24
+			player?.volume = 0.42
 			player?.prepareToPlay()
 			player?.play()
 		} catch {}
+		playHapticsIfNeeded(hapticsEnabled)
 	}
 
 	private static func cueData() -> Data {
 		let sampleRate = 22_050
-		let duration = 0.86
+		let duration = 1.42
 		let frameCount = Int(Double(sampleRate) * duration)
 		let dataSize = frameCount * MemoryLayout<Int16>.size
 		var data = Data()
@@ -231,34 +251,34 @@ private enum ReadyEarcon {
 		samples.reserveCapacity(frameCount)
 		for index in 0..<frameCount {
 			let time = Double(index) / Double(sampleRate)
-			let pad = readyPadValue(time: time) * 0.09
-			let pulses = readyPulse(time: time, start: 0.08, frequency: 494, gain: 0.55)
-				+ readyPulse(time: time, start: 0.28, frequency: 660, gain: 0.62)
-				+ readyPulse(time: time, start: 0.50, frequency: 880, gain: 0.48)
+			let pad = readyPadValue(time: time) * 0.13
+			let pulses = readyPulse(time: time, start: noteStarts[0], frequency: 494, gain: 0.58)
+				+ readyPulse(time: time, start: noteStarts[1], frequency: 660, gain: 0.68)
+				+ readyPulse(time: time, start: noteStarts[2], frequency: 988, gain: 0.76)
 			samples.append(pad + pulses)
 		}
 
 		let echoedSamples = samples.addingEcho(
 			sampleRate: sampleRate,
 			taps: [
-				(delay: 0.12, gain: 0.18),
-				(delay: 0.25, gain: 0.08)
+				(delay: 0.15, gain: 0.22),
+				(delay: 0.34, gain: 0.10)
 			]
 		)
 		for value in echoedSamples {
-			let sample = Int16(max(-1, min(1, value)) * 2_100)
+			let sample = Int16(max(-1, min(1, value)) * 2_900)
 			data.append(sample.littleEndianData)
 		}
 		return data
 	}
 
 	private static func readyPadValue(time: Double) -> Double {
-		let fadeIn = min(1, time / 0.18)
-		let fadeOut = min(1, max(0, (0.82 - time) / 0.28))
+		let fadeIn = min(1, time / 0.24)
+		let fadeOut = min(1, max(0, (1.34 - time) / 0.38))
 		let envelope = max(0, min(fadeIn, fadeOut))
 		let base = sin(2 * Double.pi * 247 * time)
-		let shimmer = sin(2 * Double.pi * 330 * time) * 0.28
-		return (base + shimmer) * envelope * 0.12
+		let shimmer = sin(2 * Double.pi * 370 * time) * 0.32
+		return (base + shimmer) * envelope * 0.15
 	}
 
 	private static func readyPulse(
@@ -267,9 +287,9 @@ private enum ReadyEarcon {
 		frequency: Double,
 		gain: Double
 	) -> Double {
-		let attack = 0.02
-		let sustain = 0.05
-		let decay = 0.18
+		let attack = 0.028
+		let sustain = 0.08
+		let decay = 0.24
 		let duration = attack + sustain + decay
 		guard time >= start, time <= start + duration else {
 			return 0
@@ -286,6 +306,31 @@ private enum ReadyEarcon {
 		}
 		let angle = 2 * Double.pi * frequency * localTime
 		return sin(angle) * envelope * gain
+	}
+
+	private static func playHapticsIfNeeded(_ isEnabled: Bool) {
+		hapticTask?.cancel()
+		guard isEnabled else {
+			hapticTask = nil
+			return
+		}
+		hapticTask = Task { @MainActor in
+			let clock = ContinuousClock()
+			let startTime = clock.now
+			let pulses: [(offset: Duration, intensity: Double)] = [
+				(.milliseconds(Int(noteStarts[0] * 1_000)), 0.25),
+				(.milliseconds(Int(noteStarts[1] * 1_000)), 0.55),
+				(.milliseconds(Int(noteStarts[2] * 1_000)), 0.95)
+			]
+			for pulse in pulses {
+				let targetTime = startTime + pulse.offset
+				if clock.now < targetTime {
+					try? await Task.sleep(until: targetTime, clock: clock)
+				}
+				guard !Task.isCancelled else { return }
+				HapticFeedback().pulse(intensity: pulse.intensity)
+			}
+		}
 	}
 }
 
@@ -1285,10 +1330,10 @@ struct ContentView: View {
 			}
 			LoadingThrobber.stop()
 			isStartupLoading = false
-			ReadyEarcon.play()
+			ReadyEarcon.play(hapticsEnabled: prefs.haptics)
 			statusText = readyText
 			Task { @MainActor in
-				try? await Task.sleep(for: .milliseconds(350))
+				try? await Task.sleep(for: .milliseconds(1_350))
 				VoiceOverAnnouncer.reportUpdated(readyText)
 			}
 		}
