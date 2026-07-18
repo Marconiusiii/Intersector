@@ -68,15 +68,18 @@ struct AnnouncementOptions: Equatable, Hashable, Sendable {
 	var includeDistance = true
 	var includeDirection = true
 	var includeNeighborhood = true
+	var includeIntersectionDetails = false
 
 	nonisolated init(
 		includeDistance: Bool = true,
 		includeDirection: Bool = true,
-		includeNeighborhood: Bool = true
+		includeNeighborhood: Bool = true,
+		includeIntersectionDetails: Bool = false
 	) {
 		self.includeDistance = includeDistance
 		self.includeDirection = includeDirection
 		self.includeNeighborhood = includeNeighborhood
+		self.includeIntersectionDetails = includeIntersectionDetails
 	}
 
 	@MainActor
@@ -84,13 +87,15 @@ struct AnnouncementOptions: Equatable, Hashable, Sendable {
 		let hasExplicitOptions =
 			defaults.object(forKey: "includeAnnouncementDistance") != nil ||
 			defaults.object(forKey: "includeAnnouncementDirection") != nil ||
-			defaults.object(forKey: "includeAnnouncementNeighborhood") != nil
+			defaults.object(forKey: "includeAnnouncementNeighborhood") != nil ||
+			defaults.object(forKey: "includeIntersectionDetails") != nil
 
 		if hasExplicitOptions {
 			return AnnouncementOptions(
 				includeDistance: defaults.object(forKey: "includeAnnouncementDistance") as? Bool ?? true,
 				includeDirection: defaults.object(forKey: "includeAnnouncementDirection") as? Bool ?? true,
-				includeNeighborhood: defaults.object(forKey: "includeAnnouncementNeighborhood") as? Bool ?? true
+				includeNeighborhood: defaults.object(forKey: "includeAnnouncementNeighborhood") as? Bool ?? true,
+				includeIntersectionDetails: defaults.object(forKey: "includeIntersectionDetails") as? Bool ?? false
 			)
 		}
 

@@ -93,34 +93,39 @@ struct WatchAnnouncementOptions: Equatable, Hashable {
 	var includeDistance = true
 	var includeDirection = true
 	var includeNeighborhood = true
+	var includeIntersectionDetails = false
 
 	nonisolated init(
 		includeDistance: Bool = true,
 		includeDirection: Bool = true,
-		includeNeighborhood: Bool = true
+		includeNeighborhood: Bool = true,
+		includeIntersectionDetails: Bool = false
 	) {
 		self.includeDistance = includeDistance
 		self.includeDirection = includeDirection
 		self.includeNeighborhood = includeNeighborhood
+		self.includeIntersectionDetails = includeIntersectionDetails
 	}
 
 	nonisolated static func saved(from defaults: UserDefaults) -> WatchAnnouncementOptions {
 		let hasExplicitOptions =
 			defaults.object(forKey: "includeAnnouncementDistance") != nil ||
 			defaults.object(forKey: "includeAnnouncementDirection") != nil ||
-			defaults.object(forKey: "includeAnnouncementNeighborhood") != nil
+			defaults.object(forKey: "includeAnnouncementNeighborhood") != nil ||
+			defaults.object(forKey: "includeIntersectionDetails") != nil
 		guard hasExplicitOptions else {
 			return WatchAnnouncementOptions()
 		}
 		return WatchAnnouncementOptions(
 			includeDistance: defaults.object(forKey: "includeAnnouncementDistance") as? Bool ?? true,
 			includeDirection: defaults.object(forKey: "includeAnnouncementDirection") as? Bool ?? true,
-			includeNeighborhood: defaults.object(forKey: "includeAnnouncementNeighborhood") as? Bool ?? true
+			includeNeighborhood: defaults.object(forKey: "includeAnnouncementNeighborhood") as? Bool ?? true,
+			includeIntersectionDetails: defaults.object(forKey: "includeIntersectionDetails") as? Bool ?? false
 		)
 	}
 
 	var speaksIntersectionNamesOnly: Bool {
-		!includeDistance && !includeDirection && !includeNeighborhood
+		!includeDistance && !includeDirection && !includeNeighborhood && !includeIntersectionDetails
 	}
 }
 
@@ -347,7 +352,8 @@ struct WatchOrientationService {
 			crossStreet: crossStreet,
 			head: WatchGeo.compassDirection(bearing),
 			area: neighborhoodContext.area,
-			toward: neighborhoodContext.toward
+			toward: neighborhoodContext.toward,
+			intersectionDetails: match.intersectionDetails
 		)
 	}
 
@@ -466,6 +472,7 @@ struct WatchOrientationReport: Equatable {
 	var head: String?
 	var area: String?
 	var toward: String?
+	var intersectionDetails: WatchIntersectionDetails? = nil
 
 	func text(with prefs: WatchAppPrefs) -> String {
 		text(with: prefs, includeLead: true, rank: nil, includeNeighborhood: true)
@@ -541,7 +548,7 @@ struct WatchOrientationReport: Equatable {
 		var text = cross
 		let details = reportDetails(with: prefs)
 		if !details.isEmpty {
-			text += ", \(details.joined(separator: " "))"
+			text += ", \(details.joined(separator: ", "))"
 		}
 		return text
 	}
@@ -555,19 +562,26 @@ struct WatchOrientationReport: Equatable {
 		guard !details.isEmpty else {
 			return "On \(street) at \(crossStreet)"
 		}
-		return "On \(street) at \(crossStreet), \(details.joined(separator: " "))"
+		return "On \(street) at \(crossStreet), \(details.joined(separator: ", "))"
 	}
 
 	private func reportDetails(with prefs: WatchAppPrefs) -> [String] {
 		var details: [String] = []
+		var travelDetails: [String] = []
 		if prefs.announcementOptions.includeDistance {
-			details.append("about \(dist)")
+			travelDetails.append("about \(dist)")
 		}
 		if
 			prefs.announcementOptions.includeDirection,
 			let direction = directionText(with: prefs)
 		{
-			details.append(direction)
+			travelDetails.append(direction)
+		}
+		if !travelDetails.isEmpty {
+			details.append(travelDetails.joined(separator: " "))
+		}
+		if prefs.announcementOptions.includeIntersectionDetails, let intersectionDetails {
+			details.append(contentsOf: intersectionDetails.spokenPhrases)
 		}
 		return details
 	}
@@ -714,6 +728,7 @@ struct WatchIntersectionCandidate: Identifiable, Equatable {
 	var names: [String]
 	var coordinate: CLLocationCoordinate2D
 	var associatedRoadNames: [String] = []
+	var intersectionDetails: WatchIntersectionDetails?
 
 	var title: String {
 		names.prefix(2).joined(separator: " and ")
@@ -726,6 +741,26 @@ struct WatchIntersectionCandidate: Identifiable, Equatable {
 	func contextLabel(on streetName: String) -> String {
 		let otherNames = names.filter { $0 != streetName }
 		return otherNames.isEmpty ? title : otherNames.joined(separator: " and ")
+	}
+}
+
+struct WatchIntersectionDetails: Equatable, Hashable {
+	var isSignalized = false
+	var hasPedestrianIsland = false
+
+	var spokenPhrases: [String] {
+		var phrases: [String] = []
+		if isSignalized {
+			phrases.append("signalized crossing")
+		}
+		if hasPedestrianIsland {
+			phrases.append("pedestrian island")
+		}
+		return phrases
+	}
+
+	var isEmpty: Bool {
+		spokenPhrases.isEmpty
 	}
 }
 
@@ -1449,7 +1484,8 @@ struct WatchIntersectionBuilder {
 					id: "crossing-\(element.id)",
 					names: ["Crossing on \(roadName) near \(anchorName)"],
 					coordinate: coordinate,
-					associatedRoadNames: [roadName]
+					associatedRoadNames: [roadName],
+					intersectionDetails: intersectionDetails(from: element.tags)
 				)
 				return candidate
 			}
@@ -1495,6 +1531,25 @@ struct WatchIntersectionBuilder {
 
 	private func isCrossing(_ tags: [String: String]?) -> Bool {
 		tags?["highway"] == "crossing" || tags?["crossing"] != nil || tags?["crossing_ref"] != nil
+	}
+
+	private func intersectionDetails(from tags: [String: String]?) -> WatchIntersectionDetails? {
+		guard let tags else {
+			return nil
+		}
+		let crossing = tags["crossing"]?.lowercased()
+		let details = WatchIntersectionDetails(
+			isSignalized: crossing == "traffic_signals" || isPositive(tags["crossing:signals"]),
+			hasPedestrianIsland: crossing == "island" || isPositive(tags["crossing:island"])
+		)
+		return details.isEmpty ? nil : details
+	}
+
+	private func isPositive(_ value: String?) -> Bool {
+		guard let value = value?.lowercased() else {
+			return false
+		}
+		return ["yes", "true", "1"].contains(value)
 	}
 }
 

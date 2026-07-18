@@ -19,6 +19,7 @@ private enum SettingsFocusTarget: Hashable {
 	case announcementDistance
 	case announcementDirection
 	case announcementNeighborhood
+	case intersectionDetails
 	case intersectionWording
 	case spokenIntersections
 	case rankedControls
@@ -315,6 +316,7 @@ private struct WatchSettingsPayload {
 	let includeAnnouncementDistance: Bool
 	let includeAnnouncementDirection: Bool
 	let includeAnnouncementNeighborhood: Bool
+	let includeIntersectionDetails: Bool
 	let includeCrossings: Bool
 	let includeWalkingPaths: Bool
 	let manhattanSnobMode: Bool
@@ -329,6 +331,7 @@ private struct WatchSettingsPayload {
 			String(includeAnnouncementDistance),
 			String(includeAnnouncementDirection),
 			String(includeAnnouncementNeighborhood),
+			String(includeIntersectionDetails),
 			String(includeCrossings),
 			String(includeWalkingPaths),
 			String(manhattanSnobMode)
@@ -345,6 +348,7 @@ private struct WatchSettingsPayload {
 			"includeAnnouncementDistance": includeAnnouncementDistance,
 			"includeAnnouncementDirection": includeAnnouncementDirection,
 			"includeAnnouncementNeighborhood": includeAnnouncementNeighborhood,
+			"includeIntersectionDetails": includeIntersectionDetails,
 			"includeCrossings": includeCrossings,
 			"includeWalkingPaths": includeWalkingPaths,
 			"manhattanSnobMode": manhattanSnobMode
@@ -407,6 +411,7 @@ struct ContentView: View {
 	@AppStorage("includeAnnouncementDistance") private var includeAnnouncementDistance = true
 	@AppStorage("includeAnnouncementDirection") private var includeAnnouncementDirection = true
 	@AppStorage("includeAnnouncementNeighborhood") private var includeAnnouncementNeighborhood = true
+	@AppStorage("includeIntersectionDetails") private var includeIntersectionDetails = false
 	@AppStorage("includeCrossings") private var includeCrossings = false
 	@AppStorage("includeWalkingPaths") private var includeWalkingPaths = false
 	@AppStorage("hapticsEnabled") private var hapticsEnabled = true
@@ -440,7 +445,8 @@ struct ContentView: View {
 			announcementOptions: AnnouncementOptions(
 				includeDistance: includeAnnouncementDistance,
 				includeDirection: includeAnnouncementDirection,
-				includeNeighborhood: includeAnnouncementNeighborhood
+				includeNeighborhood: includeAnnouncementNeighborhood,
+				includeIntersectionDetails: includeIntersectionDetails
 			),
 			mapDetails: MapDetailOptions(
 				includeCrossings: includeCrossings,
@@ -461,6 +467,7 @@ struct ContentView: View {
 			includeAnnouncementDistance: includeAnnouncementDistance,
 			includeAnnouncementDirection: includeAnnouncementDirection,
 			includeAnnouncementNeighborhood: includeAnnouncementNeighborhood,
+			includeIntersectionDetails: includeIntersectionDetails,
 			includeCrossings: includeCrossings,
 			includeWalkingPaths: includeWalkingPaths,
 			manhattanSnobMode: manhattanSnobMode
@@ -821,19 +828,32 @@ struct ContentView: View {
 		}
 	}
 
+	private var intersectionDetailsBinding: Binding<Bool> {
+		Binding {
+			includeIntersectionDetails
+		} set: { isEnabled in
+			includeIntersectionDetails = isEnabled
+			settingsFocusTarget = .intersectionDetails
+		}
+	}
+
 	private var announcementSampleText: String {
 		let report = OrientReport(
 			kind: .nearest,
-			cross: "Amsterdam Avenue and West 94th Street",
+			cross: "Crossing on Amsterdam Avenue near West 94th Street",
 			dist: "120 feet",
 			relDir: "ahead",
 			relDegrees: 0,
 			street: "Amsterdam Avenue",
-			crossStreet: "West 94th Street",
+			crossStreet: nil,
 			head: "north",
 			area: "Upper West Side",
 			toward: "Manhattan Valley",
-			conf: .high
+			conf: .high,
+			intersectionDetails: IntersectionDetails(
+				isSignalized: true,
+				hasPedestrianIsland: true
+			)
 		)
 		return "Sample: \(report.text(with: prefs))"
 	}
@@ -973,6 +993,8 @@ struct ContentView: View {
 					Toggle("Street Context", isOn: streetContextBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .intersectionWording)
 					settingsHelperText(intersectionWordingDescription)
+					Toggle("Intersection Details", isOn: intersectionDetailsBinding)
+						.accessibilityFocused($settingsFocusTarget, equals: .intersectionDetails)
 					VStack(alignment: .leading, spacing: 8) {
 						Text("Spoken Intersections")
 							.foregroundStyle(Color.crossText)
@@ -1230,7 +1252,10 @@ struct ContentView: View {
 		}
 		hasPreparedInitialLocation = true
 		Task {
-			let isReady = await OrientSvc.shared.prewarmLocation()
+			guard await OrientSvc.shared.prewarmLocation() else {
+				return
+			}
+			let isReady = await OrientSvc.shared.prewarmInitialNearestMapData(prefs: prefs)
 			guard isReady, statusText != readyText else {
 				return
 			}

@@ -54,6 +54,7 @@ private final class WatchSettingsReceiver: NSObject, WCSessionDelegate {
 		setBool("includeAnnouncementDistance", from: settings, in: defaults)
 		setBool("includeAnnouncementDirection", from: settings, in: defaults)
 		setBool("includeAnnouncementNeighborhood", from: settings, in: defaults)
+		setBool("includeIntersectionDetails", from: settings, in: defaults)
 		setBool("includeCrossings", from: settings, in: defaults)
 		setBool("includeWalkingPaths", from: settings, in: defaults)
 		setBool("manhattanSnobMode", from: settings, in: defaults)
@@ -90,6 +91,7 @@ struct WatchContentView: View {
 	@AppStorage("includeAnnouncementDistance") private var includeAnnouncementDistance = true
 	@AppStorage("includeAnnouncementDirection") private var includeAnnouncementDirection = true
 	@AppStorage("includeAnnouncementNeighborhood") private var includeAnnouncementNeighborhood = true
+	@AppStorage("includeIntersectionDetails") private var includeIntersectionDetails = false
 	@AppStorage("includeCrossings") private var includeCrossings = false
 	@AppStorage("includeWalkingPaths") private var includeWalkingPaths = false
 	@AppStorage("manhattanSnobMode") private var manhattanSnobMode = false
@@ -109,7 +111,8 @@ struct WatchContentView: View {
 			announcementOptions: WatchAnnouncementOptions(
 				includeDistance: includeAnnouncementDistance,
 				includeDirection: includeAnnouncementDirection,
-				includeNeighborhood: includeAnnouncementNeighborhood
+				includeNeighborhood: includeAnnouncementNeighborhood,
+				includeIntersectionDetails: includeIntersectionDetails
 			),
 			mapDetails: WatchMapDetailOptions(
 				includeCrossings: includeCrossings,
@@ -270,15 +273,19 @@ struct WatchContentView: View {
 	private var announcementSampleText: String {
 		let report = WatchOrientationReport(
 			kind: .nearest,
-			cross: "Amsterdam Avenue and West 94th Street",
+			cross: "Crossing on Amsterdam Avenue near West 94th Street",
 			dist: "120 feet",
 			relDir: "ahead",
 			relDegrees: 0,
 			street: "Amsterdam Avenue",
-			crossStreet: "West 94th Street",
+			crossStreet: nil,
 			head: "north",
 			area: "Upper West Side",
-			toward: "Manhattan Valley"
+			toward: "Manhattan Valley",
+			intersectionDetails: WatchIntersectionDetails(
+				isSignalized: true,
+				hasPedestrianIsland: true
+			)
 		)
 		return "Sample: \(report.text(with: prefs))"
 	}

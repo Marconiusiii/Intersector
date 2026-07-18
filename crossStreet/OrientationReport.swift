@@ -20,6 +20,7 @@ struct OrientReport: Equatable {
 	var area: String?
 	var toward: String?
 	var conf: ConfLev
+	var intersectionDetails: IntersectionDetails? = nil
 
 	func text(with prefs: AppPrefs) -> String {
 		text(with: prefs, includeLead: true)
@@ -133,7 +134,7 @@ struct OrientReport: Equatable {
 		var text = cross
 		let details = reportDetails(with: prefs)
 		if !details.isEmpty {
-			text += ", \(details.joined(separator: " "))"
+			text += ", \(details.joined(separator: ", "))"
 		}
 		return text
 	}
@@ -147,19 +148,26 @@ struct OrientReport: Equatable {
 		guard !details.isEmpty else {
 			return "On \(street) at \(crossStreet)"
 		}
-		return "On \(street) at \(crossStreet), \(details.joined(separator: " "))"
+		return "On \(street) at \(crossStreet), \(details.joined(separator: ", "))"
 	}
 
 	private func reportDetails(with prefs: AppPrefs) -> [String] {
 		var details: [String] = []
+		var travelDetails: [String] = []
 		if prefs.announcementOptions.includeDistance {
-			details.append("about \(dist)")
+			travelDetails.append("about \(dist)")
 		}
 		if
 			prefs.announcementOptions.includeDirection,
 			let direction = directionText(with: prefs)
 		{
-			details.append(direction)
+			travelDetails.append(direction)
+		}
+		if !travelDetails.isEmpty {
+			details.append(travelDetails.joined(separator: " "))
+		}
+		if prefs.announcementOptions.includeIntersectionDetails, let intersectionDetails {
+			details.append(contentsOf: intersectionDetails.spokenPhrases)
 		}
 		return details
 	}
@@ -266,7 +274,7 @@ private extension String {
 
 private extension AnnouncementOptions {
 	var speaksIntersectionNamesOnly: Bool {
-		!includeDistance && !includeDirection && !includeNeighborhood
+		!includeDistance && !includeDirection && !includeNeighborhood && !includeIntersectionDetails
 	}
 }
 
@@ -322,6 +330,7 @@ struct IntersectionCandidate: Equatable, Identifiable {
 	var names: [String]
 	var coordinate: CLLocationCoordinate2D
 	var associatedRoadNames: [String] = []
+	var intersectionDetails: IntersectionDetails?
 
 	var title: String {
 		names.prefix(2).joined(separator: " and ")
@@ -337,6 +346,26 @@ struct IntersectionCandidate: Equatable, Identifiable {
 		}
 		let otherNames = names.filter { $0 != streetName }
 		return otherNames.isEmpty ? title : otherNames.joined(separator: " and ")
+	}
+}
+
+struct IntersectionDetails: Equatable, Hashable, Sendable {
+	var isSignalized = false
+	var hasPedestrianIsland = false
+
+	var spokenPhrases: [String] {
+		var phrases: [String] = []
+		if isSignalized {
+			phrases.append("signalized crossing")
+		}
+		if hasPedestrianIsland {
+			phrases.append("pedestrian island")
+		}
+		return phrases
+	}
+
+	var isEmpty: Bool {
+		spokenPhrases.isEmpty
 	}
 }
 

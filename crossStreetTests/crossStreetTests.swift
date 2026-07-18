@@ -68,6 +68,7 @@ struct IntersectorTests {
 		defaults.set(true, forKey: "includeAnnouncementDistance")
 		defaults.set(false, forKey: "includeAnnouncementDirection")
 		defaults.set(true, forKey: "includeAnnouncementNeighborhood")
+		defaults.set(true, forKey: "includeIntersectionDetails")
 		defaults.set(true, forKey: "includeCrossings")
 		defaults.set(true, forKey: "includeWalkingPaths")
 		defaults.set(MeasurementUnit.meters.rawValue, forKey: "measurementUnit")
@@ -79,6 +80,7 @@ struct IntersectorTests {
 		#expect(prefs.announcementOptions.includeDistance)
 		#expect(!prefs.announcementOptions.includeDirection)
 		#expect(prefs.announcementOptions.includeNeighborhood)
+		#expect(prefs.announcementOptions.includeIntersectionDetails)
 		#expect(prefs.mapDetails.includeCrossings)
 		#expect(prefs.mapDetails.includeWalkingPaths)
 		#expect(prefs.measurementUnit == .meters)
@@ -335,6 +337,125 @@ struct IntersectorTests {
 		let text = report.text(with: prefs)
 
 		#expect(text == "Upcoming: Mission Street and 6th Street, about 140 feet ahead and right toward Civic Center.")
+	}
+
+	@Test func intersectionDetailsAreSpokenWhenEnabled() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.announcementOptions.includeIntersectionDetails = true
+		let report = OrientReport(
+			kind: .nearest,
+			cross: "Crossing on Main Street near Oak Street",
+			dist: "90 feet",
+			relDir: "ahead",
+			relDegrees: 0,
+			street: "Main Street",
+			head: "north",
+			area: nil,
+			toward: nil,
+			conf: .high,
+			intersectionDetails: IntersectionDetails(
+				isSignalized: true,
+				hasPedestrianIsland: true
+			)
+		)
+
+		let text = report.text(with: prefs)
+
+		#expect(
+			text ==
+				"Nearest: Crossing on Main Street near Oak Street, about 90 feet ahead, signalized crossing, pedestrian island."
+		)
+	}
+
+	@Test func intersectionDetailsAreOmittedWhenDisabled() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.announcementOptions.includeIntersectionDetails = false
+		let report = OrientReport(
+			kind: .nearest,
+			cross: "Crossing on Main Street near Oak Street",
+			dist: "90 feet",
+			relDir: "ahead",
+			relDegrees: 0,
+			street: "Main Street",
+			head: "north",
+			area: nil,
+			toward: nil,
+			conf: .high,
+			intersectionDetails: IntersectionDetails(
+				isSignalized: true,
+				hasPedestrianIsland: true
+			)
+		)
+
+		let text = report.text(with: prefs)
+
+		#expect(text == "Nearest: Crossing on Main Street near Oak Street, about 90 feet ahead.")
+	}
+
+	@Test func crossingTagsCreateIntersectionDetails() async throws {
+		let response = OverpassResponse(elements: [
+			OverpassElement(
+				type: "node",
+				id: 1,
+				lat: 37.0,
+				lon: -122.0,
+				nodes: nil,
+				tags: nil
+			),
+			OverpassElement(
+				type: "node",
+				id: 2,
+				lat: 37.0005,
+				lon: -122.0,
+				nodes: nil,
+				tags: [
+					"highway": "crossing",
+					"crossing": "traffic_signals",
+					"crossing:island": "yes"
+				]
+			),
+			OverpassElement(
+				type: "node",
+				id: 3,
+				lat: 37.001,
+				lon: -122.0,
+				nodes: nil,
+				tags: nil
+			),
+			OverpassElement(
+				type: "way",
+				id: 10,
+				lat: nil,
+				lon: nil,
+				nodes: [1, 2, 3],
+				tags: [
+					"highway": "residential",
+					"name": "Main Street"
+				]
+			),
+			OverpassElement(
+				type: "way",
+				id: 11,
+				lat: nil,
+				lon: nil,
+				nodes: [1],
+				tags: [
+					"highway": "residential",
+					"name": "Oak Street"
+				]
+			)
+		])
+
+		let mapData = IntersectionBuilder().mapData(
+			from: response,
+			options: MapDetailOptions(includeCrossings: true)
+		)
+		let crossing = try #require(mapData.intersections.first { $0.id == "crossing-2" })
+
+		#expect(crossing.intersectionDetails?.isSignalized == true)
+		#expect(crossing.intersectionDetails?.hasPedestrianIsland == true)
 	}
 
 	@Test func multipleReportsShareMatchingNeighborhoodTextOnce() async throws {
@@ -1805,6 +1926,26 @@ struct IntersectorTests {
 		let report = try await service.report(.upcoming, prefs: prefs)
 
 		#expect(report.cross == "Oak Street and First Street")
+		#expect(await mapClient.requestedRadii == [225])
+	}
+
+	@Test func initialNearestPrewarmFetchesSmallestMapRadius() async throws {
+		let mapClient = AdaptiveMapDataClient()
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(
+					coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0),
+					headingDegrees: nil,
+					horizontalAccuracy: 10
+				)
+			),
+			mapDataClient: mapClient,
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+
+		let isReady = await service.prewarmInitialNearestMapData()
+
+		#expect(isReady)
 		#expect(await mapClient.requestedRadii == [225])
 	}
 

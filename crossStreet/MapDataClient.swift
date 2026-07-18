@@ -522,7 +522,8 @@ struct IntersectionBuilder {
 					id: "crossing-\(element.id)",
 					names: ["Crossing on \(roadName) near \(anchorName)"],
 					coordinate: coordinate,
-					associatedRoadNames: [roadName]
+					associatedRoadNames: [roadName],
+					intersectionDetails: intersectionDetails(from: element.tags)
 				)
 				return candidate
 			}
@@ -585,5 +586,24 @@ struct IntersectionBuilder {
 
 	private func isCrossing(_ tags: [String: String]?) -> Bool {
 		tags?["highway"] == "crossing" || tags?["crossing"] != nil || tags?["crossing_ref"] != nil
+	}
+
+	private func intersectionDetails(from tags: [String: String]?) -> IntersectionDetails? {
+		guard let tags else {
+			return nil
+		}
+		let crossing = tags["crossing"]?.lowercased()
+		let details = IntersectionDetails(
+			isSignalized: crossing == "traffic_signals" || isPositive(tags["crossing:signals"]),
+			hasPedestrianIsland: crossing == "island" || isPositive(tags["crossing:island"])
+		)
+		return details.isEmpty ? nil : details
+	}
+
+	private func isPositive(_ value: String?) -> Bool {
+		guard let value = value?.lowercased() else {
+			return false
+		}
+		return ["yes", "true", "1"].contains(value)
 	}
 }

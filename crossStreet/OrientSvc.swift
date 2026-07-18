@@ -90,6 +90,26 @@ struct OrientSvc {
 		await locationProvider.prewarmContext(timeout: timeout)
 	}
 
+	func prewarmInitialNearestMapData(prefs: AppPrefs = AppPrefs()) async -> Bool {
+		do {
+			let context = try await locationProvider.currentContext(requiresFreshHeading: false)
+			let mapData = try await mapData(
+				for: .nearest,
+				from: context,
+				minimumCandidateCount: 1,
+				prefs: prefs
+			)
+			return hasEnoughCandidates(
+				for: .nearest,
+				from: context,
+				minimumCandidateCount: 1,
+				mapData: mapData
+			)
+		} catch {
+			return false
+		}
+	}
+
 	func report(
 		_ kind: ReportKind,
 		rank: Int = 1,
@@ -308,7 +328,8 @@ struct OrientSvc {
 			head: Geo.compassDirection(bearing),
 			area: neighborhoodContext.area,
 			toward: neighborhoodContext.toward,
-			conf: confidence(for: kind, heading: context.headingDegrees)
+			conf: confidence(for: kind, heading: context.headingDegrees),
+			intersectionDetails: match.intersectionDetails
 		)
 	}
 
