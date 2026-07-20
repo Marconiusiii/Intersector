@@ -477,7 +477,6 @@ struct ContentView: View {
 	@Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 	@Environment(\.openURL) private var openURL
 	@Environment(\.scenePhase) private var scenePhase
-	@ScaledMetric(relativeTo: .largeTitle) private var headerMinHeight: CGFloat = 88
 	@ScaledMetric(relativeTo: .title2) private var actionMinHeight: CGFloat = 76
 	@State private var statusText = "Choose an action."
 	@State private var isLoading = false
@@ -549,59 +548,62 @@ struct ContentView: View {
 
 	private var mainView: some View {
 		NavigationStack {
-			ScrollView {
-				VStack(spacing: 0) {
-					headerView
-						.frame(minHeight: headerMinHeight)
-					statusView
-					Group {
-						if showRankedControls {
-							rankedActionRow(
-								primary: nearestButton,
-								menu: rankedMenu(
-									title: "More Nearest",
-									actions: [
-										("2nd", { await updateReport(.nearest, rank: 2) }),
-										("3rd", { await updateReport(.nearest, rank: 3) })
-									]
+			GeometryReader { geometry in
+				ScrollView {
+					VStack(spacing: 0) {
+						headerView
+						statusView
+						Group {
+							if showRankedControls {
+								rankedActionRow(
+									primary: nearestButton,
+									menu: rankedMenu(
+										title: "More Nearest",
+										actions: [
+											("2nd", { await updateReport(.nearest, rank: 2) }),
+											("3rd", { await updateReport(.nearest, rank: 3) })
+										]
+									)
 								)
-							)
-						} else {
-							nearestButton
+							} else {
+								nearestButton
+							}
 						}
-					}
-					.frame(minHeight: actionMinHeight)
-					Group {
-						if showRankedControls {
-							rankedActionRow(
-								primary: upcomingButton,
-								menu: rankedMenu(
-									title: "More Upcoming",
-									actions: [
-										("2nd", { await updateReport(.upcoming, rank: 2) }),
-										("3rd", { await updateReport(.upcoming, rank: 3) })
-									]
-								)
-							)
-						} else {
-							upcomingButton
-						}
-					}
-					.frame(minHeight: actionMinHeight)
-					actionButton(
-						"Direction",
-						systemImage: "safari.fill",
-						accessibilityLabel: "My Direction",
-						accessibilityHint: "Speaks cardinal direction.",
-						isDisabled: isDirectionLoading
-					) {
-						await updateDirection()
-					}
-					.frame(minHeight: actionMinHeight)
-					pointScanToggle
 						.frame(minHeight: actionMinHeight)
+						Group {
+							if showRankedControls {
+								rankedActionRow(
+									primary: upcomingButton,
+									menu: rankedMenu(
+										title: "More Upcoming",
+										actions: [
+											("2nd", { await updateReport(.upcoming, rank: 2) }),
+											("3rd", { await updateReport(.upcoming, rank: 3) })
+										]
+									)
+								)
+							} else {
+								upcomingButton
+							}
+						}
+						.frame(minHeight: actionMinHeight)
+						actionButton(
+							"Direction",
+							systemImage: "safari.fill",
+							accessibilityLabel: "My Direction",
+							accessibilityHint: "Speaks cardinal direction.",
+							isDisabled: isDirectionLoading
+						) {
+							await updateDirection()
+						}
+						.frame(minHeight: actionMinHeight)
+						pointScanToggle
+							.frame(minHeight: actionMinHeight)
+							.frame(maxHeight: .infinity)
+					}
+					.frame(maxWidth: .infinity)
+					.frame(minHeight: geometry.size.height, alignment: .top)
 				}
-				.frame(maxWidth: .infinity)
 			}
 			.background(Color.crossBg)
 			.navigationBarTitleDisplayMode(.inline)
@@ -627,21 +629,11 @@ struct ContentView: View {
 	}
 
 	private var headerView: some View {
-		ViewThatFits(in: .horizontal) {
-			HStack {
-				appTitle
-				Spacer(minLength: 16)
-				settingsButton
-			}
-
-			VStack(alignment: .leading, spacing: 12) {
-				appTitle
-				settingsButton
-			}
+		VStack(spacing: 0) {
+			appTitle
+			settingsButton
 		}
-		.padding(.horizontal, 16)
-		.padding(.vertical, 8)
-		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+		.frame(maxWidth: .infinity, alignment: .leading)
 		.background(Color.crossBg)
 		.tint(Color.crossAccent)
 	}
@@ -653,33 +645,37 @@ struct ContentView: View {
 			.foregroundStyle(Color.crossText)
 			.lineLimit(nil)
 			.fixedSize(horizontal: false, vertical: true)
+			.padding(.horizontal, 16)
+			.padding(.vertical, 6)
+			.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+			.contentShape(Rectangle())
 			.accessibilityAddTraits(.isHeader)
 	}
 
 	private var settingsButton: some View {
-		Button("Settings") {
+		Button {
 			isShowingSettings = true
+		} label: {
+			Text("Settings")
+				.font(.body)
+				.lineLimit(nil)
+				.fixedSize(horizontal: false, vertical: true)
+				.padding(.horizontal, 16)
+				.padding(.vertical, 6)
+				.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+				.contentShape(Rectangle())
 		}
-		.font(.body)
+		.buttonStyle(.plain)
 		.foregroundStyle(Color.crossText)
-		.lineLimit(nil)
-		.fixedSize(horizontal: false, vertical: true)
 	}
 
 	private var statusView: some View {
-		VStack(alignment: .leading, spacing: 8) {
+		VStack(alignment: .leading, spacing: 0) {
 			currentInfoHeading
 			currentInfoBody
 		}
-		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-		.padding(.horizontal, 16)
-		.padding(.vertical, 10)
+		.frame(maxWidth: .infinity, alignment: .leading)
 		.background(Color.crossPanel)
-		.contentShape(Rectangle())
-		.accessibilityElement(children: .ignore)
-		.accessibilityLabel("Current Info")
-		.accessibilityValue(statusText)
-		.accessibilityAddTraits(.isHeader)
 	}
 
 	private var currentInfoHeading: some View {
@@ -688,12 +684,16 @@ struct ContentView: View {
 				.font(.title2)
 				.fontWeight(.semibold)
 				.foregroundStyle(.white)
-				.lineLimit(nil)
-				.fixedSize(horizontal: false, vertical: true)
-				.accessibilityAddTraits(.isHeader)
+			.lineLimit(nil)
+			.fixedSize(horizontal: false, vertical: true)
+			.accessibilityAddTraits(.isHeader)
 			Spacer(minLength: 8)
 			statusActivityIndicator
 		}
+		.padding(.horizontal, 16)
+		.padding(.vertical, 6)
+		.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+		.contentShape(Rectangle())
 	}
 
 	private var currentInfoText: some View {
@@ -704,6 +704,10 @@ struct ContentView: View {
 			.lineLimit(nil)
 			.textSelection(.enabled)
 			.fixedSize(horizontal: false, vertical: true)
+			.padding(.horizontal, 16)
+			.padding(.vertical, 6)
+			.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+			.contentShape(Rectangle())
 	}
 
 	private var currentInfoBody: some View {
@@ -1035,24 +1039,31 @@ struct ContentView: View {
 
 	private var settingsView: some View {
 		NavigationStack {
-			Form {
+			GeometryReader { geometry in
+				ScrollView {
+				VStack(alignment: .leading, spacing: 0) {
 				settingsHelperText("Intersection directions and distances are estimates based on your location, device heading, and available map data. Accuracy can vary with GPS and compass conditions.")
 
-				Section {
+				settingsControlRow {
 					Button {
 						isShowingHelp = true
 					} label: {
 						Text("Help")
 							.lineLimit(nil)
 							.fixedSize(horizontal: false, vertical: true)
+							.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
 					}
+					.buttonStyle(.plain)
 					.accessibilityHint("Opens instructions for using Intersector.")
 				}
 
-				Section {
+				settingsHeader("Announcements")
+				settingsControlRow {
 					Toggle("Distance", isOn: announcementDistanceBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .announcementDistance)
+				}
 					if includeAnnouncementDistance {
+					settingsControlRow {
 						Picker("Measurement Unit", selection: measurementUnitBinding) {
 							ForEach(MeasurementUnit.allCases) { item in
 								Text(item.label).tag(item)
@@ -1061,9 +1072,13 @@ struct ContentView: View {
 						.pickerStyle(.segmented)
 						.accessibilityFocused($settingsFocusTarget, equals: .measurementUnit)
 					}
+				}
+				settingsControlRow {
 					Toggle("Direction", isOn: announcementDirectionBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .announcementDirection)
+				}
 					if includeAnnouncementDirection {
+					settingsControlRow {
 						Picker("Direction Style", selection: directionStyleBinding) {
 							ForEach(DirectionStyle.allCases) { item in
 								Text(item.label).tag(item)
@@ -1072,12 +1087,18 @@ struct ContentView: View {
 						.pickerStyle(.segmented)
 						.accessibilityFocused($settingsFocusTarget, equals: .direction)
 					}
+				}
+				settingsControlRow {
 					Toggle("Manhattan Snob Mode", isOn: manhattanSnobModeBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .manhattanSnobMode)
+				}
 					settingsHelperText("Uses Uptown, Downtown, East Side, and West Side when direction wording supports it.")
+				settingsControlRow {
 					Toggle("Neighborhood", isOn: announcementNeighborhoodBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .announcementNeighborhood)
+				}
 					if includeAnnouncementNeighborhood {
+					settingsControlRow {
 						Picker("Neighborhood Context", selection: areaModeBinding) {
 							ForEach(AreaMode.allCases) { mode in
 								Text(mode.label).tag(mode)
@@ -1086,11 +1107,17 @@ struct ContentView: View {
 						.pickerStyle(.menu)
 						.accessibilityFocused($settingsFocusTarget, equals: .neighborhood)
 					}
+				}
+				settingsControlRow {
 					Toggle("Street Context", isOn: streetContextBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .intersectionWording)
+				}
 					settingsHelperText(intersectionWordingDescription)
+				settingsControlRow {
 					Toggle("Intersection Details", isOn: intersectionDetailsBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .intersectionDetails)
+				}
+				settingsControlRow {
 					VStack(alignment: .leading, spacing: 8) {
 						Text("Spoken Intersections")
 							.foregroundStyle(Color.crossText)
@@ -1105,33 +1132,40 @@ struct ContentView: View {
 					.accessibilityLabel("Spoken Intersections")
 					.accessibilityValue(spokenIntersectionAccessibilityLabel(prefs.spokenIntersectionCount))
 					.accessibilityAdjustableAction(adjustSpokenIntersections)
+				}
 					settingsHelperText(spokenIntersectionCountDescription)
+				settingsControlRow {
 					Toggle("Show 2nd and 3rd Controls", isOn: rankedControlsBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .rankedControls)
 						.accessibilityHint("Toggles the visibility of the menu chevrons")
+				}
+				settingsControlRow {
 					Text("Sample Announcement")
 						.font(.headline)
 						.foregroundStyle(Color.crossText)
 						.accessibilityAddTraits(.isHeader)
-					settingsHelperText(announcementSampleText)
-				} header: {
-					settingsHeader("Announcements")
+						.frame(maxWidth: .infinity, alignment: .leading)
 				}
+					settingsHelperText(announcementSampleText)
 
-				Section {
+				settingsHeader("Map Detail")
+				settingsControlRow {
 					Toggle("Include crossings", isOn: crossingsBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .crossings)
+				}
+				settingsControlRow {
 					Toggle("Include walking paths", isOn: walkingPathsBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .walkingPaths)
-					settingsHelperText("Keep Walking Paths off to focus results on the street grid.")
-				} header: {
-					settingsHeader("Map Detail")
 				}
+					settingsHelperText("Keep Walking Paths off to focus results on the street grid.")
 
+				settingsControlRow {
 				Toggle("Haptic scan feedback", isOn: hapticsBinding)
 					.accessibilityFocused($settingsFocusTarget, equals: .haptics)
+				}
 
-				Section {
+				settingsHeader("About Intersector")
+				settingsControlRow {
 					Button {
 						if MFMailComposeViewController.canSendMail() {
 							isShowingMailComposer = true
@@ -1142,11 +1176,17 @@ struct ContentView: View {
 						Text("Send Intersector Feedback")
 							.lineLimit(nil)
 							.fixedSize(horizontal: false, vertical: true)
+							.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
 					}
+					.buttonStyle(.plain)
 					.accessibilityHint("Opens Mail so you can send feedback about Intersector.")
+				}
 
+				settingsControlRow {
 					externalLink(title: "Privacy Policy", url: "https://marconius.com/csPrivacy/")
+				}
 
+				settingsControlRow {
 					DisclosureGroup("Acknowledgements") {
 						VStack(alignment: .leading, spacing: 8) {
 							Text("Special thanks to Jen Walz for inspiring the creation of this app!")
@@ -1162,7 +1202,9 @@ struct ContentView: View {
 						}
 						.font(.footnote)
 					}
+				}
 
+				settingsControlRow {
 					Text(appFooterText)
 						.font(.footnote)
 						.multilineTextAlignment(.center)
@@ -1170,11 +1212,13 @@ struct ContentView: View {
 						.fixedSize(horizontal: false, vertical: true)
 						.frame(maxWidth: .infinity, alignment: .center)
 						.foregroundStyle(Color.crossText)
-				} header: {
-					settingsHeader("About Intersector")
 				}
+				.frame(maxHeight: .infinity)
 			}
-			.scrollContentBackground(.hidden)
+				.frame(maxWidth: .infinity)
+				.frame(minHeight: geometry.size.height, alignment: .top)
+			}
+			}
 			.background(Color.crossBg)
 			.tint(Color.crossAccent)
 			.navigationTitle("Settings")
@@ -1297,6 +1341,14 @@ struct ContentView: View {
 			.font(.headline)
 			.foregroundStyle(Color.crossText)
 			.textCase(nil)
+			.lineLimit(nil)
+			.fixedSize(horizontal: false, vertical: true)
+			.padding(.horizontal, 16)
+			.padding(.vertical, 8)
+			.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+			.background(Color.crossBg)
+			.contentShape(Rectangle())
+			.accessibilityAddTraits(.isHeader)
 	}
 
 	private func settingsHelperText(_ text: String) -> some View {
@@ -1305,6 +1357,23 @@ struct ContentView: View {
 			.foregroundStyle(Color.crossText)
 			.lineLimit(nil)
 			.fixedSize(horizontal: false, vertical: true)
+			.padding(.horizontal, 16)
+			.padding(.vertical, 8)
+			.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+			.background(Color.crossBg)
+			.contentShape(Rectangle())
+	}
+
+	private func settingsControlRow<Content: View>(
+		@ViewBuilder content: () -> Content
+	) -> some View {
+		content()
+			.frame(maxWidth: .infinity, alignment: .leading)
+			.padding(.horizontal, 16)
+			.padding(.vertical, 8)
+			.frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+			.background(Color.crossBg)
+			.contentShape(Rectangle())
 	}
 
 	private func actionButton(
