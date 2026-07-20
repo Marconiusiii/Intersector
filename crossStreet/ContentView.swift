@@ -11,6 +11,7 @@ import SwiftUI
 import WatchConnectivity
 
 private enum SettingsFocusTarget: Hashable {
+	case displayLayout
 	case neighborhood
 	case crossings
 	case walkingPaths
@@ -25,6 +26,22 @@ private enum SettingsFocusTarget: Hashable {
 	case rankedControls
 	case manhattanSnobMode
 	case haptics
+}
+
+private enum DisplayLayout: String, CaseIterable, Identifiable {
+	case standard
+	case centered
+
+	var id: String { rawValue }
+
+	var label: String {
+		switch self {
+		case .standard:
+			"Default"
+		case .centered:
+			"Centered"
+		}
+	}
 }
 
 private let lookupLoadingText = "Intersecting..."
@@ -473,6 +490,7 @@ struct ContentView: View {
 	@AppStorage("hapticsEnabled") private var hapticsEnabled = true
 	@AppStorage("manhattanSnobMode") private var manhattanSnobMode = false
 	@AppStorage("showRankedControls") private var showRankedControls = true
+	@AppStorage("displayLayout") private var displayLayoutRaw = DisplayLayout.standard.rawValue
 	@Environment(\.dynamicTypeSize) private var dynamicTypeSize
 	@Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 	@Environment(\.openURL) private var openURL
@@ -531,6 +549,14 @@ struct ContentView: View {
 			includeWalkingPaths: includeWalkingPaths,
 			manhattanSnobMode: manhattanSnobMode
 		)
+	}
+
+	private var displayLayout: DisplayLayout {
+		DisplayLayout(rawValue: displayLayoutRaw) ?? .standard
+	}
+
+	private var usesCenteredStatusLayout: Bool {
+		displayLayout == .centered || dynamicTypeSize.isAccessibilitySize
 	}
 
 	var body: some View {
@@ -628,7 +654,7 @@ struct ContentView: View {
 	}
 
 	private var headerView: some View {
-		VStack(spacing: 0) {
+		HStack(alignment: .center, spacing: 0) {
 			appTitle
 			settingsButton
 		}
@@ -644,9 +670,10 @@ struct ContentView: View {
 			.foregroundStyle(Color.crossText)
 			.lineLimit(nil)
 			.fixedSize(horizontal: false, vertical: true)
-			.padding(.horizontal, 16)
+			.padding(.leading, 16)
+			.padding(.trailing, 8)
 			.padding(.vertical, 6)
-			.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+			.frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
 			.contentShape(Rectangle())
 			.accessibilityAddTraits(.isHeader)
 	}
@@ -657,60 +684,82 @@ struct ContentView: View {
 		} label: {
 			Text("Settings")
 				.font(.body)
-				.lineLimit(nil)
-				.fixedSize(horizontal: false, vertical: true)
-				.padding(.horizontal, 16)
+				.fontWeight(.semibold)
+				.lineLimit(1)
+				.minimumScaleFactor(0.75)
+				.padding(.horizontal, 14)
 				.padding(.vertical, 6)
-				.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+				.frame(minWidth: 96, minHeight: 56, alignment: .center)
 				.contentShape(Rectangle())
 		}
 		.buttonStyle(.plain)
-		.foregroundStyle(Color.crossText)
+		.foregroundStyle(Color.crossAccent)
 	}
 
 	private var statusView: some View {
-		VStack(alignment: .leading, spacing: 0) {
-			currentInfoHeading
-			currentInfoBody
+		Group {
+			if usesCenteredStatusLayout {
+				VStack(alignment: .center, spacing: 0) {
+					currentInfoHeading(alignment: .center, isCentered: true)
+					currentInfoBody(alignment: .center, textAlignment: .center)
+				}
+			} else {
+				HStack(alignment: .top, spacing: 0) {
+					currentInfoHeading(alignment: .leading, isCentered: false)
+						.frame(width: 168, alignment: .leading)
+					currentInfoBody(alignment: .trailing, textAlignment: .trailing)
+				}
+			}
 		}
-		.frame(maxWidth: .infinity, alignment: .leading)
+		.frame(maxWidth: .infinity, alignment: usesCenteredStatusLayout ? .center : .leading)
 		.background(Color.crossPanel)
 	}
 
-	private var currentInfoHeading: some View {
+	private func currentInfoHeading(
+		alignment: Alignment,
+		isCentered: Bool
+	) -> some View {
 		HStack(alignment: .center, spacing: 8) {
 			Text("Current Info")
 				.font(.title2)
 				.fontWeight(.semibold)
 				.foregroundStyle(.white)
-			.lineLimit(nil)
-			.fixedSize(horizontal: false, vertical: true)
-			.accessibilityAddTraits(.isHeader)
-			Spacer(minLength: 8)
+				.lineLimit(nil)
+				.fixedSize(horizontal: false, vertical: true)
+				.accessibilityAddTraits(.isHeader)
+			if !isCentered {
+				Spacer(minLength: 8)
+			}
 			statusActivityIndicator
 		}
 		.padding(.horizontal, 16)
 		.padding(.vertical, 6)
-		.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+		.frame(maxWidth: .infinity, minHeight: 56, alignment: alignment)
 		.contentShape(Rectangle())
 	}
 
-	private var currentInfoText: some View {
+	private func currentInfoText(
+		alignment: Alignment,
+		textAlignment: TextAlignment
+	) -> some View {
 		Text(statusText)
 			.font(.body)
 			.foregroundStyle(Color.crossInv)
-			.multilineTextAlignment(.leading)
+			.multilineTextAlignment(textAlignment)
 			.lineLimit(nil)
 			.textSelection(.enabled)
 			.fixedSize(horizontal: false, vertical: true)
 			.padding(.horizontal, 16)
 			.padding(.vertical, 6)
-			.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+			.frame(maxWidth: .infinity, minHeight: 56, alignment: alignment)
 			.contentShape(Rectangle())
 	}
 
-	private var currentInfoBody: some View {
-		currentInfoText
+	private func currentInfoBody(
+		alignment: Alignment,
+		textAlignment: TextAlignment
+	) -> some View {
+		currentInfoText(alignment: alignment, textAlignment: textAlignment)
 	}
 
 	@ViewBuilder
@@ -790,7 +839,7 @@ struct ContentView: View {
 		) {
 			ZStack {
 				Color.clear
-				actionLabel("Scan", systemImage: "dot.radiowaves.left.and.right")
+				actionLabel("Point and Scan", systemImage: "dot.radiowaves.left.and.right")
 			}
 			.frame(maxWidth: .infinity, maxHeight: .infinity)
 			.contentShape(Rectangle())
@@ -799,8 +848,8 @@ struct ContentView: View {
 		.frame(maxWidth: .infinity, minHeight: actionMinHeight, maxHeight: .infinity, alignment: .center)
 		.foregroundStyle(Color.crossButtonText)
 		.background(pointScanBackground)
-		.overlay(Rectangle().stroke(Color.crossButtonStrongBorder, lineWidth: 2))
-		.shadow(color: Color.black.opacity(0.18), radius: 2, x: 0, y: 1)
+		.overlay(Rectangle().stroke(Color.crossButtonBorder, lineWidth: 1))
+		.shadow(color: Color.black.opacity(0.12), radius: 2, x: 0, y: 1)
 		.contentShape(Rectangle())
 		.disabled(isLoading || isStartupLoading)
 		.accessibilityLabel("Point and Scan")
@@ -817,7 +866,7 @@ struct ContentView: View {
 		HStack(spacing: 0) {
 			primary
 			menu
-				.frame(minWidth: 54)
+				.frame(width: 48)
 		}
 		.background(Color.crossBtn)
 		.overlay(Rectangle().stroke(Color.crossButtonBorder, lineWidth: 1))
@@ -838,10 +887,11 @@ struct ContentView: View {
 			}
 		} label: {
 			Image(systemName: "chevron.down")
-				.imageScale(.large)
-			.frame(maxWidth: .infinity, minHeight: actionMinHeight)
-			.foregroundStyle(Color.crossChevron)
-			.contentShape(Rectangle())
+				.imageScale(.medium)
+				.frame(width: 48)
+				.frame(minHeight: actionMinHeight)
+				.foregroundStyle(Color.crossChevron)
+				.contentShape(Rectangle())
 		}
 		.menuStyle(.button)
 		.buttonStyle(IntersectorActionButtonStyle(drawsChrome: false))
@@ -981,6 +1031,15 @@ struct ContentView: View {
 		}
 	}
 
+	private var displayLayoutBinding: Binding<DisplayLayout> {
+		Binding {
+			displayLayout
+		} set: { layout in
+			displayLayoutRaw = layout.rawValue
+			settingsFocusTarget = .displayLayout
+		}
+	}
+
 	private func spokenIntersectionAccessibilityLabel(_ count: SpokenIntersectionCount) -> String {
 		switch count {
 		case .one:
@@ -1045,184 +1104,10 @@ struct ContentView: View {
 		NavigationStack {
 			GeometryReader { geometry in
 				ScrollView {
-				VStack(alignment: .leading, spacing: 0) {
-				settingsHelperText("Intersection directions and distances are estimates based on your location, device heading, and available map data. Accuracy can vary with GPS and compass conditions.")
-
-				settingsControlRow {
-					Button {
-						isShowingHelp = true
-					} label: {
-						Text("Help")
-							.lineLimit(nil)
-							.fixedSize(horizontal: false, vertical: true)
-							.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-					}
-					.buttonStyle(.plain)
-					.accessibilityHint("Opens instructions for using Intersector.")
+					settingsContent
+						.frame(maxWidth: .infinity)
+						.frame(minHeight: geometry.size.height, alignment: .top)
 				}
-
-				settingsHeader("Announcements")
-				settingsControlRow {
-					Toggle("Distance", isOn: announcementDistanceBinding)
-						.accessibilityFocused($settingsFocusTarget, equals: .announcementDistance)
-				}
-					if includeAnnouncementDistance {
-					settingsControlRow {
-						Picker("Measurement Unit", selection: measurementUnitBinding) {
-							ForEach(MeasurementUnit.allCases) { item in
-								Text(item.label).tag(item)
-							}
-						}
-						.pickerStyle(.segmented)
-						.accessibilityFocused($settingsFocusTarget, equals: .measurementUnit)
-					}
-				}
-				settingsControlRow {
-					Toggle("Direction", isOn: announcementDirectionBinding)
-						.accessibilityFocused($settingsFocusTarget, equals: .announcementDirection)
-				}
-					if includeAnnouncementDirection {
-					settingsControlRow {
-						Picker("Direction Style", selection: directionStyleBinding) {
-							ForEach(DirectionStyle.allCases) { item in
-								Text(item.label).tag(item)
-							}
-						}
-						.pickerStyle(.segmented)
-						.accessibilityFocused($settingsFocusTarget, equals: .direction)
-					}
-				}
-				settingsControlRow {
-					Toggle("Manhattan Snob Mode", isOn: manhattanSnobModeBinding)
-						.accessibilityFocused($settingsFocusTarget, equals: .manhattanSnobMode)
-				}
-					settingsHelperText("Uses Uptown, Downtown, East Side, and West Side when direction wording supports it.")
-				settingsControlRow {
-					Toggle("Neighborhood", isOn: announcementNeighborhoodBinding)
-						.accessibilityFocused($settingsFocusTarget, equals: .announcementNeighborhood)
-				}
-					if includeAnnouncementNeighborhood {
-					settingsControlRow {
-						Picker("Neighborhood Context", selection: areaModeBinding) {
-							ForEach(AreaMode.allCases) { mode in
-								Text(mode.label).tag(mode)
-							}
-						}
-						.pickerStyle(.menu)
-						.accessibilityFocused($settingsFocusTarget, equals: .neighborhood)
-					}
-				}
-				settingsControlRow {
-					Toggle("Street Context", isOn: streetContextBinding)
-						.accessibilityFocused($settingsFocusTarget, equals: .intersectionWording)
-				}
-					settingsHelperText(intersectionWordingDescription)
-				settingsControlRow {
-					Toggle("Intersection Details", isOn: intersectionDetailsBinding)
-						.accessibilityFocused($settingsFocusTarget, equals: .intersectionDetails)
-				}
-					settingsHelperText("Adds mapped details such as traffic signals and pedestrian islands when that information is available.")
-				settingsControlRow {
-					VStack(alignment: .leading, spacing: 8) {
-						Text("Spoken Intersections")
-							.foregroundStyle(Color.crossText)
-						Slider(
-							value: spokenIntersectionSliderBinding,
-							in: 1...3,
-							step: 1
-						)
-					}
-					.accessibilityElement(children: .ignore)
-					.accessibilityFocused($settingsFocusTarget, equals: .spokenIntersections)
-					.accessibilityLabel("Spoken Intersections")
-					.accessibilityValue(spokenIntersectionAccessibilityLabel(prefs.spokenIntersectionCount))
-					.accessibilityAdjustableAction(adjustSpokenIntersections)
-				}
-					settingsHelperText(spokenIntersectionCountDescription)
-				settingsControlRow {
-					Toggle("Show 2nd and 3rd Controls", isOn: rankedControlsBinding)
-						.accessibilityFocused($settingsFocusTarget, equals: .rankedControls)
-						.accessibilityHint("Toggles the visibility of the menu chevrons")
-				}
-				settingsControlRow {
-					Text("Sample Announcement")
-						.font(.headline)
-						.foregroundStyle(Color.crossText)
-						.accessibilityAddTraits(.isHeader)
-						.frame(maxWidth: .infinity, alignment: .leading)
-				}
-					settingsHelperText(announcementSampleText)
-
-				settingsHeader("Map Detail")
-				settingsControlRow {
-					Toggle("Include crossings", isOn: crossingsBinding)
-						.accessibilityFocused($settingsFocusTarget, equals: .crossings)
-				}
-				settingsControlRow {
-					Toggle("Include walking paths", isOn: walkingPathsBinding)
-						.accessibilityFocused($settingsFocusTarget, equals: .walkingPaths)
-				}
-					settingsHelperText("Keep Walking Paths off to focus results on the street grid.")
-
-				settingsControlRow {
-				Toggle("Haptic scan feedback", isOn: hapticsBinding)
-					.accessibilityFocused($settingsFocusTarget, equals: .haptics)
-				}
-
-				settingsHeader("About Intersector")
-				settingsControlRow {
-					Button {
-						if MFMailComposeViewController.canSendMail() {
-							isShowingMailComposer = true
-						} else {
-							openMailFallback()
-						}
-					} label: {
-						Text("Send Intersector Feedback")
-							.lineLimit(nil)
-							.fixedSize(horizontal: false, vertical: true)
-							.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-					}
-					.buttonStyle(.plain)
-					.accessibilityHint("Opens Mail so you can send feedback about Intersector.")
-				}
-
-				settingsControlRow {
-					externalLink(title: "Privacy Policy", url: "https://marconius.com/csPrivacy/")
-				}
-
-				settingsControlRow {
-					DisclosureGroup("Acknowledgements") {
-						VStack(alignment: .leading, spacing: 8) {
-							Text("Special thanks to Jen Walz for inspiring the creation of this app!")
-								.lineLimit(nil)
-								.fixedSize(horizontal: false, vertical: true)
-							Text("Map data from OpenStreetMap, available under the Open Database License.")
-								.lineLimit(nil)
-								.fixedSize(horizontal: false, vertical: true)
-							Link(
-								"OpenStreetMap copyright and licence",
-								destination: URL(string: "https://www.openstreetmap.org/copyright")!
-							)
-						}
-						.font(.footnote)
-					}
-				}
-
-				settingsControlRow {
-					Text(appFooterText)
-						.font(.footnote)
-						.multilineTextAlignment(.center)
-						.lineLimit(nil)
-						.fixedSize(horizontal: false, vertical: true)
-						.frame(maxWidth: .infinity, alignment: .center)
-						.foregroundStyle(Color.crossText)
-				}
-				.frame(maxHeight: .infinity)
-			}
-				.frame(maxWidth: .infinity)
-				.frame(minHeight: geometry.size.height, alignment: .top)
-			}
 			}
 			.background(Color.crossBg)
 			.tint(Color.crossAccent)
@@ -1244,6 +1129,216 @@ struct ContentView: View {
 			}
 			.sheet(isPresented: $isShowingHelp) {
 				helpView
+			}
+		}
+	}
+
+	private var settingsContent: some View {
+		VStack(alignment: .leading, spacing: 0) {
+			settingsIntroSection
+			settingsDisplaySection
+			settingsAnnouncementSection
+			settingsMapDetailSection
+			settingsAboutSection
+		}
+		.frame(maxHeight: .infinity)
+	}
+
+	private var settingsIntroSection: some View {
+		Group {
+			settingsScreenTitle("Settings")
+			settingsControlRow {
+				Button {
+					isShowingHelp = true
+				} label: {
+					settingsButtonLabel("Help")
+				}
+				.buttonStyle(.plain)
+				.accessibilityHint("Opens instructions for using Intersector.")
+			}
+			settingsHelperText("Intersection directions and distances are estimates based on your location, device heading, and available map data. Accuracy can vary with GPS and compass conditions.")
+		}
+	}
+
+	private var settingsDisplaySection: some View {
+		Group {
+			settingsHeader("Display")
+			settingsControlRow {
+				Picker("Current Info Layout", selection: displayLayoutBinding) {
+					ForEach(DisplayLayout.allCases) { layout in
+						Text(layout.label).tag(layout)
+					}
+				}
+				.pickerStyle(.segmented)
+				.accessibilityFocused($settingsFocusTarget, equals: .displayLayout)
+			}
+			settingsHelperText("Default keeps Current Info and the current announcement side by side. Centered puts each in its own centered row.")
+		}
+	}
+
+	private var settingsAnnouncementSection: some View {
+		Group {
+			settingsHeader("Announcements")
+			settingsControlRow {
+				Toggle("Distance", isOn: announcementDistanceBinding)
+					.accessibilityFocused($settingsFocusTarget, equals: .announcementDistance)
+			}
+			if includeAnnouncementDistance {
+				settingsControlRow {
+					Picker("Measurement Unit", selection: measurementUnitBinding) {
+						ForEach(MeasurementUnit.allCases) { item in
+							Text(item.label).tag(item)
+						}
+					}
+					.pickerStyle(.segmented)
+					.accessibilityFocused($settingsFocusTarget, equals: .measurementUnit)
+				}
+			}
+			settingsControlRow {
+				Toggle("Direction", isOn: announcementDirectionBinding)
+					.accessibilityFocused($settingsFocusTarget, equals: .announcementDirection)
+			}
+			if includeAnnouncementDirection {
+				settingsControlRow {
+					Picker("Direction Style", selection: directionStyleBinding) {
+						ForEach(DirectionStyle.allCases) { item in
+							Text(item.label).tag(item)
+						}
+					}
+					.pickerStyle(.segmented)
+					.accessibilityFocused($settingsFocusTarget, equals: .direction)
+				}
+			}
+			settingsControlRow {
+				Toggle("Manhattan Snob Mode", isOn: manhattanSnobModeBinding)
+					.accessibilityFocused($settingsFocusTarget, equals: .manhattanSnobMode)
+			}
+			settingsHelperText("Uses Uptown, Downtown, East Side, and West Side when direction wording supports it.")
+			settingsControlRow {
+				Toggle("Neighborhood", isOn: announcementNeighborhoodBinding)
+					.accessibilityFocused($settingsFocusTarget, equals: .announcementNeighborhood)
+			}
+			if includeAnnouncementNeighborhood {
+				settingsControlRow {
+					Picker("Neighborhood Context", selection: areaModeBinding) {
+						ForEach(AreaMode.allCases) { mode in
+							Text(mode.label).tag(mode)
+						}
+					}
+					.pickerStyle(.menu)
+					.accessibilityFocused($settingsFocusTarget, equals: .neighborhood)
+				}
+			}
+			settingsControlRow {
+				Toggle("Street Context", isOn: streetContextBinding)
+					.accessibilityFocused($settingsFocusTarget, equals: .intersectionWording)
+			}
+			settingsHelperText(intersectionWordingDescription)
+			settingsControlRow {
+				Toggle("Intersection Details", isOn: intersectionDetailsBinding)
+					.accessibilityFocused($settingsFocusTarget, equals: .intersectionDetails)
+			}
+			settingsHelperText("Adds mapped details such as traffic signals and pedestrian islands when that information is available.")
+			settingsControlRow {
+				spokenIntersectionsControl
+			}
+			settingsHelperText(spokenIntersectionCountDescription)
+			settingsControlRow {
+				Toggle("Show 2nd and 3rd Controls", isOn: rankedControlsBinding)
+					.accessibilityFocused($settingsFocusTarget, equals: .rankedControls)
+					.accessibilityHint("Toggles the visibility of the menu chevrons")
+			}
+			settingsControlRow {
+				Text("Sample Announcement")
+					.font(.headline)
+					.foregroundStyle(Color.crossText)
+					.accessibilityAddTraits(.isHeader)
+					.frame(maxWidth: .infinity, alignment: .leading)
+			}
+			settingsHelperText(announcementSampleText)
+		}
+	}
+
+	private var spokenIntersectionsControl: some View {
+		VStack(alignment: .leading, spacing: 8) {
+			Text("Spoken Intersections")
+				.foregroundStyle(Color.crossText)
+			Slider(
+				value: spokenIntersectionSliderBinding,
+				in: 1...3,
+				step: 1
+			)
+		}
+		.accessibilityElement(children: .ignore)
+		.accessibilityFocused($settingsFocusTarget, equals: .spokenIntersections)
+		.accessibilityLabel("Spoken Intersections")
+		.accessibilityValue(spokenIntersectionAccessibilityLabel(prefs.spokenIntersectionCount))
+		.accessibilityAdjustableAction(adjustSpokenIntersections)
+	}
+
+	private var settingsMapDetailSection: some View {
+		Group {
+			settingsHeader("Map Detail")
+			settingsControlRow {
+				Toggle("Include crossings", isOn: crossingsBinding)
+					.accessibilityFocused($settingsFocusTarget, equals: .crossings)
+			}
+			settingsControlRow {
+				Toggle("Include walking paths", isOn: walkingPathsBinding)
+					.accessibilityFocused($settingsFocusTarget, equals: .walkingPaths)
+			}
+			settingsHelperText("Keep Walking Paths off to focus results on the street grid.")
+			settingsControlRow {
+				Toggle("Haptic scan feedback", isOn: hapticsBinding)
+					.accessibilityFocused($settingsFocusTarget, equals: .haptics)
+			}
+		}
+	}
+
+	private var settingsAboutSection: some View {
+		Group {
+			settingsHeader("About Intersector")
+			settingsControlRow {
+				Button {
+					if MFMailComposeViewController.canSendMail() {
+						isShowingMailComposer = true
+					} else {
+						openMailFallback()
+					}
+				} label: {
+					settingsButtonLabel("Send Intersector Feedback")
+				}
+				.buttonStyle(.plain)
+				.accessibilityHint("Opens Mail so you can send feedback about Intersector.")
+			}
+			settingsControlRow {
+				externalLink(title: "Privacy Policy", url: "https://marconius.com/csPrivacy/")
+			}
+			settingsControlRow {
+				DisclosureGroup("Acknowledgements") {
+					VStack(alignment: .leading, spacing: 8) {
+						Text("Special thanks to Jen Walz for inspiring the creation of this app!")
+							.lineLimit(nil)
+							.fixedSize(horizontal: false, vertical: true)
+						Text("Map data from OpenStreetMap, available under the Open Database License.")
+							.lineLimit(nil)
+							.fixedSize(horizontal: false, vertical: true)
+						Link(
+							"OpenStreetMap copyright and licence",
+							destination: URL(string: "https://www.openstreetmap.org/copyright")!
+						)
+					}
+					.font(.footnote)
+				}
+			}
+			settingsControlRow {
+				Text(appFooterText)
+					.font(.footnote)
+					.multilineTextAlignment(.center)
+					.lineLimit(nil)
+					.fixedSize(horizontal: false, vertical: true)
+					.frame(maxWidth: .infinity, alignment: .center)
+					.foregroundStyle(Color.crossText)
 			}
 		}
 	}
@@ -1341,17 +1436,34 @@ struct ContentView: View {
 		}
 	}
 
+	private func settingsScreenTitle(_ title: String) -> some View {
+		Text(title)
+			.font(.largeTitle)
+			.fontWeight(.bold)
+			.foregroundStyle(Color.crossText)
+			.lineLimit(nil)
+			.fixedSize(horizontal: false, vertical: true)
+			.padding(.horizontal, 16)
+			.padding(.vertical, 10)
+			.frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+			.background(Color.crossSettingsHeader)
+			.contentShape(Rectangle())
+			.accessibilityAddTraits(.isHeader)
+	}
+
 	private func settingsHeader(_ title: String) -> some View {
 		Text(title)
-			.font(.headline)
+			.font(.title3)
+			.fontWeight(.bold)
 			.foregroundStyle(Color.crossText)
 			.textCase(nil)
 			.lineLimit(nil)
 			.fixedSize(horizontal: false, vertical: true)
 			.padding(.horizontal, 16)
-			.padding(.vertical, 8)
-			.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-			.background(Color.crossBg)
+			.padding(.top, 14)
+			.padding(.bottom, 8)
+			.frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+			.background(Color.crossSettingsHeader)
 			.contentShape(Rectangle())
 			.accessibilityElement(children: .ignore)
 			.accessibilityLabel(title)
@@ -1367,7 +1479,7 @@ struct ContentView: View {
 			.padding(.horizontal, 16)
 			.padding(.vertical, 8)
 			.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-			.background(Color.crossBg)
+			.background(Color.crossSettingsHelper)
 			.contentShape(Rectangle())
 			.accessibilityElement(children: .ignore)
 			.accessibilityLabel(text)
@@ -1381,9 +1493,24 @@ struct ContentView: View {
 			.padding(.horizontal, 16)
 			.padding(.vertical, 8)
 			.frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
-			.background(Color.crossBg)
+			.background(Color.crossSettingsRow)
+			.overlay(alignment: .bottom) {
+				Rectangle()
+					.fill(Color.crossSettingsDivider)
+					.frame(height: 1)
+			}
 			.contentShape(Rectangle())
 			.accessibilityElement(children: .contain)
+	}
+
+	private func settingsButtonLabel(_ title: String) -> some View {
+		Text(title)
+			.font(.body)
+			.fontWeight(.semibold)
+			.foregroundStyle(Color.crossAccent)
+			.lineLimit(nil)
+			.fixedSize(horizontal: false, vertical: true)
+			.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
 	}
 
 	private func actionButton(
@@ -1431,8 +1558,8 @@ struct ContentView: View {
 		Label {
 			Text(title)
 				.multilineTextAlignment(.center)
-				.lineLimit(nil)
-				.fixedSize(horizontal: false, vertical: true)
+				.lineLimit(1)
+				.minimumScaleFactor(0.72)
 		} icon: {
 			Image(systemName: systemImage)
 		}
@@ -1663,6 +1790,34 @@ extension Color {
 			traits.userInterfaceStyle == .dark
 				? UIColor(red: 0.12, green: 0.12, blue: 0.12, alpha: 1)
 				: UIColor(red: 0.18, green: 0.18, blue: 0.17, alpha: 1)
+		}
+	)
+	static let crossSettingsHeader = Color(
+		UIColor { traits in
+			traits.userInterfaceStyle == .dark
+				? UIColor(red: 0.10, green: 0.10, blue: 0.10, alpha: 1)
+				: UIColor(red: 0.94, green: 0.94, blue: 0.91, alpha: 1)
+		}
+	)
+	static let crossSettingsRow = Color(
+		UIColor { traits in
+			traits.userInterfaceStyle == .dark
+				? UIColor(red: 0.16, green: 0.16, blue: 0.16, alpha: 1)
+				: UIColor(red: 1.00, green: 1.00, blue: 0.98, alpha: 1)
+		}
+	)
+	static let crossSettingsHelper = Color(
+		UIColor { traits in
+			traits.userInterfaceStyle == .dark
+				? UIColor(red: 0.08, green: 0.08, blue: 0.08, alpha: 1)
+				: UIColor(red: 0.97, green: 0.97, blue: 0.94, alpha: 1)
+		}
+	)
+	static let crossSettingsDivider = Color(
+		UIColor { traits in
+			traits.userInterfaceStyle == .dark
+				? UIColor(red: 0.28, green: 0.28, blue: 0.28, alpha: 1)
+				: UIColor(red: 0.78, green: 0.78, blue: 0.74, alpha: 1)
 		}
 	)
 	static let crossText = Color(
