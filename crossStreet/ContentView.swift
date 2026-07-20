@@ -1121,6 +1121,7 @@ struct ContentView: View {
 					Toggle("Intersection Details", isOn: intersectionDetailsBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .intersectionDetails)
 				}
+					settingsHelperText("Adds mapped details such as traffic signals and pedestrian islands when that information is available.")
 				settingsControlRow {
 					VStack(alignment: .leading, spacing: 8) {
 						Text("Spoken Intersections")
