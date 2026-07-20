@@ -1770,6 +1770,38 @@ struct IntersectorTests {
 		])
 	}
 
+	@Test func intersectionBuilderAddsCrossingsFromOptionalEnrichmentResponse() async throws {
+		let coreResponse = OverpassResponse(
+			elements: [
+				OverpassElement(type: "node", id: 1, lat: 37.0, lon: -122.0, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 2, lat: 37.0005, lon: -122.0, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 3, lat: 37.001, lon: -122.0, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 4, lat: 37.001, lon: -122.001, nodes: nil, tags: nil),
+				OverpassElement(type: "way", id: 10, lat: nil, lon: nil, nodes: [1, 2, 3], tags: ["highway": "residential", "name": "Oak Street"]),
+				OverpassElement(type: "way", id: 11, lat: nil, lon: nil, nodes: [4, 3], tags: ["highway": "residential", "name": "Pine Street"])
+			]
+		)
+		let crossingResponse = OverpassResponse(
+			elements: [
+				OverpassElement(type: "node", id: 2, lat: 37.0005, lon: -122.0, nodes: nil, tags: ["highway": "crossing", "crossing": "traffic_signals"])
+			]
+		)
+		let builder = IntersectionBuilder()
+		let coreData = builder.mapData(from: coreResponse)
+
+		let enrichedData = builder.mapData(
+			from: crossingResponse,
+			options: MapDetailOptions(includeCrossings: true),
+			coreData: coreData
+		)
+
+		#expect(enrichedData.intersections.map(\.title) == [
+			"Oak Street and Pine Street",
+			"Crossing on Oak Street near Pine Street"
+		])
+		#expect(enrichedData.intersections.last?.intersectionDetails?.isSignalized == true)
+	}
+
 	@Test func intersectionBuilderSuppressesCrossingBesideStreetIntersection() async throws {
 		let response = OverpassResponse(
 			elements: [
@@ -1946,7 +1978,7 @@ struct IntersectorTests {
 		#expect(await mapClient.requestedRadii == [225])
 	}
 
-	@Test func initialNearestPrewarmFetchesDataNeededByCurrentNearestSettings() async throws {
+	@Test func initialNearestPrewarmFetchesNeededCountWithoutOptionalMapDetails() async throws {
 		let mapClient = AdaptiveMapDataClient()
 		var prefs = AppPrefs()
 		prefs.spokenIntersectionCount = .three
@@ -1968,9 +2000,9 @@ struct IntersectorTests {
 		#expect(isReady)
 		#expect(await mapClient.requestedRadii == [225, 375, 750])
 		#expect(await mapClient.requestedOptions == [
-			MapDetailOptions(includeCrossings: true, includeWalkingPaths: true),
-			MapDetailOptions(includeCrossings: true, includeWalkingPaths: true),
-			MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
+			MapDetailOptions(),
+			MapDetailOptions(),
+			MapDetailOptions()
 		])
 	}
 
