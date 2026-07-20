@@ -72,28 +72,18 @@ struct MapDataClient: MapDataFetching {
 			primary: endpoint,
 			fallbacks: fallbackEndpoints
 		)
-		var lastError: Error?
-
-		for endpoint in endpoints {
-			do {
-				let data = try await fetchMapData(
-					from: endpoint,
-					near: coordinate,
-					radiusMeters: radiusMeters,
-					options: options,
-					coreData: coreData
-				)
-				await Self.endpointHealth.markSuccess(endpoint)
-				return data
-			} catch {
-				lastError = error
-				guard isTemporary(error), endpoint != endpoints.last else {
-					throw error
-				}
-			}
+		guard let endpoint = endpoints.first else {
+			throw MapDataError.invalidResponse
 		}
-
-		throw lastError ?? MapDataError.invalidResponse
+		let data = try await fetchMapData(
+			from: endpoint,
+			near: coordinate,
+			radiusMeters: radiusMeters,
+			options: options,
+			coreData: coreData
+		)
+		await Self.endpointHealth.markSuccess(endpoint)
+		return data
 	}
 
 	private func fetchMapData(
@@ -103,10 +93,10 @@ struct MapDataClient: MapDataFetching {
 		options: MapDetailOptions,
 		coreData: MapDataSet
 	) async throws -> MapDataSet {
-		let crossingRadius = min(radiusMeters, 300)
+		let crossingRadius = min(radiusMeters, 225)
 		var request = URLRequest(url: endpoint)
 		request.httpMethod = "POST"
-		request.timeoutInterval = 3
+		request.timeoutInterval = 1.2
 		request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
 		request.httpBody = crossingQuery(
 			near: coordinate,
@@ -267,7 +257,7 @@ struct MapDataClient: MapDataFetching {
 	) -> String {
 		let radius = Int(radiusMeters.rounded())
 		let body = """
-		[out:json][timeout:3];
+		[out:json][timeout:1];
 		(
 		  node(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"="crossing"];
 		  node(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["crossing"];
