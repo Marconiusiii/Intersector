@@ -65,6 +65,7 @@ struct OrientSvc {
 	var finder = IntersectionFinder()
 	var neighborhoodResolver = NeighborhoodResolver()
 	private var upcomingCache = UpcomingReportCache()
+	private let firstLookupGuard = FirstLookupMapDetailGuard()
 	private static let spokenExpansionTimeout: Duration = .milliseconds(900)
 
 	init(
@@ -126,11 +127,12 @@ struct OrientSvc {
 		{
 			return cachedReport
 		}
+		let lookupPrefs = await prefsForFirstLookup(kind: kind, rank: rank, prefs: prefs)
 		let mapData = try await mapData(
 			for: kind,
 			from: context,
 			minimumCandidateCount: rank,
-			prefs: prefs
+			prefs: lookupPrefs
 		)
 		if kind == .upcoming {
 			let reports = await upcomingReports(
@@ -165,11 +167,12 @@ struct OrientSvc {
 		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming || kind == .scan)
 		let requestedCount = prefs.spokenIntersectionCount.rawValue
 		let resultCount = kind == .upcoming && context.headingDegrees == nil ? 1 : requestedCount
+		let firstLookupPrefs = await prefsForFirstLookup(kind: kind, rank: 1, prefs: prefs)
 		let firstMapData = try await mapData(
 			for: kind,
 			from: context,
 			minimumCandidateCount: 1,
-			prefs: prefs
+			prefs: firstLookupPrefs
 		)
 		var reports = await spokenReports(
 			for: kind,
@@ -205,6 +208,21 @@ struct OrientSvc {
 			await upcomingCache.store(reports: reports, prefs: prefs, context: context)
 		}
 		return IntersectionReportList(reports: reports).text(with: prefs)
+	}
+
+	private func prefsForFirstLookup(
+		kind: ReportKind,
+		rank: Int,
+		prefs: AppPrefs
+	) async -> AppPrefs {
+		guard
+			await firstLookupGuard.shouldUseCoreMapDetails(kind: kind, rank: rank, prefs: prefs)
+		else {
+			return prefs
+		}
+		var lookupPrefs = prefs
+		lookupPrefs.mapDetails = MapDetailOptions()
+		return lookupPrefs
 	}
 
 	private func mapDataForSpokenExpansion(
@@ -538,6 +556,33 @@ private extension Array where Element == OrientReport {
 				return existingStreet == reportStreet && existingCrossStreet == reportCrossStreet
 			}
 			return existing.cross == report.cross
+		}
+	}
+}
+
+actor FirstLookupMapDetailGuard {
+	private var hasProtectedNearest = false
+	private var hasProtectedUpcoming = false
+
+	func shouldUseCoreMapDetails(kind: ReportKind, rank: Int, prefs: AppPrefs) -> Bool {
+		guard rank == 1, prefs.mapDetails != MapDetailOptions() else {
+			return false
+		}
+		switch kind {
+		case .nearest:
+			guard !hasProtectedNearest else {
+				return false
+			}
+			hasProtectedNearest = true
+			return true
+		case .upcoming:
+			guard !hasProtectedUpcoming else {
+				return false
+			}
+			hasProtectedUpcoming = true
+			return true
+		case .scan:
+			return false
 		}
 	}
 }

@@ -129,9 +129,27 @@ struct WatchAnnouncementOptions: Equatable, Hashable {
 	}
 }
 
-struct WatchMapDetailOptions: Equatable, Hashable {
+struct WatchMapDetailOptions: Equatable, Hashable, Sendable {
 	var includeCrossings = false
 	var includeWalkingPaths = false
+
+	nonisolated init(
+		includeCrossings: Bool = false,
+		includeWalkingPaths: Bool = false
+	) {
+		self.includeCrossings = includeCrossings
+		self.includeWalkingPaths = includeWalkingPaths
+	}
+
+	nonisolated static func == (lhs: WatchMapDetailOptions, rhs: WatchMapDetailOptions) -> Bool {
+		lhs.includeCrossings == rhs.includeCrossings &&
+			lhs.includeWalkingPaths == rhs.includeWalkingPaths
+	}
+
+	nonisolated func hash(into hasher: inout Hasher) {
+		hasher.combine(includeCrossings)
+		hasher.combine(includeWalkingPaths)
+	}
 }
 
 enum WatchAreaMode: String, CaseIterable, Identifiable {
@@ -237,6 +255,7 @@ struct WatchOrientationService {
 	private let neighborhoodProvider = WatchNeighborhoodProvider()
 	private let finder = WatchIntersectionFinder()
 	private let neighborhoodResolver = WatchNeighborhoodResolver()
+	private let firstLookupGuard = WatchFirstLookupMapDetailGuard()
 	private static let spokenExpansionTimeout: Duration = .milliseconds(900)
 
 	@MainActor
@@ -248,11 +267,12 @@ struct WatchOrientationService {
 		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming)
 		let requestedCount = prefs.spokenIntersectionCount.rawValue
 		let resultCount = kind == .upcoming && context.headingDegrees == nil ? 1 : requestedCount
+		let firstLookupPrefs = await prefsForFirstLookup(kind: kind, rank: 1, prefs: prefs)
 		let firstMapData = try await mapData(
 			for: kind,
 			from: context,
 			minimumCandidateCount: 1,
-			prefs: prefs
+			prefs: firstLookupPrefs
 		)
 		var reports = await spokenReports(
 			for: kind,
@@ -361,11 +381,12 @@ struct WatchOrientationService {
 	@MainActor
 	func report(_ kind: WatchReportKind, rank: Int = 1, prefs: WatchAppPrefs) async throws -> WatchOrientationReport {
 		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming)
+		let lookupPrefs = await prefsForFirstLookup(kind: kind, rank: rank, prefs: prefs)
 		let mapData = try await mapData(
 			for: kind,
 			from: context,
 			minimumCandidateCount: rank,
-			prefs: prefs
+			prefs: lookupPrefs
 		)
 		let match = if kind == .nearest {
 			finder.nearest(rank: rank, from: context.coordinate, in: mapData.intersections)
@@ -384,6 +405,21 @@ struct WatchOrientationService {
 			prefs: prefs,
 			neighborhoodContext: neighborhoodContext
 		)
+	}
+
+	private func prefsForFirstLookup(
+		kind: WatchReportKind,
+		rank: Int,
+		prefs: WatchAppPrefs
+	) async -> WatchAppPrefs {
+		guard
+			await firstLookupGuard.shouldUseCoreMapDetails(kind: kind, rank: rank, prefs: prefs)
+		else {
+			return prefs
+		}
+		var lookupPrefs = prefs
+		lookupPrefs.mapDetails = WatchMapDetailOptions()
+		return lookupPrefs
 	}
 
 	private func makeReport(
@@ -764,6 +800,31 @@ private extension Array where Element == WatchOrientationReport {
 				return existingStreet == reportStreet && existingCrossStreet == reportCrossStreet
 			}
 			return existing.cross == report.cross
+		}
+	}
+}
+
+actor WatchFirstLookupMapDetailGuard {
+	private var hasProtectedNearest = false
+	private var hasProtectedUpcoming = false
+
+	func shouldUseCoreMapDetails(kind: WatchReportKind, rank: Int, prefs: WatchAppPrefs) -> Bool {
+		guard rank == 1, prefs.mapDetails != WatchMapDetailOptions() else {
+			return false
+		}
+		switch kind {
+		case .nearest:
+			guard !hasProtectedNearest else {
+				return false
+			}
+			hasProtectedNearest = true
+			return true
+		case .upcoming:
+			guard !hasProtectedUpcoming else {
+				return false
+			}
+			hasProtectedUpcoming = true
+			return true
 		}
 	}
 }

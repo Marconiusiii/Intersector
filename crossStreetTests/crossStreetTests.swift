@@ -1978,7 +1978,7 @@ struct IntersectorTests {
 		#expect(await mapClient.requestedRadii == [225])
 	}
 
-	@Test func initialNearestPrewarmFetchesNeededCountWithoutOptionalMapDetails() async throws {
+	@Test func initialNearestPrewarmFetchesOneCoreResultWithoutOptionalMapDetails() async throws {
 		let mapClient = AdaptiveMapDataClient()
 		var prefs = AppPrefs()
 		prefs.spokenIntersectionCount = .three
@@ -1998,11 +1998,36 @@ struct IntersectorTests {
 		let isReady = await service.prewarmInitialNearestMapData(prefs: prefs)
 
 		#expect(isReady)
-		#expect(await mapClient.requestedRadii == [225, 375, 750])
+		#expect(await mapClient.requestedRadii == [225])
+		#expect(await mapClient.requestedOptions == [
+			MapDetailOptions()
+		])
+	}
+
+	@Test func firstNearestWithOptionalMapDetailsUsesCoreLookup() async throws {
+		let mapClient = AdaptiveMapDataClient()
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.mapDetails = MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(
+					coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0),
+					headingDegrees: nil,
+					horizontalAccuracy: 10
+				)
+			),
+			mapDataClient: mapClient,
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+
+		_ = try await service.report(.nearest, prefs: prefs)
+		_ = try await service.report(.nearest, prefs: prefs)
+
+		#expect(await mapClient.requestedRadii == [225, 225])
 		#expect(await mapClient.requestedOptions == [
 			MapDetailOptions(),
-			MapDetailOptions(),
-			MapDetailOptions()
+			MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
 		])
 	}
 
