@@ -1946,9 +1946,10 @@ struct IntersectorTests {
 		#expect(await mapClient.requestedRadii == [225])
 	}
 
-	@Test func initialNearestPrewarmFetchesSmallestMapRadius() async throws {
+	@Test func initialNearestPrewarmFetchesDataNeededByCurrentNearestSettings() async throws {
 		let mapClient = AdaptiveMapDataClient()
 		var prefs = AppPrefs()
+		prefs.spokenIntersectionCount = .three
 		prefs.mapDetails = MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
 		let service = OrientSvc(
 			locationProvider: FakeLocationProvider(
@@ -1965,8 +1966,12 @@ struct IntersectorTests {
 		let isReady = await service.prewarmInitialNearestMapData(prefs: prefs)
 
 		#expect(isReady)
-		#expect(await mapClient.requestedRadii == [225])
-		#expect(await mapClient.requestedOptions == [MapDetailOptions()])
+		#expect(await mapClient.requestedRadii == [225, 375, 750])
+		#expect(await mapClient.requestedOptions == [
+			MapDetailOptions(includeCrossings: true, includeWalkingPaths: true),
+			MapDetailOptions(includeCrossings: true, includeWalkingPaths: true),
+			MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
+		])
 	}
 
 	@Test func thirdUpcomingStillExpandsRadiusWhenCacheIsMissing() async throws {
@@ -1990,59 +1995,6 @@ struct IntersectorTests {
 		#expect(await mapClient.requestedRadii == [225, 375, 750])
 	}
 
-	@Test func temporaryMapFailureUsesLighterRecoveryLookupOnNextAttempt() async throws {
-		var prefs = AppPrefs()
-		prefs.areaMode = .off
-		prefs.mapDetails = MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
-		let mapClient = TemporaryFailureRecoveryMapDataClient()
-		let service = OrientSvc(
-			locationProvider: FakeLocationProvider(
-				context: DeviceContext(
-					coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0),
-					headingDegrees: nil
-				)
-			),
-			mapDataClient: mapClient,
-			neighborhoodProvider: FailingNeighborhoodProvider()
-		)
-
-		await #expect(throws: URLError.self) {
-			_ = try await service.report(.nearest, prefs: prefs)
-		}
-		let report = try await service.report(.nearest, prefs: prefs)
-
-		#expect(report.cross == "Oak Street and Pine Street")
-		#expect(await mapClient.requestedRadii == [225, 225])
-		#expect(await mapClient.requestedOptions == [
-			MapDetailOptions(),
-			MapDetailOptions()
-		])
-	}
-
-	@Test func firstUserLookupUsesBasicMapDataBeforeRicherDetails() async throws {
-		var prefs = AppPrefs()
-		prefs.areaMode = .off
-		prefs.mapDetails = MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
-		let mapClient = AdaptiveMapDataClient()
-		let service = OrientSvc(
-			locationProvider: FakeLocationProvider(
-				context: DeviceContext(
-					coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0),
-					headingDegrees: nil
-				)
-			),
-			mapDataClient: mapClient,
-			neighborhoodProvider: FailingNeighborhoodProvider()
-		)
-
-		_ = try await service.report(.nearest, prefs: prefs)
-		_ = try await service.report(.nearest, prefs: prefs)
-
-		#expect(await mapClient.requestedOptions == [
-			MapDetailOptions(),
-			MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
-		])
-	}
 }
 
 actor FetchCounter {
@@ -2215,47 +2167,6 @@ actor AdaptiveMapDataClient: MapDataFetching {
 					]
 				)
 			]
-		)
-	}
-}
-
-actor TemporaryFailureRecoveryMapDataClient: MapDataFetching {
-	private(set) var requestedRadii: [CLLocationDistance] = []
-	private(set) var requestedOptions: [MapDetailOptions] = []
-	private var shouldFail = true
-
-	func intersections(
-		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance,
-		options: MapDetailOptions
-	) async throws -> [IntersectionCandidate] {
-		try await mapData(
-			near: coordinate,
-			radiusMeters: radiusMeters,
-			options: options
-		).intersections
-	}
-
-	func mapData(
-		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance,
-		options: MapDetailOptions
-	) async throws -> MapDataSet {
-		requestedRadii.append(radiusMeters)
-		requestedOptions.append(options)
-		if shouldFail {
-			shouldFail = false
-			throw URLError(.timedOut)
-		}
-		return MapDataSet(
-			intersections: [
-				IntersectionCandidate(
-					id: "oak-pine",
-					names: ["Oak Street", "Pine Street"],
-					coordinate: CLLocationCoordinate2D(latitude: coordinate.latitude + 0.0001, longitude: coordinate.longitude)
-				)
-			],
-			roads: []
 		)
 	}
 }

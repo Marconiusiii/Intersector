@@ -592,7 +592,7 @@ struct ContentView: View {
 							systemImage: "safari.fill",
 							accessibilityLabel: "My Direction",
 							accessibilityHint: "Speaks cardinal direction.",
-							isDisabled: isDirectionLoading
+							isDisabled: isDirectionLoading || isStartupLoading
 						) {
 							await updateDirection()
 						}
@@ -802,7 +802,7 @@ struct ContentView: View {
 		.overlay(Rectangle().stroke(Color.crossButtonStrongBorder, lineWidth: 2))
 		.shadow(color: Color.black.opacity(0.18), radius: 2, x: 0, y: 1)
 		.contentShape(Rectangle())
-		.disabled(isLoading)
+		.disabled(isLoading || isStartupLoading)
 		.accessibilityLabel("Point and Scan")
 	}
 
@@ -845,7 +845,7 @@ struct ContentView: View {
 		}
 		.menuStyle(.button)
 		.buttonStyle(IntersectorActionButtonStyle(drawsChrome: false))
-		.disabled(isLoading || pointScanner.isScanning || pointScanner.isPreparing)
+		.disabled(isLoading || isStartupLoading || pointScanner.isScanning || pointScanner.isPreparing)
 		.accessibilityHidden(true)
 	}
 
@@ -1410,7 +1410,7 @@ struct ContentView: View {
 		.buttonStyle(IntersectorActionButtonStyle(drawsChrome: drawsChrome))
 		.frame(maxWidth: .infinity)
 		.contentShape(Rectangle())
-		.disabled(isDisabled ?? (isLoading || pointScanner.isScanning || pointScanner.isPreparing))
+		.disabled(isDisabled ?? (isLoading || isStartupLoading || pointScanner.isScanning || pointScanner.isPreparing))
 		.accessibilityLabel(accessibilityLabel ?? title)
 		.accessibilityHint(accessibilityHint ?? "")
 	}
@@ -1546,8 +1546,18 @@ struct ContentView: View {
 				VoiceOverAnnouncer.reportUpdated(text)
 				return
 			}
+			let hasMapData = await OrientSvc.shared.prewarmInitialNearestMapData(prefs: prefs)
+			guard !Task.isCancelled else {
+				return
+			}
 			LoadingThrobber.stop()
 			isStartupLoading = false
+			guard hasMapData else {
+				let text = "Intersector is having trouble loading map data. Please try again."
+				statusText = text
+				VoiceOverAnnouncer.reportUpdated(text)
+				return
+			}
 			ReadyEarcon.play(hapticsEnabled: prefs.haptics)
 			statusText = readyText
 			Task { @MainActor in
