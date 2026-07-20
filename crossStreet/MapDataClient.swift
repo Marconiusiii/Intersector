@@ -16,6 +16,7 @@ struct MapDataClient: MapDataFetching {
 	var session: URLSession = .shared
 	private static let cache = MapDataCache()
 	private static let endpointHealth = MapEndpointHealth()
+	private static let crossingEnrichmentTimeout: Duration = .milliseconds(700)
 
 	func intersections(
 		near coordinate: CLLocationCoordinate2D,
@@ -51,12 +52,28 @@ struct MapDataClient: MapDataFetching {
 		}
 
 		do {
-			return try await fetchMapDataWithCrossingEnrichment(
-				near: coordinate,
-				radiusMeters: radiusMeters,
-				options: options,
-				coreData: coreData
-			)
+			return try await withThrowingTaskGroup(of: MapDataSet.self) { group in
+				group.addTask {
+					try await fetchMapDataWithCrossingEnrichment(
+						near: coordinate,
+						radiusMeters: radiusMeters,
+						options: options,
+						coreData: coreData
+					)
+				}
+				group.addTask {
+					try await Task.sleep(for: Self.crossingEnrichmentTimeout)
+					throw URLError(.timedOut)
+				}
+
+				defer {
+					group.cancelAll()
+				}
+				guard let data = try await group.next() else {
+					throw MapDataError.invalidResponse
+				}
+				return data
+			}
 		} catch {
 			return coreData
 		}

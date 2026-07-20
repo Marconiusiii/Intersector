@@ -65,6 +65,7 @@ struct OrientSvc {
 	var finder = IntersectionFinder()
 	var neighborhoodResolver = NeighborhoodResolver()
 	private var upcomingCache = UpcomingReportCache()
+	private static let spokenExpansionTimeout: Duration = .milliseconds(900)
 
 	init(
 		locationProvider: LocationProviding,
@@ -98,13 +99,13 @@ struct OrientSvc {
 			let mapData = try await mapData(
 				for: .nearest,
 				from: context,
-				minimumCandidateCount: prefs.spokenIntersectionCount.rawValue,
+				minimumCandidateCount: 1,
 				prefs: prewarmPrefs
 			)
 			return hasEnoughCandidates(
 				for: .nearest,
 				from: context,
-				minimumCandidateCount: prefs.spokenIntersectionCount.rawValue,
+				minimumCandidateCount: 1,
 				mapData: mapData
 			)
 		} catch {
@@ -163,15 +164,86 @@ struct OrientSvc {
 
 		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming || kind == .scan)
 		let requestedCount = prefs.spokenIntersectionCount.rawValue
-		let minimumCandidateCount = kind == .upcoming && context.headingDegrees == nil
-			? 1
-			: requestedCount
-		let mapData = try await mapData(
+		let resultCount = kind == .upcoming && context.headingDegrees == nil ? 1 : requestedCount
+		let firstMapData = try await mapData(
 			for: kind,
 			from: context,
-			minimumCandidateCount: minimumCandidateCount,
+			minimumCandidateCount: 1,
 			prefs: prefs
 		)
+		var reports = await spokenReports(
+			for: kind,
+			from: context,
+			mapData: firstMapData,
+			prefs: prefs,
+			maxCount: resultCount
+		)
+		guard !reports.isEmpty else {
+			throw OrientError.noIntersections
+		}
+		if reports.count < resultCount {
+			do {
+				let expandedMapData = try await mapDataForSpokenExpansion(
+					for: kind,
+					from: context,
+					minimumCandidateCount: resultCount,
+					prefs: prefs
+				)
+				let expandedReports = await spokenReports(
+					for: kind,
+					from: context,
+					mapData: expandedMapData,
+					prefs: prefs,
+					maxCount: resultCount
+				)
+				if expandedReports.count > reports.count {
+					reports = expandedReports
+				}
+			} catch {}
+		}
+		if kind == .upcoming {
+			await upcomingCache.store(reports: reports, prefs: prefs, context: context)
+		}
+		return IntersectionReportList(reports: reports).text(with: prefs)
+	}
+
+	private func mapDataForSpokenExpansion(
+		for kind: ReportKind,
+		from context: DeviceContext,
+		minimumCandidateCount: Int,
+		prefs: AppPrefs
+	) async throws -> MapDataSet {
+		try await withThrowingTaskGroup(of: MapDataSet.self) { group in
+			group.addTask {
+				try await mapData(
+					for: kind,
+					from: context,
+					minimumCandidateCount: minimumCandidateCount,
+					prefs: prefs
+				)
+			}
+			group.addTask {
+				try await Task.sleep(for: Self.spokenExpansionTimeout)
+				throw URLError(.timedOut)
+			}
+
+			defer {
+				group.cancelAll()
+			}
+			guard let data = try await group.next() else {
+				throw OrientError.noIntersections
+			}
+			return data
+		}
+	}
+
+	private func spokenReports(
+		for kind: ReportKind,
+		from context: DeviceContext,
+		mapData: MapDataSet,
+		prefs: AppPrefs,
+		maxCount: Int
+	) async -> [OrientReport] {
 		let ranked: [IntersectionCandidate]
 		switch kind {
 		case .nearest:
@@ -185,7 +257,6 @@ struct OrientSvc {
 		case .scan:
 			ranked = finder.scanMatch(from: context, in: mapData.intersections).map { [$0.candidate] } ?? []
 		}
-		let resultCount = kind == .upcoming && context.headingDegrees == nil ? 1 : requestedCount
 		let neighborhoodContext = await neighborhoodContext(for: prefs, from: context)
 		var reports: [OrientReport] = []
 		for match in ranked {
@@ -200,17 +271,11 @@ struct OrientSvc {
 			if !reports.containsSpokenIntersection(matching: report) {
 				reports.append(report)
 			}
-			if reports.count == resultCount {
+			if reports.count == maxCount {
 				break
 			}
 		}
-		guard !reports.isEmpty else {
-			throw OrientError.noIntersections
-		}
-		if kind == .upcoming {
-			await upcomingCache.store(reports: reports, prefs: prefs, context: context)
-		}
-		return IntersectionReportList(reports: reports).text(with: prefs)
+		return reports
 	}
 
 	private func upcomingReports(

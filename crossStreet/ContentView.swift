@@ -998,17 +998,7 @@ struct ContentView: View {
 				hasPedestrianIsland: true
 			)
 		)
-		return "Sample: \(report.text(with: prefs))"
-	}
-
-	private var spokenIntersectionSliderBinding: Binding<Double> {
-		Binding {
-			Double(prefs.spokenIntersectionCount.rawValue)
-		} set: { value in
-			let rawValue = min(3, max(1, Int(value.rounded())))
-			spokenIntersectionCountRaw = rawValue
-			settingsFocusTarget = .spokenIntersections
-		}
+		return report.text(with: prefs)
 	}
 
 	private var spokenIntersectionCountDescription: String {
@@ -1040,28 +1030,24 @@ struct ContentView: View {
 		}
 	}
 
-	private func spokenIntersectionAccessibilityLabel(_ count: SpokenIntersectionCount) -> String {
-		switch count {
-		case .one:
-			"One intersection"
-		case .two:
-			"Two intersections"
-		case .three:
-			"Three intersections"
+	private var spokenIntersectionCountBinding: Binding<SpokenIntersectionCount> {
+		Binding {
+			prefs.spokenIntersectionCount
+		} set: { count in
+			spokenIntersectionCountRaw = count.rawValue
+			settingsFocusTarget = .spokenIntersections
 		}
 	}
 
-	private func adjustSpokenIntersections(_ direction: AccessibilityAdjustmentDirection) {
-		let rawValue = prefs.spokenIntersectionCount.rawValue
-		switch direction {
-		case .increment:
-			spokenIntersectionCountRaw = min(3, rawValue + 1)
-		case .decrement:
-			spokenIntersectionCountRaw = max(1, rawValue - 1)
-		@unknown default:
-			break
+	private func spokenIntersectionOptionAccessibilityLabel(_ count: SpokenIntersectionCount) -> String {
+		switch count {
+		case .one:
+			"1 intersection"
+		case .two:
+			"2 intersections"
+		case .three:
+			"3 intersections"
 		}
-		settingsFocusTarget = .spokenIntersections
 	}
 
 	private var hapticsBinding: Binding<Bool> {
@@ -1146,7 +1132,6 @@ struct ContentView: View {
 
 	private var settingsIntroSection: some View {
 		Group {
-			settingsScreenTitle("Settings")
 			settingsControlRow {
 				Button {
 					isShowingHelp = true
@@ -1263,17 +1248,16 @@ struct ContentView: View {
 		VStack(alignment: .leading, spacing: 8) {
 			Text("Spoken Intersections")
 				.foregroundStyle(Color.crossText)
-			Slider(
-				value: spokenIntersectionSliderBinding,
-				in: 1...3,
-				step: 1
-			)
+			Picker("Spoken Intersections", selection: spokenIntersectionCountBinding) {
+				ForEach(SpokenIntersectionCount.allCases) { count in
+					Text("\(count.rawValue)")
+						.accessibilityLabel(spokenIntersectionOptionAccessibilityLabel(count))
+						.tag(count)
+				}
+			}
+			.pickerStyle(.segmented)
 		}
-		.accessibilityElement(children: .ignore)
 		.accessibilityFocused($settingsFocusTarget, equals: .spokenIntersections)
-		.accessibilityLabel("Spoken Intersections")
-		.accessibilityValue(spokenIntersectionAccessibilityLabel(prefs.spokenIntersectionCount))
-		.accessibilityAdjustableAction(adjustSpokenIntersections)
 	}
 
 	private var settingsMapDetailSection: some View {
@@ -1434,21 +1418,6 @@ struct ContentView: View {
 				.lineLimit(nil)
 				.fixedSize(horizontal: false, vertical: true)
 		}
-	}
-
-	private func settingsScreenTitle(_ title: String) -> some View {
-		Text(title)
-			.font(.largeTitle)
-			.fontWeight(.bold)
-			.foregroundStyle(Color.crossText)
-			.lineLimit(nil)
-			.fixedSize(horizontal: false, vertical: true)
-			.padding(.horizontal, 16)
-			.padding(.vertical, 10)
-			.frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
-			.background(Color.crossSettingsHeader)
-			.contentShape(Rectangle())
-			.accessibilityAddTraits(.isHeader)
 	}
 
 	private func settingsHeader(_ title: String) -> some View {

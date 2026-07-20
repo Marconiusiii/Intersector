@@ -237,6 +237,7 @@ struct WatchOrientationService {
 	private let neighborhoodProvider = WatchNeighborhoodProvider()
 	private let finder = WatchIntersectionFinder()
 	private let neighborhoodResolver = WatchNeighborhoodResolver()
+	private static let spokenExpansionTimeout: Duration = .milliseconds(900)
 
 	@MainActor
 	func spokenText(_ kind: WatchReportKind, prefs: WatchAppPrefs) async throws -> String {
@@ -246,13 +247,85 @@ struct WatchOrientationService {
 
 		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming)
 		let requestedCount = prefs.spokenIntersectionCount.rawValue
-		let minimumCandidateCount = kind == .upcoming && context.headingDegrees == nil ? 1 : requestedCount
-		let mapData = try await mapData(
+		let resultCount = kind == .upcoming && context.headingDegrees == nil ? 1 : requestedCount
+		let firstMapData = try await mapData(
 			for: kind,
 			from: context,
-			minimumCandidateCount: minimumCandidateCount,
+			minimumCandidateCount: 1,
 			prefs: prefs
 		)
+		var reports = await spokenReports(
+			for: kind,
+			from: context,
+			mapData: firstMapData,
+			prefs: prefs,
+			maxCount: resultCount
+		)
+		guard !reports.isEmpty else {
+			throw WatchReportError.noIntersections
+		}
+		if reports.count < resultCount {
+			do {
+				let expandedMapData = try await mapDataForSpokenExpansion(
+					for: kind,
+					from: context,
+					minimumCandidateCount: resultCount,
+					prefs: prefs
+				)
+				let expandedReports = await spokenReports(
+					for: kind,
+					from: context,
+					mapData: expandedMapData,
+					prefs: prefs,
+					maxCount: resultCount
+				)
+				if expandedReports.count > reports.count {
+					reports = expandedReports
+				}
+			} catch {}
+		}
+		return WatchIntersectionReportList(reports: reports).text(with: prefs)
+	}
+
+	@MainActor
+	private func mapDataForSpokenExpansion(
+		for kind: WatchReportKind,
+		from context: WatchDeviceContext,
+		minimumCandidateCount: Int,
+		prefs: WatchAppPrefs
+	) async throws -> WatchMapDataSet {
+		try await withThrowingTaskGroup(of: WatchMapDataSet.self) { group in
+			group.addTask {
+				try await mapData(
+					for: kind,
+					from: context,
+					minimumCandidateCount: minimumCandidateCount,
+					prefs: prefs
+				)
+			}
+			group.addTask {
+				try await Task.sleep(for: Self.spokenExpansionTimeout)
+				throw URLError(.timedOut)
+			}
+
+			defer {
+				group.cancelAll()
+			}
+			guard let data = try await group.next() else {
+				throw WatchReportError.noIntersections
+			}
+			return data
+		}
+	}
+
+	@MainActor
+	private func spokenReports(
+		for kind: WatchReportKind,
+		from context: WatchDeviceContext,
+		mapData: WatchMapDataSet,
+		prefs: WatchAppPrefs,
+		maxCount: Int
+	) async -> [WatchOrientationReport] {
 		let ranked: [WatchIntersectionCandidate]
 		switch kind {
 		case .nearest:
@@ -264,7 +337,6 @@ struct WatchOrientationService {
 				ranked = finder.rankedUpcoming(from: context, in: mapData)
 			}
 		}
-		let resultCount = kind == .upcoming && context.headingDegrees == nil ? 1 : requestedCount
 		let neighborhoodContext = await neighborhoodContext(for: prefs.areaMode, from: context)
 		var reports: [WatchOrientationReport] = []
 		for match in ranked {
@@ -279,14 +351,11 @@ struct WatchOrientationService {
 			if !reports.containsSpokenIntersection(matching: report) {
 				reports.append(report)
 			}
-			if reports.count == resultCount {
+			if reports.count == maxCount {
 				break
 			}
 		}
-		guard !reports.isEmpty else {
-			throw WatchReportError.noIntersections
-		}
-		return WatchIntersectionReportList(reports: reports).text(with: prefs)
+		return reports
 	}
 
 	@MainActor
@@ -1261,6 +1330,7 @@ struct WatchMapDataClient {
 	]
 	private let session: URLSession = .shared
 	private static let endpointHealth = WatchMapEndpointHealth()
+	private static let crossingEnrichmentTimeout: Duration = .milliseconds(700)
 
 	func mapData(
 		near coordinate: CLLocationCoordinate2D,
@@ -1275,12 +1345,28 @@ struct WatchMapDataClient {
 		coreOptions.includeCrossings = false
 		let coreData = try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: coreOptions)
 		do {
-			return try await fetchMapDataWithCrossingEnrichment(
-				near: coordinate,
-				radiusMeters: radiusMeters,
-				options: options,
-				coreData: coreData
-			)
+			return try await withThrowingTaskGroup(of: WatchMapDataSet.self) { group in
+				group.addTask {
+					try await fetchMapDataWithCrossingEnrichment(
+						near: coordinate,
+						radiusMeters: radiusMeters,
+						options: options,
+						coreData: coreData
+					)
+				}
+				group.addTask {
+					try await Task.sleep(for: Self.crossingEnrichmentTimeout)
+					throw URLError(.timedOut)
+				}
+
+				defer {
+					group.cancelAll()
+				}
+				guard let data = try await group.next() else {
+					throw WatchReportError.invalidResponse
+				}
+				return data
+			}
 		} catch {
 			return coreData
 		}
