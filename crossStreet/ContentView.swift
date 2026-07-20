@@ -839,7 +839,7 @@ struct ContentView: View {
 		) {
 			ZStack {
 				Color.clear
-				actionLabel("Point and Scan", systemImage: "dot.radiowaves.left.and.right")
+				actionLabel("Scan", systemImage: "dot.radiowaves.left.and.right")
 			}
 			.frame(maxWidth: .infinity, maxHeight: .infinity)
 			.contentShape(Rectangle())
@@ -848,8 +848,8 @@ struct ContentView: View {
 		.frame(maxWidth: .infinity, minHeight: actionMinHeight, maxHeight: .infinity, alignment: .center)
 		.foregroundStyle(Color.crossButtonText)
 		.background(pointScanBackground)
-		.overlay(Rectangle().stroke(Color.crossButtonBorder, lineWidth: 1))
-		.shadow(color: Color.black.opacity(0.12), radius: 2, x: 0, y: 1)
+		.overlay(Rectangle().stroke(Color.crossButtonStrongBorder, lineWidth: 2))
+		.shadow(color: Color.black.opacity(0.18), radius: 2, x: 0, y: 1)
 		.contentShape(Rectangle())
 		.disabled(isLoading || isStartupLoading)
 		.accessibilityLabel("Point and Scan")
