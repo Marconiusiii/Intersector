@@ -478,7 +478,6 @@ struct ContentView: View {
 	@Environment(\.openURL) private var openURL
 	@Environment(\.scenePhase) private var scenePhase
 	@ScaledMetric(relativeTo: .largeTitle) private var headerMinHeight: CGFloat = 88
-	@ScaledMetric(relativeTo: .body) private var statusMinHeight: CGFloat = 112
 	@ScaledMetric(relativeTo: .title2) private var actionMinHeight: CGFloat = 76
 	@State private var statusText = "Choose an action."
 	@State private var isLoading = false
@@ -555,7 +554,6 @@ struct ContentView: View {
 					headerView
 						.frame(minHeight: headerMinHeight)
 					statusView
-						.frame(minHeight: statusMinHeight)
 					Group {
 						if showRankedControls {
 							rankedActionRow(
@@ -677,6 +675,11 @@ struct ContentView: View {
 		.padding(.horizontal, 16)
 		.padding(.vertical, 10)
 		.background(Color.crossPanel)
+		.contentShape(Rectangle())
+		.accessibilityElement(children: .ignore)
+		.accessibilityLabel("Current Info")
+		.accessibilityValue(statusText)
+		.accessibilityAddTraits(.isHeader)
 	}
 
 	private var currentInfoHeading: some View {
