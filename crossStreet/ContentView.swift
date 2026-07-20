@@ -488,6 +488,7 @@ struct ContentView: View {
 	@State private var isShowingHelp = false
 	@State private var isShowingMailComposer = false
 	@State private var hasPreparedInitialLocation = false
+	@State private var startupTask: Task<Void, Never>?
 	@State private var onboardingLocationProvider = LocationProvider()
 	@State private var directionLocationProvider = LocationProvider()
 	@StateObject private var pointScanner = PointScanController()
@@ -765,6 +766,9 @@ struct ContentView: View {
 			isOn: Binding(
 				get: { pointScanner.isScanning || pointScanner.isPreparing },
 				set: { enabled in
+					if enabled {
+						cancelStartupPreparationIfNeeded()
+					}
 					pointScanner.setScanning(enabled, prefs: prefs) { text in
 						statusText = text
 					}
@@ -1353,6 +1357,7 @@ struct ContentView: View {
 		guard !isLoading else {
 			return
 		}
+		cancelStartupPreparationIfNeeded()
 		isLoading = true
 		let loadingTask = Task { @MainActor in
 			do {
@@ -1408,6 +1413,7 @@ struct ContentView: View {
 		guard !isDirectionLoading else {
 			return
 		}
+		cancelStartupPreparationIfNeeded()
 		isDirectionLoading = true
 		let loadingText = "Checking direction."
 		statusText = loadingText
@@ -1432,32 +1438,48 @@ struct ContentView: View {
 			return
 		}
 		hasPreparedInitialLocation = true
-		Task {
+		startupTask = Task {
 			isStartupLoading = true
 			statusText = startupLoadingText
 			VoiceOverAnnouncer.reportUpdated(startupLoadingText)
 			LoadingThrobber.start(hapticsEnabled: prefs.haptics)
 
-			guard await OrientSvc.shared.prewarmLocation() else {
-				LoadingThrobber.stop()
-				isStartupLoading = false
-				statusText = "Choose an action."
+			let hasLocation = await OrientSvc.shared.prewarmLocation()
+			guard !Task.isCancelled else {
 				return
 			}
-			let isReady = await OrientSvc.shared.prewarmInitialNearestMapData(prefs: prefs)
-			guard isReady, statusText != readyText else {
+			guard hasLocation else {
 				LoadingThrobber.stop()
 				isStartupLoading = false
+				let text = "Intersector could not get your location yet. Try again in a moment."
+				statusText = text
+				VoiceOverAnnouncer.reportUpdated(text)
 				return
 			}
 			LoadingThrobber.stop()
 			isStartupLoading = false
 			ReadyEarcon.play(hapticsEnabled: prefs.haptics)
 			statusText = readyText
+			Task {
+				_ = await OrientSvc.shared.prewarmInitialNearestMapData(prefs: prefs)
+			}
 			Task { @MainActor in
 				try? await Task.sleep(for: .milliseconds(1_350))
 				VoiceOverAnnouncer.reportUpdated(readyText)
 			}
+		}
+	}
+
+	private func cancelStartupPreparationIfNeeded() {
+		startupTask?.cancel()
+		startupTask = nil
+		guard isStartupLoading else {
+			return
+		}
+		LoadingThrobber.stop()
+		isStartupLoading = false
+		if statusText == startupLoadingText {
+			statusText = "Choose an action."
 		}
 	}
 
@@ -1467,6 +1489,7 @@ struct ContentView: View {
 			return false
 		}
 		UserDefaults.standard.set(false, forKey: LaunchKeys.startPointScan)
+		cancelStartupPreparationIfNeeded()
 		pointScanner.setScanning(true, prefs: prefs) { text in
 			statusText = text
 		}
