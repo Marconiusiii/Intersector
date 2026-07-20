@@ -45,9 +45,7 @@ struct NearestIntersectionIntent: AppIntent {
 			let text = try await OrientSvc.shared.spokenText(.nearest, prefs: prefs)
 			return intersectorResult(text)
 		} catch {
-			return intersectorResult(
-				"I couldn't get your nearest intersection. Make sure Location Services are enabled for Intersector and try again."
-			)
+			return intersectorResult("I couldn't find your nearest intersection. Please try again.")
 		}
 	}
 }
@@ -64,9 +62,7 @@ struct UpcomingIntersectionIntent: AppIntent {
 			let text = try await OrientSvc.shared.spokenText(.upcoming, prefs: prefs)
 			return intersectorResult(text)
 		} catch {
-			return intersectorResult(
-				"I couldn't get your upcoming intersection. Make sure Location Services are enabled for Intersector and try again."
-			)
+			return intersectorResult("I couldn't find your upcoming intersection. Please try again.")
 		}
 	}
 }
@@ -84,9 +80,7 @@ struct SecondNearestIntersectionIntent: AppIntent {
 			let text = report.text(with: prefs, rank: 2)
 			return intersectorResult(text)
 		} catch {
-			return intersectorResult(
-				"I couldn't get your second nearest intersection. Make sure Location Services are enabled for Intersector and try again."
-			)
+			return intersectorResult("I couldn't find your second nearest intersection. Please try again.")
 		}
 	}
 }
@@ -104,9 +98,7 @@ struct ThirdNearestIntersectionIntent: AppIntent {
 			let text = report.text(with: prefs, rank: 3)
 			return intersectorResult(text)
 		} catch {
-			return intersectorResult(
-				"I couldn't get your third nearest intersection. Make sure Location Services are enabled for Intersector and try again."
-			)
+			return intersectorResult("I couldn't find your third nearest intersection. Please try again.")
 		}
 	}
 }
@@ -124,9 +116,7 @@ struct SecondUpcomingIntersectionIntent: AppIntent {
 			let text = report.text(with: prefs, rank: 2)
 			return intersectorResult(text)
 		} catch {
-			return intersectorResult(
-				"I couldn't get your second upcoming intersection. Make sure Location Services are enabled for Intersector and try again."
-			)
+			return intersectorResult("I couldn't find your second upcoming intersection. Please try again.")
 		}
 	}
 }
@@ -144,9 +134,7 @@ struct ThirdUpcomingIntersectionIntent: AppIntent {
 			let text = report.text(with: prefs, rank: 3)
 			return intersectorResult(text)
 		} catch {
-			return intersectorResult(
-				"I couldn't get your third upcoming intersection. Make sure Location Services are enabled for Intersector and try again."
-			)
+			return intersectorResult("I couldn't find your third upcoming intersection. Please try again.")
 		}
 	}
 }
@@ -165,9 +153,7 @@ struct MyDirectionIntent: AppIntent {
 			let text = Self.spokenDirection(for: heading, prefs: prefs)
 			return intersectorResult(text)
 		} catch {
-			return intersectorResult(
-				"I couldn't get your direction. Make sure Location Services are enabled for Intersector and try again."
-			)
+			return intersectorResult("I couldn't get your direction. Please try again.")
 		}
 	}
 

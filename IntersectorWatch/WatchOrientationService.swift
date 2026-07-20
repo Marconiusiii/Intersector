@@ -216,7 +216,7 @@ enum IntersectorWatchReporter {
 		do {
 			return try await WatchOrientationService().spokenText(kind, prefs: prefs)
 		} catch {
-			return "Unable to update \(kind.intentLabel). \(error.localizedDescription)"
+			return "I couldn't find your \(kind.intentLabel.lowercased()). Please try again."
 		}
 	}
 
@@ -226,7 +226,7 @@ enum IntersectorWatchReporter {
 			let heading = try await WatchLocationProvider().currentHeading(allowCached: false)
 			return "Facing \(WatchGeo.localizedDirection(heading, prefs: prefs))."
 		} catch {
-			return error.localizedDescription
+			return "I couldn't get your direction. Please try again."
 		}
 	}
 }
