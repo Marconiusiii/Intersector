@@ -2014,8 +2014,33 @@ struct IntersectorTests {
 		#expect(report.cross == "Oak Street and Pine Street")
 		#expect(await mapClient.requestedRadii == [225, 225])
 		#expect(await mapClient.requestedOptions == [
-			MapDetailOptions(includeCrossings: true, includeWalkingPaths: true),
+			MapDetailOptions(),
 			MapDetailOptions()
+		])
+	}
+
+	@Test func firstUserLookupUsesBasicMapDataBeforeRicherDetails() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.mapDetails = MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
+		let mapClient = AdaptiveMapDataClient()
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(
+					coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0),
+					headingDegrees: nil
+				)
+			),
+			mapDataClient: mapClient,
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+
+		_ = try await service.report(.nearest, prefs: prefs)
+		_ = try await service.report(.nearest, prefs: prefs)
+
+		#expect(await mapClient.requestedOptions == [
+			MapDetailOptions(),
+			MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
 		])
 	}
 }

@@ -258,6 +258,7 @@ struct WatchOrientationService {
 		let requestedCount = prefs.spokenIntersectionCount.rawValue
 		let minimumCandidateCount = kind == .upcoming && context.headingDegrees == nil ? 1 : requestedCount
 		let useRecovery = await Self.lookupFailureState.shouldUseRecovery(for: kind.recoveryKey)
+		let useFastInitialLookup = await Self.lookupFailureState.shouldUseFastInitialLookup()
 		let mapData: WatchMapDataSet
 		do {
 			mapData = try await self.mapData(
@@ -265,9 +266,10 @@ struct WatchOrientationService {
 				from: context,
 				minimumCandidateCount: minimumCandidateCount,
 				prefs: prefs,
-				recoveryMode: useRecovery
+				recoveryMode: useRecovery,
+				fastInitialLookup: useFastInitialLookup
 			)
-			await Self.lookupFailureState.recordSuccess(for: kind.recoveryKey)
+			await Self.lookupFailureState.recordSuccess(for: kind.recoveryKey, loadedMapData: true)
 		} catch {
 			await Self.lookupFailureState.recordFailure(for: kind.recoveryKey, error: error)
 			throw error
@@ -312,6 +314,7 @@ struct WatchOrientationService {
 	func report(_ kind: WatchReportKind, rank: Int = 1, prefs: WatchAppPrefs) async throws -> WatchOrientationReport {
 		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming)
 		let useRecovery = await Self.lookupFailureState.shouldUseRecovery(for: kind.recoveryKey)
+		let useFastInitialLookup = await Self.lookupFailureState.shouldUseFastInitialLookup()
 		let mapData: WatchMapDataSet
 		do {
 			mapData = try await self.mapData(
@@ -319,9 +322,10 @@ struct WatchOrientationService {
 				from: context,
 				minimumCandidateCount: rank,
 				prefs: prefs,
-				recoveryMode: useRecovery
+				recoveryMode: useRecovery,
+				fastInitialLookup: useFastInitialLookup
 			)
-			await Self.lookupFailureState.recordSuccess(for: kind.recoveryKey)
+			await Self.lookupFailureState.recordSuccess(for: kind.recoveryKey, loadedMapData: true)
 		} catch {
 			await Self.lookupFailureState.recordFailure(for: kind.recoveryKey, error: error)
 			throw error
@@ -390,10 +394,11 @@ struct WatchOrientationService {
 		from context: WatchDeviceContext,
 		minimumCandidateCount: Int,
 		prefs: WatchAppPrefs,
-		recoveryMode: Bool = false
+		recoveryMode: Bool = false,
+		fastInitialLookup: Bool = false
 	) async throws -> WatchMapDataSet {
 		let radii: [CLLocationDistance] = recoveryMode ? [225, 375] : [225, 375, 750, 1_200]
-		let options = recoveryMode ? WatchMapDetailOptions() : prefs.mapDetails
+		let options = recoveryMode || fastInitialLookup ? WatchMapDetailOptions() : prefs.mapDetails
 		var latestData = WatchMapDataSet(intersections: [], roads: [])
 		for radius in radii {
 			latestData = try await mapClient.mapData(
@@ -1282,7 +1287,12 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 
 actor WatchMapLookupFailureState {
 	private var recoveryUntil: [String: Date] = [:]
+	private var hasLoadedMapData = false
 	private let recoveryDuration: TimeInterval = 90
+
+	func shouldUseFastInitialLookup() -> Bool {
+		!hasLoadedMapData
+	}
 
 	func shouldUseRecovery(for key: String) -> Bool {
 		guard let date = recoveryUntil[key] else {
@@ -1302,8 +1312,11 @@ actor WatchMapLookupFailureState {
 		recoveryUntil[key] = Date().addingTimeInterval(recoveryDuration)
 	}
 
-	func recordSuccess(for key: String) {
+	func recordSuccess(for key: String, loadedMapData: Bool = false) {
 		recoveryUntil[key] = nil
+		if loadedMapData {
+			hasLoadedMapData = true
+		}
 	}
 }
 

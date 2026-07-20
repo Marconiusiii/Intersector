@@ -127,6 +127,7 @@ struct OrientSvc {
 			return cachedReport
 		}
 		let useRecovery = await lookupFailureState.shouldUseRecovery(for: kind.recoveryKey)
+		let useFastInitialLookup = await lookupFailureState.shouldUseFastInitialLookup()
 		let mapData: MapDataSet
 		do {
 			mapData = try await self.mapData(
@@ -134,9 +135,10 @@ struct OrientSvc {
 				from: context,
 				minimumCandidateCount: rank,
 				prefs: prefs,
-				recoveryMode: useRecovery
+				recoveryMode: useRecovery,
+				fastInitialLookup: useFastInitialLookup
 			)
-			await lookupFailureState.recordSuccess(for: kind.recoveryKey)
+			await lookupFailureState.recordSuccess(for: kind.recoveryKey, loadedMapData: true)
 		} catch {
 			await lookupFailureState.recordFailure(for: kind.recoveryKey, error: error)
 			throw error
@@ -177,6 +179,7 @@ struct OrientSvc {
 			? 1
 			: requestedCount
 		let useRecovery = await lookupFailureState.shouldUseRecovery(for: kind.recoveryKey)
+		let useFastInitialLookup = await lookupFailureState.shouldUseFastInitialLookup()
 		let mapData: MapDataSet
 		do {
 			mapData = try await self.mapData(
@@ -184,9 +187,10 @@ struct OrientSvc {
 				from: context,
 				minimumCandidateCount: minimumCandidateCount,
 				prefs: prefs,
-				recoveryMode: useRecovery
+				recoveryMode: useRecovery,
+				fastInitialLookup: useFastInitialLookup
 			)
-			await lookupFailureState.recordSuccess(for: kind.recoveryKey)
+			await lookupFailureState.recordSuccess(for: kind.recoveryKey, loadedMapData: true)
 		} catch {
 			await lookupFailureState.recordFailure(for: kind.recoveryKey, error: error)
 			throw error
@@ -359,10 +363,11 @@ struct OrientSvc {
 		from context: DeviceContext,
 		minimumCandidateCount: Int,
 		prefs: AppPrefs,
-		recoveryMode: Bool = false
+		recoveryMode: Bool = false,
+		fastInitialLookup: Bool = false
 	) async throws -> MapDataSet {
 		let radii: [CLLocationDistance] = recoveryMode ? [225, 375] : [225, 375, 750, 1_200]
-		let options = recoveryMode ? MapDetailOptions() : prefs.mapDetails
+		let options = recoveryMode || fastInitialLookup ? MapDetailOptions() : prefs.mapDetails
 		var latestData = MapDataSet(intersections: [], roads: [])
 
 		for radius in radii {
@@ -500,7 +505,12 @@ private extension Array where Element == OrientReport {
 
 actor MapLookupFailureState {
 	private var recoveryUntil: [String: Date] = [:]
+	private var hasLoadedMapData = false
 	private let recoveryDuration: TimeInterval = 90
+
+	func shouldUseFastInitialLookup() -> Bool {
+		!hasLoadedMapData
+	}
 
 	func shouldUseRecovery(for key: String) -> Bool {
 		guard let date = recoveryUntil[key] else {
@@ -520,8 +530,11 @@ actor MapLookupFailureState {
 		recoveryUntil[key] = Date().addingTimeInterval(recoveryDuration)
 	}
 
-	func recordSuccess(for key: String) {
+	func recordSuccess(for key: String, loadedMapData: Bool = false) {
 		recoveryUntil[key] = nil
+		if loadedMapData {
+			hasLoadedMapData = true
+		}
 	}
 }
 

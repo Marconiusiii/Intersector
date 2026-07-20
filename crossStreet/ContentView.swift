@@ -1550,9 +1550,6 @@ struct ContentView: View {
 			isStartupLoading = false
 			ReadyEarcon.play(hapticsEnabled: prefs.haptics)
 			statusText = readyText
-			Task {
-				_ = await OrientSvc.shared.prewarmInitialNearestMapData(prefs: prefs)
-			}
 			Task { @MainActor in
 				try? await Task.sleep(for: .milliseconds(1_350))
 				VoiceOverAnnouncer.reportUpdated(readyText)
