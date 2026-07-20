@@ -485,6 +485,7 @@ struct ContentView: View {
 	@State private var isStartupLoading = false
 	@State private var isLookupProgressVisible = false
 	@State private var isShowingSettings = false
+	@State private var isShowingHelp = false
 	@State private var isShowingMailComposer = false
 	@State private var hasPreparedInitialLocation = false
 	@State private var onboardingLocationProvider = LocationProvider()
@@ -1024,6 +1025,17 @@ struct ContentView: View {
 				settingsHelperText("Intersection directions and distances are estimates based on your location, device heading, and available map data. Accuracy can vary with GPS and compass conditions.")
 
 				Section {
+					Button {
+						isShowingHelp = true
+					} label: {
+						Text("Help")
+							.lineLimit(nil)
+							.fixedSize(horizontal: false, vertical: true)
+					}
+					.accessibilityHint("Opens instructions for using Intersector.")
+				}
+
+				Section {
 					Toggle("Distance", isOn: announcementDistanceBinding)
 						.accessibilityFocused($settingsFocusTarget, equals: .announcementDistance)
 					if includeAnnouncementDistance {
@@ -1167,6 +1179,102 @@ struct ContentView: View {
 					onFinish: { _ in }
 				)
 			}
+			.sheet(isPresented: $isShowingHelp) {
+				helpView
+			}
+		}
+	}
+
+	private var helpView: some View {
+		NavigationStack {
+			ScrollView {
+				VStack(alignment: .leading, spacing: 20) {
+					Text("Intersector helps you identify nearby intersections, understand the direction your phone is facing, and get quick street context from the app, Siri, Shortcuts, or Apple Watch. It uses your location, device heading, and available OpenStreetMap data to describe what is around you in concise spoken and visible announcements.")
+						.font(.body)
+						.foregroundStyle(Color.crossText)
+						.lineLimit(nil)
+						.fixedSize(horizontal: false, vertical: true)
+
+					helpSection(
+						title: "Nearest Intersection",
+						body: "Use Nearest Intersection to find the intersection closest to your current location. If Street Context is on, Intersector tries to say the street you are on first, followed by the cross street."
+					)
+
+					helpSection(
+						title: "Upcoming Intersection",
+						body: "Use Upcoming Intersection to find the next intersection in the direction your phone is facing. The 2nd and 3rd Upcoming actions follow your current street forward, so they describe what comes after the first result instead of simply picking nearby intersections by distance."
+					)
+
+					helpSection(
+						title: "My Direction",
+						body: "Use My Direction to hear the cardinal direction your phone is facing. If Manhattan Snob Mode is on, Intersector can use Uptown, Downtown, East Side, and West Side wording when that style applies."
+					)
+
+					helpSection(
+						title: "Point and Scan",
+						body: "Turn on Point and Scan for a live orientation mode. Point the top of your phone around you to scan for nearby intersections and crossings. Haptics get stronger as your phone lines up with a result, and Intersector speaks the result when you are pointing directly toward it."
+					)
+
+					helpSection(
+						title: "2nd and 3rd Results",
+						body: "The chevron menus on Nearest and Upcoming expose 2nd and 3rd result actions. Nearest ranks by distance from you. Upcoming follows the direction your phone is facing and looks forward along your current street. You can hide the visible chevrons in Settings while keeping ranked actions available through VoiceOver, Siri, and Shortcuts."
+					)
+
+					helpSection(
+						title: "Announcement Settings",
+						body: "Use the Announcements settings to choose what Intersector includes when it speaks. Distance adds how far away the result is. Direction adds wording like ahead, left, right, or clock-face direction. Neighborhood adds nearby area context when map data can support it. Intersection Details can add useful details such as signalized crossings or pedestrian islands when that information is mapped."
+					)
+
+					helpSection(
+						title: "Map Detail",
+						body: "Crossings can include mapped crossing points on named roads. Walking Paths can include named paths such as footways. Keep Walking Paths off if you want results focused on the regular street grid."
+					)
+
+					helpSection(
+						title: "Siri and Shortcuts",
+						body: "Intersector includes shortcut actions for Nearest Intersection, Upcoming Intersection, My Direction, and Point and Scan. In the Shortcuts app, you can create your own phrase, such as Which way am I facing, and Siri can run that shortcut without needing you to say with Intersector."
+					)
+
+					helpSection(
+						title: "Apple Watch",
+						body: "The Apple Watch app supports quick intersection and direction reports. Settings sync from the iPhone app so your spoken announcement preferences stay consistent."
+					)
+
+					helpSection(
+						title: "Accuracy",
+						body: "Intersector depends on GPS, compass heading, and available OpenStreetMap data. Tall buildings, weak location signals, magnetic interference, missing map details, or unusual street layouts can affect results. Treat Intersector as orientation support, not turn-by-turn navigation."
+					)
+				}
+				.padding(24)
+				.frame(maxWidth: .infinity, alignment: .leading)
+			}
+			.scrollContentBackground(.hidden)
+			.background(Color.crossBg)
+			.navigationTitle("Help")
+			.toolbar {
+				ToolbarItem(placement: .confirmationAction) {
+					Button("Done") {
+						isShowingHelp = false
+					}
+				}
+			}
+		}
+		.tint(Color.crossAccent)
+	}
+
+	private func helpSection(title: String, body: String) -> some View {
+		VStack(alignment: .leading, spacing: 8) {
+			Text(title)
+				.font(.headline)
+				.foregroundStyle(Color.crossText)
+				.lineLimit(nil)
+				.fixedSize(horizontal: false, vertical: true)
+				.accessibilityAddTraits(.isHeader)
+			Text(body)
+				.font(.body)
+				.foregroundStyle(Color.crossText)
+				.lineLimit(nil)
+				.fixedSize(horizontal: false, vertical: true)
 		}
 	}
 
