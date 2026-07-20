@@ -669,18 +669,9 @@ struct ContentView: View {
 	}
 
 	private var statusView: some View {
-		Group {
-			if dynamicTypeSize.isAccessibilitySize {
-				VStack(alignment: .leading, spacing: 8) {
-					currentInfoHeading
-					currentInfoBody
-				}
-			} else {
-				HStack(alignment: .firstTextBaseline, spacing: 16) {
-					currentInfoHeading
-					currentInfoBody
-				}
-			}
+		VStack(alignment: .leading, spacing: 8) {
+			currentInfoHeading
+			currentInfoBody
 		}
 		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
 		.padding(.horizontal, 16)
@@ -689,7 +680,7 @@ struct ContentView: View {
 	}
 
 	private var currentInfoHeading: some View {
-		HStack(alignment: .firstTextBaseline, spacing: 8) {
+		HStack(alignment: .center, spacing: 8) {
 			Text("Current Info")
 				.font(.title2)
 				.fontWeight(.semibold)
@@ -697,6 +688,7 @@ struct ContentView: View {
 				.lineLimit(nil)
 				.fixedSize(horizontal: false, vertical: true)
 				.accessibilityAddTraits(.isHeader)
+			Spacer(minLength: 8)
 			statusActivityIndicator
 		}
 	}
