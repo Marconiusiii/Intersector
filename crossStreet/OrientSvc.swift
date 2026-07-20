@@ -65,6 +65,7 @@ struct OrientSvc {
 	var finder = IntersectionFinder()
 	var neighborhoodResolver = NeighborhoodResolver()
 	private var upcomingCache = UpcomingReportCache()
+	private var lookupFailureState = MapLookupFailureState()
 
 	init(
 		locationProvider: LocationProviding,
@@ -125,12 +126,21 @@ struct OrientSvc {
 		{
 			return cachedReport
 		}
-		let mapData = try await mapData(
-			for: kind,
-			from: context,
-			minimumCandidateCount: rank,
-			prefs: prefs
-		)
+		let useRecovery = await lookupFailureState.shouldUseRecovery(for: kind.recoveryKey)
+		let mapData: MapDataSet
+		do {
+			mapData = try await self.mapData(
+				for: kind,
+				from: context,
+				minimumCandidateCount: rank,
+				prefs: prefs,
+				recoveryMode: useRecovery
+			)
+			await lookupFailureState.recordSuccess(for: kind.recoveryKey)
+		} catch {
+			await lookupFailureState.recordFailure(for: kind.recoveryKey, error: error)
+			throw error
+		}
 		if kind == .upcoming {
 			let reports = await upcomingReports(
 				from: context,
@@ -166,12 +176,21 @@ struct OrientSvc {
 		let minimumCandidateCount = kind == .upcoming && context.headingDegrees == nil
 			? 1
 			: requestedCount
-		let mapData = try await mapData(
-			for: kind,
-			from: context,
-			minimumCandidateCount: minimumCandidateCount,
-			prefs: prefs
-		)
+		let useRecovery = await lookupFailureState.shouldUseRecovery(for: kind.recoveryKey)
+		let mapData: MapDataSet
+		do {
+			mapData = try await self.mapData(
+				for: kind,
+				from: context,
+				minimumCandidateCount: minimumCandidateCount,
+				prefs: prefs,
+				recoveryMode: useRecovery
+			)
+			await lookupFailureState.recordSuccess(for: kind.recoveryKey)
+		} catch {
+			await lookupFailureState.recordFailure(for: kind.recoveryKey, error: error)
+			throw error
+		}
 		let ranked: [IntersectionCandidate]
 		switch kind {
 		case .nearest:
@@ -339,16 +358,18 @@ struct OrientSvc {
 		for kind: ReportKind,
 		from context: DeviceContext,
 		minimumCandidateCount: Int,
-		prefs: AppPrefs
+		prefs: AppPrefs,
+		recoveryMode: Bool = false
 	) async throws -> MapDataSet {
-		let radii: [CLLocationDistance] = [225, 375, 750, 1_200]
+		let radii: [CLLocationDistance] = recoveryMode ? [225, 375] : [225, 375, 750, 1_200]
+		let options = recoveryMode ? MapDetailOptions() : prefs.mapDetails
 		var latestData = MapDataSet(intersections: [], roads: [])
 
 		for radius in radii {
 			latestData = try await mapDataClient.mapData(
 				near: context.coordinate,
 				radiusMeters: radius,
-				options: prefs.mapDetails
+				options: options
 			)
 
 			if hasEnoughCandidates(
@@ -474,6 +495,33 @@ private extension Array where Element == OrientReport {
 			}
 			return existing.cross == report.cross
 		}
+	}
+}
+
+actor MapLookupFailureState {
+	private var recoveryUntil: [String: Date] = [:]
+	private let recoveryDuration: TimeInterval = 90
+
+	func shouldUseRecovery(for key: String) -> Bool {
+		guard let date = recoveryUntil[key] else {
+			return false
+		}
+		if date > Date() {
+			return true
+		}
+		recoveryUntil[key] = nil
+		return false
+	}
+
+	func recordFailure(for key: String, error: Error) {
+		guard MapDataFailure.isTemporary(error) else {
+			return
+		}
+		recoveryUntil[key] = Date().addingTimeInterval(recoveryDuration)
+	}
+
+	func recordSuccess(for key: String) {
+		recoveryUntil[key] = nil
 	}
 }
 

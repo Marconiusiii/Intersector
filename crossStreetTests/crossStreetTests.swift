@@ -1989,6 +1989,35 @@ struct IntersectorTests {
 		#expect(report.cross == "Oak Street and Third Street")
 		#expect(await mapClient.requestedRadii == [225, 375, 750])
 	}
+
+	@Test func temporaryMapFailureUsesLighterRecoveryLookupOnNextAttempt() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.mapDetails = MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
+		let mapClient = TemporaryFailureRecoveryMapDataClient()
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(
+					coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0),
+					headingDegrees: nil
+				)
+			),
+			mapDataClient: mapClient,
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+
+		await #expect(throws: URLError.self) {
+			_ = try await service.report(.nearest, prefs: prefs)
+		}
+		let report = try await service.report(.nearest, prefs: prefs)
+
+		#expect(report.cross == "Oak Street and Pine Street")
+		#expect(await mapClient.requestedRadii == [225, 225])
+		#expect(await mapClient.requestedOptions == [
+			MapDetailOptions(includeCrossings: true, includeWalkingPaths: true),
+			MapDetailOptions()
+		])
+	}
 }
 
 actor FetchCounter {
@@ -2161,6 +2190,47 @@ actor AdaptiveMapDataClient: MapDataFetching {
 					]
 				)
 			]
+		)
+	}
+}
+
+actor TemporaryFailureRecoveryMapDataClient: MapDataFetching {
+	private(set) var requestedRadii: [CLLocationDistance] = []
+	private(set) var requestedOptions: [MapDetailOptions] = []
+	private var shouldFail = true
+
+	func intersections(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> [IntersectionCandidate] {
+		try await mapData(
+			near: coordinate,
+			radiusMeters: radiusMeters,
+			options: options
+		).intersections
+	}
+
+	func mapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> MapDataSet {
+		requestedRadii.append(radiusMeters)
+		requestedOptions.append(options)
+		if shouldFail {
+			shouldFail = false
+			throw URLError(.timedOut)
+		}
+		return MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: "oak-pine",
+					names: ["Oak Street", "Pine Street"],
+					coordinate: CLLocationCoordinate2D(latitude: coordinate.latitude + 0.0001, longitude: coordinate.longitude)
+				)
+			],
+			roads: []
 		)
 	}
 }

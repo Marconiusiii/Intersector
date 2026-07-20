@@ -107,25 +107,7 @@ struct MapDataClient: MapDataFetching {
 	}
 
 	private func isTemporary(_ error: Error) -> Bool {
-		if let mapError = error as? MapDataError {
-			switch mapError {
-			case .serverError(let statusCode):
-				return [429, 500, 502, 503, 504].contains(statusCode)
-			case .invalidResponse, .invalidMapData:
-				return false
-			}
-		}
-
-		if let urlError = error as? URLError {
-			switch urlError.code {
-			case .timedOut, .cannotFindHost, .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .dnsLookupFailed:
-				return true
-			default:
-				return false
-			}
-		}
-
-		return false
+		MapDataFailure.isTemporary(error)
 	}
 
 	private func query(
@@ -172,6 +154,30 @@ struct MapDataClient: MapDataFetching {
 		let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&+"))
 		let encoded = body.addingPercentEncoding(withAllowedCharacters: allowed) ?? body
 		return "data=\(encoded)"
+	}
+}
+
+enum MapDataFailure {
+	nonisolated static func isTemporary(_ error: Error) -> Bool {
+		if let mapError = error as? MapDataError {
+			switch mapError {
+			case .serverError(let statusCode):
+				return [429, 500, 502, 503, 504].contains(statusCode)
+			case .invalidResponse, .invalidMapData:
+				return false
+			}
+		}
+
+		if let urlError = error as? URLError {
+			switch urlError.code {
+			case .timedOut, .cannotFindHost, .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .dnsLookupFailed:
+				return true
+			default:
+				return false
+			}
+		}
+
+		return false
 	}
 }
 

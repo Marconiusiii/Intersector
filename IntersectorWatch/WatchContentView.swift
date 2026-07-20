@@ -353,11 +353,15 @@ struct WatchContentView: View {
 			WatchVoiceOverAnnouncer.reportUpdated(text)
 		} catch {
 			loadingTask.cancel()
-			let text = "Unable to update \(reportLabel(kind, rank: rank)). \(error.localizedDescription)"
+			let text = reportFailureText(kind, rank: rank)
 			statusText = text
 			WatchVoiceOverAnnouncer.reportUpdated(text)
 		}
 		isLoading = false
+	}
+
+	private func reportFailureText(_ kind: WatchReportKind, rank: Int) -> String {
+		"Intersector is having trouble loading map data. Please try again."
 	}
 
 	private func updateDirection() async {

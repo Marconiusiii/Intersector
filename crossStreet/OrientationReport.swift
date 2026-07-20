@@ -293,6 +293,17 @@ enum ReportKind {
 			"pointed intersection"
 		}
 	}
+
+	var recoveryKey: String {
+		switch self {
+		case .nearest:
+			"nearest"
+		case .upcoming:
+			"upcoming"
+		case .scan:
+			"scan"
+		}
+	}
 }
 
 enum ConfLev {

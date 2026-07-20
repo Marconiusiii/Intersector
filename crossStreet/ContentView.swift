@@ -598,7 +598,6 @@ struct ContentView: View {
 						}
 						.frame(minHeight: actionMinHeight)
 						pointScanToggle
-							.frame(minHeight: actionMinHeight)
 							.frame(maxHeight: .infinity)
 					}
 					.frame(maxWidth: .infinity)
@@ -789,10 +788,15 @@ struct ContentView: View {
 				}
 			)
 		) {
-			actionLabel("Scan", systemImage: "dot.radiowaves.left.and.right")
+			ZStack {
+				Color.clear
+				actionLabel("Scan", systemImage: "dot.radiowaves.left.and.right")
+			}
+			.frame(maxWidth: .infinity, maxHeight: .infinity)
+			.contentShape(Rectangle())
 		}
 		.toggleStyle(.button)
-		.frame(maxWidth: .infinity, alignment: .center)
+		.frame(maxWidth: .infinity, minHeight: actionMinHeight, maxHeight: .infinity, alignment: .center)
 		.foregroundStyle(Color.crossButtonText)
 		.background(pointScanBackground)
 		.overlay(Rectangle().stroke(Color.crossButtonStrongBorder, lineWidth: 2))
@@ -1348,6 +1352,8 @@ struct ContentView: View {
 			.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
 			.background(Color.crossBg)
 			.contentShape(Rectangle())
+			.accessibilityElement(children: .ignore)
+			.accessibilityLabel(title)
 			.accessibilityAddTraits(.isHeader)
 	}
 
@@ -1362,6 +1368,8 @@ struct ContentView: View {
 			.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
 			.background(Color.crossBg)
 			.contentShape(Rectangle())
+			.accessibilityElement(children: .ignore)
+			.accessibilityLabel(text)
 	}
 
 	private func settingsControlRow<Content: View>(
@@ -1374,6 +1382,7 @@ struct ContentView: View {
 			.frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
 			.background(Color.crossBg)
 			.contentShape(Rectangle())
+			.accessibilityElement(children: .contain)
 	}
 
 	private func actionButton(
@@ -1462,12 +1471,16 @@ struct ContentView: View {
 			loadingTask.cancel()
 			LoadingThrobber.stop()
 			isLookupProgressVisible = false
-			let text = "Unable to update \(reportLabel(kind, rank: rank)). \(error.localizedDescription)"
+			let text = reportFailureText(kind, rank: rank)
 			statusText = text
 			VoiceOverAnnouncer.reportUpdated(text)
 		}
 
 		isLoading = false
+	}
+
+	private func reportFailureText(_ kind: ReportKind, rank: Int) -> String {
+		"Intersector is having trouble loading map data. Please try again."
 	}
 
 	private func reportLabel(_ kind: ReportKind, rank: Int) -> String {
@@ -1501,7 +1514,7 @@ struct ContentView: View {
 			statusText = text
 			VoiceOverAnnouncer.reportUpdated(text)
 		} catch {
-			let text = error.localizedDescription
+			let text = "Intersector is having trouble getting your direction. Please try again."
 			statusText = text
 			VoiceOverAnnouncer.reportUpdated(text)
 		}

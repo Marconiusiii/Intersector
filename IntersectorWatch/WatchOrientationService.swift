@@ -29,6 +29,15 @@ enum WatchReportKind {
 			"upcoming intersection"
 		}
 	}
+
+	var recoveryKey: String {
+		switch self {
+		case .nearest:
+			"nearest"
+		case .upcoming:
+			"upcoming"
+		}
+	}
 }
 
 enum WatchReportError: LocalizedError {
@@ -232,6 +241,7 @@ enum IntersectorWatchReporter {
 }
 
 struct WatchOrientationService {
+	private static let lookupFailureState = WatchMapLookupFailureState()
 	private let locationProvider = WatchLocationProvider()
 	private let mapClient = WatchMapDataClient()
 	private let neighborhoodProvider = WatchNeighborhoodProvider()
@@ -247,12 +257,21 @@ struct WatchOrientationService {
 		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming)
 		let requestedCount = prefs.spokenIntersectionCount.rawValue
 		let minimumCandidateCount = kind == .upcoming && context.headingDegrees == nil ? 1 : requestedCount
-		let mapData = try await mapData(
-			for: kind,
-			from: context,
-			minimumCandidateCount: minimumCandidateCount,
-			prefs: prefs
-		)
+		let useRecovery = await Self.lookupFailureState.shouldUseRecovery(for: kind.recoveryKey)
+		let mapData: WatchMapDataSet
+		do {
+			mapData = try await self.mapData(
+				for: kind,
+				from: context,
+				minimumCandidateCount: minimumCandidateCount,
+				prefs: prefs,
+				recoveryMode: useRecovery
+			)
+			await Self.lookupFailureState.recordSuccess(for: kind.recoveryKey)
+		} catch {
+			await Self.lookupFailureState.recordFailure(for: kind.recoveryKey, error: error)
+			throw error
+		}
 		let ranked: [WatchIntersectionCandidate]
 		switch kind {
 		case .nearest:
@@ -292,12 +311,21 @@ struct WatchOrientationService {
 	@MainActor
 	func report(_ kind: WatchReportKind, rank: Int = 1, prefs: WatchAppPrefs) async throws -> WatchOrientationReport {
 		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming)
-		let mapData = try await mapData(
-			for: kind,
-			from: context,
-			minimumCandidateCount: rank,
-			prefs: prefs
-		)
+		let useRecovery = await Self.lookupFailureState.shouldUseRecovery(for: kind.recoveryKey)
+		let mapData: WatchMapDataSet
+		do {
+			mapData = try await self.mapData(
+				for: kind,
+				from: context,
+				minimumCandidateCount: rank,
+				prefs: prefs,
+				recoveryMode: useRecovery
+			)
+			await Self.lookupFailureState.recordSuccess(for: kind.recoveryKey)
+		} catch {
+			await Self.lookupFailureState.recordFailure(for: kind.recoveryKey, error: error)
+			throw error
+		}
 		let match = if kind == .nearest {
 			finder.nearest(rank: rank, from: context.coordinate, in: mapData.intersections)
 		} else {
@@ -361,15 +389,17 @@ struct WatchOrientationService {
 		for kind: WatchReportKind,
 		from context: WatchDeviceContext,
 		minimumCandidateCount: Int,
-		prefs: WatchAppPrefs
+		prefs: WatchAppPrefs,
+		recoveryMode: Bool = false
 	) async throws -> WatchMapDataSet {
-		let radii: [CLLocationDistance] = [225, 375, 750, 1_200]
+		let radii: [CLLocationDistance] = recoveryMode ? [225, 375] : [225, 375, 750, 1_200]
+		let options = recoveryMode ? WatchMapDetailOptions() : prefs.mapDetails
 		var latestData = WatchMapDataSet(intersections: [], roads: [])
 		for radius in radii {
 			latestData = try await mapClient.mapData(
 				near: context.coordinate,
 				radiusMeters: radius,
-				options: prefs.mapDetails
+				options: options
 			)
 			if hasEnoughCandidates(
 				for: kind,
@@ -1250,6 +1280,33 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 	}
 }
 
+actor WatchMapLookupFailureState {
+	private var recoveryUntil: [String: Date] = [:]
+	private let recoveryDuration: TimeInterval = 90
+
+	func shouldUseRecovery(for key: String) -> Bool {
+		guard let date = recoveryUntil[key] else {
+			return false
+		}
+		if date > Date() {
+			return true
+		}
+		recoveryUntil[key] = nil
+		return false
+	}
+
+	func recordFailure(for key: String, error: Error) {
+		guard WatchMapFailure.isTemporary(error) else {
+			return
+		}
+		recoveryUntil[key] = Date().addingTimeInterval(recoveryDuration)
+	}
+
+	func recordSuccess(for key: String) {
+		recoveryUntil[key] = nil
+	}
+}
+
 struct WatchMapDataClient {
 	private let endpoint = URL(string: "https://overpass-api.de/api/interpreter")!
 	private let fallbackEndpoints = [
@@ -1312,23 +1369,7 @@ struct WatchMapDataClient {
 	}
 
 	private func isTemporary(_ error: Error) -> Bool {
-		if let mapError = error as? WatchReportError {
-			switch mapError {
-			case .serverError(let statusCode):
-				return [429, 500, 502, 503, 504].contains(statusCode)
-			default:
-				return false
-			}
-		}
-		if let urlError = error as? URLError {
-			switch urlError.code {
-			case .timedOut, .cannotFindHost, .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .dnsLookupFailed:
-				return true
-			default:
-				return false
-			}
-		}
-		return false
+		WatchMapFailure.isTemporary(error)
 	}
 
 	private func query(
@@ -1361,6 +1402,28 @@ struct WatchMapDataClient {
 		let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&+"))
 		let encoded = body.addingPercentEncoding(withAllowedCharacters: allowed) ?? body
 		return "data=\(encoded)"
+	}
+}
+
+enum WatchMapFailure {
+	nonisolated static func isTemporary(_ error: Error) -> Bool {
+		if let mapError = error as? WatchReportError {
+			switch mapError {
+			case .serverError(let statusCode):
+				return [429, 500, 502, 503, 504].contains(statusCode)
+			default:
+				return false
+			}
+		}
+		if let urlError = error as? URLError {
+			switch urlError.code {
+			case .timedOut, .cannotFindHost, .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .dnsLookupFailed:
+				return true
+			default:
+				return false
+			}
+		}
+		return false
 	}
 }
 
