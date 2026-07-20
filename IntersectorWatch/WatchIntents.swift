@@ -7,15 +7,40 @@
 
 import AppIntents
 import Foundation
+import SwiftUI
+
+private struct WatchIntentResultView: View {
+	var text: String
+
+	var body: some View {
+		Text(text)
+			.font(.body)
+			.multilineTextAlignment(.leading)
+			.lineLimit(nil)
+			.fixedSize(horizontal: false, vertical: true)
+			.padding()
+	}
+}
+
+private func watchIntersectorResult(
+	_ text: String
+) -> some IntentResult & ProvidesDialog & ReturnsValue<String> & ShowsSnippetView {
+	.result(
+		value: text,
+		dialog: IntentDialog(stringLiteral: text),
+		view: WatchIntentResultView(text: text)
+	)
+}
 
 struct WatchNearestIntersectionIntent: AppIntent {
 	static var title: LocalizedStringResource = "Nearest Intersection"
 	static var description = IntentDescription("Reports the closest mapped intersection.")
 	static var openAppWhenRun = false
 
-	func perform() async throws -> some IntentResult & ProvidesDialog {
+	@MainActor
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> & ShowsSnippetView {
 		let text = await IntersectorWatchReporter.reportText(for: .nearest)
-		return .result(dialog: IntentDialog(stringLiteral: text))
+		return watchIntersectorResult(text)
 	}
 }
 
@@ -24,9 +49,10 @@ struct WatchUpcomingIntersectionIntent: AppIntent {
 	static var description = IntentDescription("Reports the mapped intersection ahead.")
 	static var openAppWhenRun = false
 
-	func perform() async throws -> some IntentResult & ProvidesDialog {
+	@MainActor
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> & ShowsSnippetView {
 		let text = await IntersectorWatchReporter.reportText(for: .upcoming)
-		return .result(dialog: IntentDialog(stringLiteral: text))
+		return watchIntersectorResult(text)
 	}
 }
 
@@ -35,9 +61,10 @@ struct WatchMyDirectionIntent: AppIntent {
 	static var description = IntentDescription("Reports the direction you are facing.")
 	static var openAppWhenRun = false
 
-	func perform() async throws -> some IntentResult & ProvidesDialog {
+	@MainActor
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> & ShowsSnippetView {
 		let text = await IntersectorWatchReporter.directionText()
-		return .result(dialog: IntentDialog(stringLiteral: text))
+		return watchIntersectorResult(text)
 	}
 }
 

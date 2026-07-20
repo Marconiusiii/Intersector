@@ -10,6 +10,13 @@ import WatchConnectivity
 
 private let watchLookupLoadingText = "Intersecting..."
 
+@MainActor
+private enum WatchVoiceOverAnnouncer {
+	static func reportUpdated(_ text: String) {
+		AccessibilityNotification.Announcement(text).post()
+	}
+}
+
 private final class WatchSettingsReceiver: NSObject, WCSessionDelegate {
 	private let session: WCSession?
 
@@ -343,9 +350,12 @@ struct WatchContentView: View {
 			}
 			loadingTask.cancel()
 			statusText = text
+			WatchVoiceOverAnnouncer.reportUpdated(text)
 		} catch {
 			loadingTask.cancel()
-			statusText = "Unable to update \(reportLabel(kind, rank: rank)). \(error.localizedDescription)"
+			let text = "Unable to update \(reportLabel(kind, rank: rank)). \(error.localizedDescription)"
+			statusText = text
+			WatchVoiceOverAnnouncer.reportUpdated(text)
 		}
 		isLoading = false
 	}
@@ -355,8 +365,9 @@ struct WatchContentView: View {
 			return
 		}
 		isDirectionLoading = true
-		statusText = "Checking direction."
-		statusText = await IntersectorWatchReporter.directionText(prefs: prefs)
+		let text = await IntersectorWatchReporter.directionText(prefs: prefs)
+		statusText = text
+		WatchVoiceOverAnnouncer.reportUpdated(text)
 		isDirectionLoading = false
 	}
 

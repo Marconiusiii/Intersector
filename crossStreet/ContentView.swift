@@ -57,7 +57,7 @@ private enum LoadingThrobber {
 			IntersectorAudioSession.prepareForFeedback()
 			if player == nil {
 				player = try AVAudioPlayer(data: cueData())
-				player?.volume = 0.14
+				player?.volume = 0.42
 				player?.numberOfLoops = -1
 				player?.prepareToPlay()
 			}
@@ -474,6 +474,7 @@ struct ContentView: View {
 	@AppStorage("manhattanSnobMode") private var manhattanSnobMode = false
 	@AppStorage("showRankedControls") private var showRankedControls = true
 	@Environment(\.dynamicTypeSize) private var dynamicTypeSize
+	@Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 	@Environment(\.openURL) private var openURL
 	@Environment(\.scenePhase) private var scenePhase
 	@ScaledMetric(relativeTo: .largeTitle) private var headerMinHeight: CGFloat = 88
@@ -688,13 +689,16 @@ struct ContentView: View {
 	}
 
 	private var currentInfoHeading: some View {
-		Text("Current Info")
-			.font(.title2)
-			.fontWeight(.semibold)
-			.foregroundStyle(.white)
-			.lineLimit(nil)
-			.fixedSize(horizontal: false, vertical: true)
-			.accessibilityAddTraits(.isHeader)
+		HStack(alignment: .firstTextBaseline, spacing: 8) {
+			Text("Current Info")
+				.font(.title2)
+				.fontWeight(.semibold)
+				.foregroundStyle(.white)
+				.lineLimit(nil)
+				.fixedSize(horizontal: false, vertical: true)
+				.accessibilityAddTraits(.isHeader)
+			statusActivityIndicator
+		}
 	}
 
 	private var currentInfoText: some View {
@@ -708,15 +712,26 @@ struct ContentView: View {
 	}
 
 	private var currentInfoBody: some View {
-		HStack(alignment: .firstTextBaseline, spacing: 10) {
-			if isStartupLoading || isLookupProgressVisible {
+		currentInfoText
+	}
+
+	@ViewBuilder
+	private var statusActivityIndicator: some View {
+		let isVisible = isStartupLoading || isLookupProgressVisible
+		Group {
+			if accessibilityReduceMotion {
+				Image(systemName: "hourglass")
+					.imageScale(.small)
+					.foregroundStyle(Color.crossAccent)
+			} else {
 				ProgressView()
 					.tint(Color.crossAccent)
 					.controlSize(.regular)
-					.accessibilityHidden(true)
 			}
-			currentInfoText
 		}
+		.frame(width: 24, height: 24)
+		.opacity(isVisible ? 1 : 0)
+		.accessibilityHidden(true)
 	}
 
 	private var nearestButton: some View {
@@ -1415,9 +1430,6 @@ struct ContentView: View {
 		}
 		cancelStartupPreparationIfNeeded()
 		isDirectionLoading = true
-		let loadingText = "Checking direction."
-		statusText = loadingText
-		VoiceOverAnnouncer.reportUpdated(loadingText)
 
 		do {
 			let heading = try await directionLocationProvider.currentHeading(allowCached: false)
