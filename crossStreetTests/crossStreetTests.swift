@@ -6,6 +6,7 @@
 //
 
 import CoreLocation
+import Foundation
 import Testing
 @testable import Intersector
 
@@ -1666,6 +1667,22 @@ struct IntersectorTests {
 		#expect(await counter.count == 2)
 	}
 
+	@Test func mapEndpointHealthSkipsTemporarilyFailedPrimaryEndpoint() async throws {
+		let health = MapEndpointHealth()
+		let primary = URL(string: "https://primary.example/api/interpreter")!
+		let fallback = URL(string: "https://fallback.example/api/interpreter")!
+
+		let initialOrder = await health.orderedEndpoints(primary: primary, fallbacks: [fallback])
+		await health.markTemporaryFailure(primary)
+		let failureOrder = await health.orderedEndpoints(primary: primary, fallbacks: [fallback])
+		await health.markSuccess(primary)
+		let recoveredOrder = await health.orderedEndpoints(primary: primary, fallbacks: [fallback])
+
+		#expect(initialOrder == [primary, fallback])
+		#expect(failureOrder == [fallback])
+		#expect(recoveredOrder == [primary, fallback])
+	}
+
 	@Test func intersectionBuilderIgnoresNonStreetPaths() async throws {
 		let response = OverpassResponse(
 			elements: [
@@ -1931,6 +1948,8 @@ struct IntersectorTests {
 
 	@Test func initialNearestPrewarmFetchesSmallestMapRadius() async throws {
 		let mapClient = AdaptiveMapDataClient()
+		var prefs = AppPrefs()
+		prefs.mapDetails = MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
 		let service = OrientSvc(
 			locationProvider: FakeLocationProvider(
 				context: DeviceContext(
@@ -1943,10 +1962,11 @@ struct IntersectorTests {
 			neighborhoodProvider: FailingNeighborhoodProvider()
 		)
 
-		let isReady = await service.prewarmInitialNearestMapData()
+		let isReady = await service.prewarmInitialNearestMapData(prefs: prefs)
 
 		#expect(isReady)
 		#expect(await mapClient.requestedRadii == [225])
+		#expect(await mapClient.requestedOptions == [MapDetailOptions()])
 	}
 
 	@Test func thirdUpcomingStillExpandsRadiusWhenCacheIsMissing() async throws {
@@ -2089,6 +2109,7 @@ struct StaticMapDataClient: MapDataFetching {
 
 actor AdaptiveMapDataClient: MapDataFetching {
 	private(set) var requestedRadii: [CLLocationDistance] = []
+	private(set) var requestedOptions: [MapDetailOptions] = []
 
 	func intersections(
 		near coordinate: CLLocationCoordinate2D,
@@ -2108,6 +2129,7 @@ actor AdaptiveMapDataClient: MapDataFetching {
 		options: MapDetailOptions
 	) async throws -> MapDataSet {
 		requestedRadii.append(radiusMeters)
+		requestedOptions.append(options)
 		let availableCount = radiusMeters < 375 ? 1 : (radiusMeters < 750 ? 2 : 3)
 		let names = ["First Street", "Second Street", "Third Street"]
 		let candidates = (0..<availableCount).map { index in

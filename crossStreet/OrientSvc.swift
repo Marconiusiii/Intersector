@@ -92,12 +92,14 @@ struct OrientSvc {
 
 	func prewarmInitialNearestMapData(prefs: AppPrefs = AppPrefs()) async -> Bool {
 		do {
+			var prewarmPrefs = prefs
+			prewarmPrefs.mapDetails = MapDetailOptions()
 			let context = try await locationProvider.currentContext(requiresFreshHeading: false)
 			let mapData = try await mapData(
 				for: .nearest,
 				from: context,
 				minimumCandidateCount: 1,
-				prefs: prefs
+				prefs: prewarmPrefs
 			)
 			return hasEnoughCandidates(
 				for: .nearest,

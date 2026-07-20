@@ -1256,17 +1256,26 @@ struct WatchMapDataClient {
 		URL(string: "https://overpass.kumi.systems/api/interpreter")!
 	]
 	private let session: URLSession = .shared
+	private static let endpointHealth = WatchMapEndpointHealth()
 
 	func mapData(
 		near coordinate: CLLocationCoordinate2D,
 		radiusMeters: CLLocationDistance,
 		options: WatchMapDetailOptions
 	) async throws -> WatchMapDataSet {
-		let endpoints = ([endpoint] + fallbackEndpoints).removingDuplicates()
+		let endpoints = await Self.endpointHealth.orderedEndpoints(
+			primary: endpoint,
+			fallbacks: fallbackEndpoints
+		)
 		for endpoint in endpoints {
 			do {
-				return try await mapData(from: endpoint, near: coordinate, radiusMeters: radiusMeters, options: options)
+				let data = try await mapData(from: endpoint, near: coordinate, radiusMeters: radiusMeters, options: options)
+				await Self.endpointHealth.markSuccess(endpoint)
+				return data
 			} catch {
+				if isTemporary(error) {
+					await Self.endpointHealth.markTemporaryFailure(endpoint)
+				}
 				guard isTemporary(error), endpoint != endpoints.last else {
 					throw error
 				}
@@ -1283,7 +1292,7 @@ struct WatchMapDataClient {
 	) async throws -> WatchMapDataSet {
 		var request = URLRequest(url: endpoint)
 		request.httpMethod = "POST"
-		request.timeoutInterval = 10
+		request.timeoutInterval = 5
 		request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
 		request.httpBody = query(near: coordinate, radiusMeters: radiusMeters, options: options).data(using: .utf8)
 
@@ -1341,7 +1350,7 @@ struct WatchMapDataClient {
 		  node(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["crossing"];
 		""" : ""
 		let body = """
-		[out:json][timeout:8];
+		[out:json][timeout:5];
 		(
 		  way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"~"^(\(highwayPattern))$"]["name"];
 		\(crossingQueries)
@@ -2032,8 +2041,43 @@ enum WatchGeo {
 	}
 }
 
+actor WatchMapEndpointHealth {
+	private var preferredEndpoint: URL?
+	private var unhealthyUntil: [URL: Date] = [:]
+	private let cooldown: TimeInterval = 60
+
+	func orderedEndpoints(primary: URL, fallbacks: [URL]) -> [URL] {
+		let endpoints = ([primary] + fallbacks).removingDuplicates()
+		let now = Date()
+		let healthyEndpoints = endpoints.filter { endpoint in
+			guard let retryAfter = unhealthyUntil[endpoint] else {
+				return true
+			}
+			return retryAfter <= now
+		}
+		let availableEndpoints = healthyEndpoints.isEmpty ? endpoints : healthyEndpoints
+
+		guard let preferredEndpoint, availableEndpoints.contains(preferredEndpoint) else {
+			return availableEndpoints
+		}
+		return [preferredEndpoint] + availableEndpoints.filter { $0 != preferredEndpoint }
+	}
+
+	func markSuccess(_ endpoint: URL) {
+		preferredEndpoint = endpoint
+		unhealthyUntil[endpoint] = nil
+	}
+
+	func markTemporaryFailure(_ endpoint: URL) {
+		unhealthyUntil[endpoint] = Date().addingTimeInterval(cooldown)
+		if preferredEndpoint == endpoint {
+			preferredEndpoint = nil
+		}
+	}
+}
+
 private extension Array where Element: Hashable {
-	func removingDuplicates() -> [Element] {
+	nonisolated func removingDuplicates() -> [Element] {
 		var seen = Set<Element>()
 		return filter { seen.insert($0).inserted }
 	}

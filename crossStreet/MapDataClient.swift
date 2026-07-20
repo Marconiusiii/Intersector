@@ -15,6 +15,7 @@ struct MapDataClient: MapDataFetching {
 	]
 	var session: URLSession = .shared
 	private static let cache = MapDataCache()
+	private static let endpointHealth = MapEndpointHealth()
 
 	func intersections(
 		near coordinate: CLLocationCoordinate2D,
@@ -43,19 +44,27 @@ struct MapDataClient: MapDataFetching {
 		radiusMeters: CLLocationDistance,
 		options: MapDetailOptions
 	) async throws -> MapDataSet {
-		let endpoints = ([endpoint] + fallbackEndpoints).removingDuplicates()
+		let endpoints = await Self.endpointHealth.orderedEndpoints(
+			primary: endpoint,
+			fallbacks: fallbackEndpoints
+		)
 		var lastError: Error?
 
 		for endpoint in endpoints {
 			do {
-				return try await fetchMapData(
+				let data = try await fetchMapData(
 					from: endpoint,
 					near: coordinate,
 					radiusMeters: radiusMeters,
 					options: options
 				)
+				await Self.endpointHealth.markSuccess(endpoint)
+				return data
 			} catch {
 				lastError = error
+				if isTemporary(error) {
+					await Self.endpointHealth.markTemporaryFailure(endpoint)
+				}
 				guard isTemporary(error), endpoint != endpoints.last else {
 					throw error
 				}
@@ -73,7 +82,7 @@ struct MapDataClient: MapDataFetching {
 	) async throws -> MapDataSet {
 		var request = URLRequest(url: endpoint)
 		request.httpMethod = "POST"
-		request.timeoutInterval = 10
+		request.timeoutInterval = 5
 		request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
 		request.httpBody = query(
 			near: coordinate,
@@ -152,7 +161,7 @@ struct MapDataClient: MapDataFetching {
 		  node(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["crossing"];
 		""" : ""
 		let body = """
-		[out:json][timeout:8];
+		[out:json][timeout:5];
 		(
 		  way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"~"^(\(highwayPattern))$"]["name"];
 		\(crossingQueries)
@@ -166,8 +175,43 @@ struct MapDataClient: MapDataFetching {
 	}
 }
 
+actor MapEndpointHealth {
+	private var preferredEndpoint: URL?
+	private var unhealthyUntil: [URL: Date] = [:]
+	private let cooldown: TimeInterval = 60
+
+	func orderedEndpoints(primary: URL, fallbacks: [URL]) -> [URL] {
+		let endpoints = ([primary] + fallbacks).removingDuplicates()
+		let now = Date()
+		let healthyEndpoints = endpoints.filter { endpoint in
+			guard let retryAfter = unhealthyUntil[endpoint] else {
+				return true
+			}
+			return retryAfter <= now
+		}
+		let availableEndpoints = healthyEndpoints.isEmpty ? endpoints : healthyEndpoints
+
+		guard let preferredEndpoint, availableEndpoints.contains(preferredEndpoint) else {
+			return availableEndpoints
+		}
+		return [preferredEndpoint] + availableEndpoints.filter { $0 != preferredEndpoint }
+	}
+
+	func markSuccess(_ endpoint: URL) {
+		preferredEndpoint = endpoint
+		unhealthyUntil[endpoint] = nil
+	}
+
+	func markTemporaryFailure(_ endpoint: URL) {
+		unhealthyUntil[endpoint] = Date().addingTimeInterval(cooldown)
+		if preferredEndpoint == endpoint {
+			preferredEndpoint = nil
+		}
+	}
+}
+
 private extension Array where Element: Hashable {
-	func removingDuplicates() -> [Element] {
+	nonisolated func removingDuplicates() -> [Element] {
 		var seen = Set<Element>()
 		return filter { seen.insert($0).inserted }
 	}
@@ -239,6 +283,10 @@ actor MapDataCache {
 		if let inFlightRequest,
 		   canReuse(inFlightRequest, for: coordinate, radiusMeters: radiusMeters, options: options) {
 			return try await inFlightRequest.task.value
+		}
+
+		if let entry = entries.first(where: { canReuseStale($0, for: coordinate, radiusMeters: radiusMeters, options: options) }) {
+			return entry.data
 		}
 
 		let task = Task {
