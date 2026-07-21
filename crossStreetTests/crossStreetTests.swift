@@ -147,7 +147,7 @@ struct IntersectorTests {
 		#expect(text == "Upcoming: Mission Street and 6th Street, about 140 feet at 2 o'clock toward Civic Center.")
 	}
 
-	@Test func manhattanSnobModeAddsManhattanDirectionToReports() async throws {
+	@Test func manhattanSnobModeDoesNotOverrideRelativeWordReports() async throws {
 		var prefs = AppPrefs()
 		prefs.areaMode = .off
 		prefs.manhattanSnobMode = true
@@ -164,7 +164,7 @@ struct IntersectorTests {
 			conf: .high
 		)
 
-		#expect(report.text(with: prefs) == "Nearest: Amsterdam Avenue and West 94th Street, about 120 feet towards Uptown.")
+		#expect(report.text(with: prefs) == "Nearest: Amsterdam Avenue and West 94th Street, about 120 feet ahead.")
 		#expect(Geo.localizedDirection(180, prefs: prefs) == "Downtown")
 	}
 

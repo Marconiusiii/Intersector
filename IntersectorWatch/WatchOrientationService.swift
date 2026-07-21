@@ -712,9 +712,6 @@ struct WatchOrientationReport: Equatable {
 	private func directionText(with prefs: WatchAppPrefs) -> String? {
 		switch prefs.directionStyle {
 		case .words:
-			if prefs.manhattanSnobMode {
-				return head.map { "towards \(WatchGeo.manhattanDirection(for: $0))" }
-			}
 			return relDir
 		case .clockFace:
 			return relDegrees.map { Self.clockFaceDirection(from: $0) }

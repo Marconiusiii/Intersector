@@ -194,9 +194,6 @@ struct OrientReport: Equatable {
 	private func directionText(with prefs: AppPrefs) -> String? {
 		switch prefs.directionStyle {
 		case .words:
-			if prefs.manhattanSnobMode, kind != .scan {
-				return head.map { "towards \(Geo.manhattanDirection(for: $0))" }
-			}
 			return relDir
 		case .clockFace:
 			return relDegrees.map { Self.clockFaceDirection(from: $0) }

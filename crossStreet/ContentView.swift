@@ -861,10 +861,12 @@ struct ContentView: View {
 		primary: some View,
 		menu: some View
 	) -> some View {
-		HStack(spacing: 0) {
+		ZStack(alignment: .trailing) {
 			primary
+				.padding(.trailing, 48)
+				.padding(.leading, 48)
 			menu
-				.frame(width: 48)
+				.frame(width: 48, alignment: .center)
 		}
 		.background(Color.crossBtn)
 		.overlay(Rectangle().stroke(Color.crossButtonBorder, lineWidth: 1))
