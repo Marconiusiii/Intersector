@@ -714,6 +714,11 @@ struct ContentView: View {
 		}
 		.frame(maxWidth: .infinity, minHeight: statusMinHeight, alignment: usesCenteredStatusLayout ? .center : .topLeading)
 		.background(Color.crossPanel)
+		.overlay(alignment: .topTrailing) {
+			loadingStatusOverlay
+				.padding(.top, 10)
+				.padding(.trailing, 10)
+		}
 		.contentShape(Rectangle())
 	}
 
@@ -730,7 +735,6 @@ struct ContentView: View {
 				.minimumScaleFactor(0.8)
 				.fixedSize(horizontal: true, vertical: false)
 				.accessibilityAddTraits(.isHeader)
-			statusActivityIndicator
 		}
 		.padding(.horizontal, 16)
 		.padding(.vertical, 10)
@@ -763,8 +767,27 @@ struct ContentView: View {
 	}
 
 	@ViewBuilder
-	private var statusActivityIndicator: some View {
+	private var loadingStatusOverlay: some View {
 		let isVisible = isStartupLoading || isLookupProgressVisible
+		HStack(spacing: 8) {
+			statusActivityIndicator
+			if isLookupProgressVisible {
+				Text(lookupLoadingText)
+					.font(.caption)
+					.fontWeight(.semibold)
+					.foregroundStyle(Color.crossInv)
+			}
+		}
+		.padding(.horizontal, 10)
+		.padding(.vertical, 6)
+		.background(Color.black.opacity(0.62), in: Capsule())
+		.opacity(isVisible ? 1 : 0)
+		.animation(accessibilityReduceMotion ? nil : .easeInOut(duration: 0.2), value: isVisible)
+		.accessibilityHidden(true)
+	}
+
+	@ViewBuilder
+	private var statusActivityIndicator: some View {
 		Group {
 			if accessibilityReduceMotion {
 				Image(systemName: "hourglass")
@@ -777,7 +800,6 @@ struct ContentView: View {
 			}
 		}
 		.frame(width: 24, height: 24)
-		.opacity(isVisible ? 1 : 0)
 		.accessibilityHidden(true)
 	}
 
@@ -1586,7 +1608,6 @@ struct ContentView: View {
 		let loadingTask = Task { @MainActor in
 			do {
 				try await Task.sleep(for: .milliseconds(800))
-				statusText = lookupLoadingText
 				isLookupProgressVisible = true
 				LoadingThrobber.start(hapticsEnabled: prefs.haptics)
 			} catch {}
