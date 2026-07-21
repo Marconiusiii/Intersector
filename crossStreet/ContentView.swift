@@ -891,7 +891,7 @@ struct ContentView: View {
 				.contentShape(Rectangle())
 		}
 		.menuStyle(.button)
-		.buttonStyle(IntersectorActionButtonStyle(drawsChrome: false))
+		.buttonStyle(.plain)
 		.disabled(isLoading || isStartupLoading || pointScanner.isScanning || pointScanner.isPreparing)
 		.accessibilityHidden(true)
 	}
@@ -1534,15 +1534,16 @@ struct ContentView: View {
 				await action()
 			}
 		} label: {
-			ZStack {
-				Color.clear
-				actionLabel(title, systemImage: systemImage)
-			}
-			.frame(maxWidth: .infinity)
+			actionLabel(title, systemImage: systemImage)
+				.frame(maxWidth: .infinity, minHeight: actionMinHeight, alignment: .center)
 			.contentShape(Rectangle())
 		}
-		.buttonStyle(IntersectorActionButtonStyle(drawsChrome: drawsChrome))
+		.buttonStyle(.plain)
 		.frame(maxWidth: .infinity)
+		.foregroundStyle(Color.crossButtonText)
+		.background(drawsChrome ? Color.crossBtn : Color.clear)
+		.overlay(Rectangle().stroke(drawsChrome ? Color.crossButtonStrongBorder : Color.clear, lineWidth: 2))
+		.shadow(color: drawsChrome ? Color.black.opacity(0.18) : Color.clear, radius: 2, x: 0, y: 1)
 		.contentShape(Rectangle())
 		.disabled(isDisabled ?? (isLoading || isStartupLoading || pointScanner.isScanning || pointScanner.isPreparing))
 		.accessibilityLabel(accessibilityLabel ?? title)
@@ -1740,26 +1741,6 @@ struct ContentView: View {
 			return
 		}
 		openURL(mailURL)
-	}
-}
-
-private struct IntersectorActionButtonStyle: ButtonStyle {
-	@Environment(\.isEnabled) private var isEnabled
-	var drawsChrome = true
-
-	func makeBody(configuration: Configuration) -> some View {
-		configuration.label
-			.foregroundStyle(Color.crossButtonText)
-			.background(drawsChrome ? Color.crossBtn : Color.clear)
-			.overlay(Rectangle().stroke(drawsChrome ? Color.crossButtonStrongBorder : Color.clear, lineWidth: 2))
-			.shadow(
-				color: drawsChrome ? Color.black.opacity(configuration.isPressed ? 0.08 : 0.18) : Color.clear,
-				radius: 2,
-				x: 0,
-				y: 1
-			)
-			.opacity(isEnabled ? (configuration.isPressed ? 0.82 : 1) : 0.45)
-			.scaleEffect(configuration.isPressed ? 0.985 : 1)
 	}
 }
 
