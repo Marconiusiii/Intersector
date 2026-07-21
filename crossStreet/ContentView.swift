@@ -699,21 +699,22 @@ struct ContentView: View {
 	private var statusView: some View {
 		Group {
 			if usesCenteredStatusLayout {
-				VStack(alignment: .center, spacing: 0) {
+				VStack(alignment: .center, spacing: 8) {
 					currentInfoHeading(alignment: .center, isCentered: true)
 					currentInfoBody(alignment: .center, textAlignment: .center)
 				}
 			} else {
-				HStack(alignment: .top, spacing: 0) {
+				HStack(alignment: .firstTextBaseline, spacing: 16) {
 					currentInfoHeading(alignment: .leading, isCentered: false)
-						.layoutPriority(1)
 					currentInfoBody(alignment: .leading, textAlignment: .leading)
-						.layoutPriority(2)
 				}
 			}
 		}
-		.frame(maxWidth: .infinity, alignment: usesCenteredStatusLayout ? .center : .leading)
+		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: usesCenteredStatusLayout ? .center : .leading)
+		.padding(.horizontal, 16)
+		.padding(.vertical, 10)
 		.background(Color.crossPanel)
+		.contentShape(Rectangle())
 	}
 
 	private func currentInfoHeading(
@@ -730,9 +731,7 @@ struct ContentView: View {
 				.accessibilityAddTraits(.isHeader)
 			statusActivityIndicator
 		}
-		.padding(.horizontal, 16)
-		.padding(.vertical, 6)
-		.frame(maxWidth: isCentered ? .infinity : nil, minHeight: 56, alignment: alignment)
+		.frame(maxWidth: isCentered ? .infinity : nil, alignment: alignment)
 		.contentShape(Rectangle())
 	}
 
@@ -747,9 +746,7 @@ struct ContentView: View {
 			.lineLimit(nil)
 			.textSelection(.enabled)
 			.fixedSize(horizontal: false, vertical: true)
-			.padding(.horizontal, 16)
-			.padding(.vertical, 6)
-			.frame(maxWidth: .infinity, minHeight: 56, alignment: alignment)
+			.frame(maxWidth: .infinity, alignment: alignment)
 			.contentShape(Rectangle())
 	}
 
@@ -869,8 +866,8 @@ struct ContentView: View {
 				.frame(width: 48, alignment: .center)
 		}
 		.background(Color.crossBtn)
-		.overlay(Rectangle().stroke(Color.crossButtonBorder, lineWidth: 1))
-		.shadow(color: Color.black.opacity(0.12), radius: 2, x: 0, y: 1)
+		.overlay(Rectangle().stroke(Color.crossButtonStrongBorder, lineWidth: 2))
+		.shadow(color: Color.black.opacity(0.18), radius: 2, x: 0, y: 1)
 	}
 
 	private func rankedMenu(
@@ -1754,9 +1751,9 @@ private struct IntersectorActionButtonStyle: ButtonStyle {
 		configuration.label
 			.foregroundStyle(Color.crossButtonText)
 			.background(drawsChrome ? Color.crossBtn : Color.clear)
-			.overlay(Rectangle().stroke(drawsChrome ? Color.crossButtonBorder : Color.clear, lineWidth: 1))
+			.overlay(Rectangle().stroke(drawsChrome ? Color.crossButtonStrongBorder : Color.clear, lineWidth: 2))
 			.shadow(
-				color: drawsChrome ? Color.black.opacity(configuration.isPressed ? 0.06 : 0.12) : Color.clear,
+				color: drawsChrome ? Color.black.opacity(configuration.isPressed ? 0.08 : 0.18) : Color.clear,
 				radius: 2,
 				x: 0,
 				y: 1
