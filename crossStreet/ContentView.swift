@@ -698,12 +698,12 @@ struct ContentView: View {
 	private var statusView: some View {
 		Group {
 			if usesCenteredStatusLayout {
-				VStack(alignment: .center, spacing: 8) {
+				VStack(alignment: .center, spacing: 0) {
 					currentInfoHeading(alignment: .center, isCentered: true)
 					currentInfoBody(alignment: .center, textAlignment: .center)
 				}
 			} else {
-				HStack(alignment: .top, spacing: 16) {
+				HStack(alignment: .top, spacing: 0) {
 					currentInfoHeading(alignment: .leading, isCentered: false)
 						.layoutPriority(1)
 					currentInfoBody(alignment: .leading, textAlignment: .leading)
@@ -712,8 +712,6 @@ struct ContentView: View {
 			}
 		}
 		.frame(maxWidth: .infinity, minHeight: 60, alignment: usesCenteredStatusLayout ? .center : .leading)
-		.padding(.horizontal, 16)
-		.padding(.vertical, 10)
 		.background(Color.crossPanel)
 		.contentShape(Rectangle())
 	}
@@ -733,7 +731,9 @@ struct ContentView: View {
 				.accessibilityAddTraits(.isHeader)
 			statusActivityIndicator
 		}
-		.frame(maxWidth: isCentered ? .infinity : nil, alignment: alignment)
+		.padding(.horizontal, 16)
+		.padding(.vertical, 10)
+		.frame(maxWidth: isCentered ? .infinity : nil, minHeight: 60, alignment: alignment)
 		.contentShape(Rectangle())
 	}
 
@@ -748,7 +748,9 @@ struct ContentView: View {
 			.lineLimit(nil)
 			.textSelection(.enabled)
 			.fixedSize(horizontal: false, vertical: true)
-			.frame(maxWidth: .infinity, alignment: alignment)
+			.padding(.horizontal, 16)
+			.padding(.vertical, 10)
+			.frame(maxWidth: .infinity, minHeight: 60, alignment: alignment)
 			.contentShape(Rectangle())
 	}
 
