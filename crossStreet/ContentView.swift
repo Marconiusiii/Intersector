@@ -1125,7 +1125,9 @@ struct ContentView: View {
 			settingsIntroSection
 			settingsDisplaySection
 			settingsAnnouncementSection
+			settingsRegionalWordingSection
 			settingsMapDetailSection
+			settingsInteractionSection
 			settingsAboutSection
 		}
 		.frame(maxHeight: .infinity)
@@ -1190,7 +1192,7 @@ struct ContentView: View {
 
 	private var settingsAnnouncementSection: some View {
 		Group {
-			settingsHeader("Announcements")
+			settingsHeader("Spoken Announcements")
 			settingsControlRow {
 				Toggle("Distance", isOn: announcementDistanceBinding)
 					.accessibilityFocused($settingsFocusTarget, equals: .announcementDistance)
@@ -1221,11 +1223,6 @@ struct ContentView: View {
 					.accessibilityFocused($settingsFocusTarget, equals: .direction)
 				}
 			}
-			settingsControlRow {
-				Toggle("Manhattan Snob Mode", isOn: manhattanSnobModeBinding)
-					.accessibilityFocused($settingsFocusTarget, equals: .manhattanSnobMode)
-			}
-			settingsHelperText("Uses Uptown, Downtown, East Side, and West Side when direction wording supports it.")
 			settingsControlRow {
 				Toggle("Neighborhood", isOn: announcementNeighborhoodBinding)
 					.accessibilityFocused($settingsFocusTarget, equals: .announcementNeighborhood)
@@ -1271,6 +1268,17 @@ struct ContentView: View {
 		}
 	}
 
+	private var settingsRegionalWordingSection: some View {
+		Group {
+			settingsHeader("Regional Wording")
+			settingsControlRow {
+				Toggle("Manhattan Snob Mode", isOn: manhattanSnobModeBinding)
+					.accessibilityFocused($settingsFocusTarget, equals: .manhattanSnobMode)
+			}
+			settingsHelperText("Uses Uptown, Downtown, East Side, and West Side when cardinal directions are spoken.")
+		}
+	}
+
 	private var spokenIntersectionsControl: some View {
 		VStack(alignment: .leading, spacing: 8) {
 			Text("Spoken Intersections")
@@ -1289,7 +1297,7 @@ struct ContentView: View {
 
 	private var settingsMapDetailSection: some View {
 		Group {
-			settingsHeader("Map Detail")
+			settingsHeader("Map Data")
 			settingsControlRow {
 				Toggle("Include crossings", isOn: crossingsBinding)
 					.accessibilityFocused($settingsFocusTarget, equals: .crossings)
@@ -1299,6 +1307,12 @@ struct ContentView: View {
 					.accessibilityFocused($settingsFocusTarget, equals: .walkingPaths)
 			}
 			settingsHelperText("Keep Walking Paths off to focus results on the street grid.")
+		}
+	}
+
+	private var settingsInteractionSection: some View {
+		Group {
+			settingsHeader("Interaction")
 			settingsControlRow {
 				Toggle("Haptic scan feedback", isOn: hapticsBinding)
 					.accessibilityFocused($settingsFocusTarget, equals: .haptics)
