@@ -8,28 +8,13 @@
 import AppIntents
 import CoreLocation
 import Foundation
-import SwiftUI
-
-private struct IntersectorIntentResultView: View {
-	var text: String
-
-	var body: some View {
-		Text(text)
-			.font(.body)
-			.multilineTextAlignment(.leading)
-			.lineLimit(nil)
-			.fixedSize(horizontal: false, vertical: true)
-			.padding()
-	}
-}
 
 private func intersectorResult(
 	_ text: String
-) -> some IntentResult & ProvidesDialog & ReturnsValue<String> & ShowsSnippetView {
+) -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 	.result(
 		value: text,
-		dialog: IntentDialog(stringLiteral: text),
-		view: IntersectorIntentResultView(text: text)
+		dialog: IntentDialog(stringLiteral: text)
 	)
 }
 
@@ -39,7 +24,7 @@ struct NearestIntersectionIntent: AppIntent {
 	static var openAppWhenRun = false
 
 	@MainActor
-	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> & ShowsSnippetView {
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 		do {
 			let prefs = AppPrefs.saved()
 			let text = try await OrientSvc.shared.spokenText(.nearest, prefs: prefs)
@@ -56,7 +41,7 @@ struct UpcomingIntersectionIntent: AppIntent {
 	static var openAppWhenRun = false
 
 	@MainActor
-	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> & ShowsSnippetView {
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 		do {
 			let prefs = AppPrefs.saved()
 			let text = try await OrientSvc.shared.spokenText(.upcoming, prefs: prefs)
@@ -73,7 +58,7 @@ struct SecondNearestIntersectionIntent: AppIntent {
 	static var openAppWhenRun = false
 
 	@MainActor
-	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> & ShowsSnippetView {
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 		do {
 			let prefs = AppPrefs.saved()
 			let report = try await OrientSvc.shared.report(.nearest, rank: 2, prefs: prefs)
@@ -91,7 +76,7 @@ struct ThirdNearestIntersectionIntent: AppIntent {
 	static var openAppWhenRun = false
 
 	@MainActor
-	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> & ShowsSnippetView {
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 		do {
 			let prefs = AppPrefs.saved()
 			let report = try await OrientSvc.shared.report(.nearest, rank: 3, prefs: prefs)
@@ -109,7 +94,7 @@ struct SecondUpcomingIntersectionIntent: AppIntent {
 	static var openAppWhenRun = false
 
 	@MainActor
-	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> & ShowsSnippetView {
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 		do {
 			let prefs = AppPrefs.saved()
 			let report = try await OrientSvc.shared.report(.upcoming, rank: 2, prefs: prefs)
@@ -127,7 +112,7 @@ struct ThirdUpcomingIntersectionIntent: AppIntent {
 	static var openAppWhenRun = false
 
 	@MainActor
-	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> & ShowsSnippetView {
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 		do {
 			let prefs = AppPrefs.saved()
 			let report = try await OrientSvc.shared.report(.upcoming, rank: 3, prefs: prefs)
@@ -145,7 +130,7 @@ struct MyDirectionIntent: AppIntent {
 	static var openAppWhenRun = false
 
 	@MainActor
-	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> & ShowsSnippetView {
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 		do {
 			let prefs = AppPrefs.saved()
 			let provider = LocationProvider()

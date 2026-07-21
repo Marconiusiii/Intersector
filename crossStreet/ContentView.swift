@@ -624,7 +624,6 @@ struct ContentView: View {
 						}
 						.frame(minHeight: actionMinHeight)
 						pointScanToggle
-							.frame(maxHeight: .infinity)
 					}
 					.frame(maxWidth: .infinity)
 					.frame(minHeight: geometry.size.height, alignment: .top)
@@ -704,13 +703,15 @@ struct ContentView: View {
 					currentInfoBody(alignment: .center, textAlignment: .center)
 				}
 			} else {
-				HStack(alignment: .firstTextBaseline, spacing: 16) {
+				HStack(alignment: .top, spacing: 16) {
 					currentInfoHeading(alignment: .leading, isCentered: false)
+						.layoutPriority(1)
 					currentInfoBody(alignment: .leading, textAlignment: .leading)
+						.layoutPriority(2)
 				}
 			}
 		}
-		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: usesCenteredStatusLayout ? .center : .leading)
+		.frame(maxWidth: .infinity, minHeight: 60, alignment: usesCenteredStatusLayout ? .center : .leading)
 		.padding(.horizontal, 16)
 		.padding(.vertical, 10)
 		.background(Color.crossPanel)
@@ -723,11 +724,12 @@ struct ContentView: View {
 	) -> some View {
 		HStack(alignment: .center, spacing: 8) {
 			Text("Current Info")
-				.font(.title2)
+				.font(.headline)
 				.fontWeight(.semibold)
 				.foregroundStyle(.white)
-				.lineLimit(nil)
-				.fixedSize(horizontal: false, vertical: true)
+				.lineLimit(1)
+				.minimumScaleFactor(0.8)
+				.fixedSize(horizontal: true, vertical: false)
 				.accessibilityAddTraits(.isHeader)
 			statusActivityIndicator
 		}
@@ -832,15 +834,10 @@ struct ContentView: View {
 				}
 			)
 		) {
-			ZStack {
-				Color.clear
-				actionLabel("Scan", systemImage: "dot.radiowaves.left.and.right")
-			}
-			.frame(maxWidth: .infinity, maxHeight: .infinity)
-			.contentShape(Rectangle())
+			actionLabel("Scan", systemImage: "dot.radiowaves.left.and.right")
 		}
 		.toggleStyle(.button)
-		.frame(maxWidth: .infinity, minHeight: actionMinHeight, maxHeight: .infinity, alignment: .center)
+		.frame(maxWidth: .infinity, minHeight: actionMinHeight, alignment: .center)
 		.foregroundStyle(Color.crossButtonText)
 		.background(pointScanBackground)
 		.overlay(Rectangle().stroke(Color.crossButtonStrongBorder, lineWidth: 2))
@@ -860,14 +857,14 @@ struct ContentView: View {
 	) -> some View {
 		ZStack(alignment: .trailing) {
 			primary
-				.padding(.trailing, 48)
-				.padding(.leading, 48)
+				.frame(maxWidth: .infinity)
 			menu
 				.frame(width: 48, alignment: .center)
 		}
 		.background(Color.crossBtn)
-		.overlay(Rectangle().stroke(Color.crossButtonStrongBorder, lineWidth: 2))
-		.shadow(color: Color.black.opacity(0.18), radius: 2, x: 0, y: 1)
+		.overlay(Rectangle().stroke(Color.crossButtonBorder, lineWidth: 1))
+		.shadow(color: Color.black.opacity(0.12), radius: 2, x: 0, y: 1)
+		.contentShape(Rectangle())
 	}
 
 	private func rankedMenu(
@@ -1751,9 +1748,9 @@ private struct IntersectorActionButtonStyle: ButtonStyle {
 		configuration.label
 			.foregroundStyle(Color.crossButtonText)
 			.background(drawsChrome ? Color.crossBtn : Color.clear)
-			.overlay(Rectangle().stroke(drawsChrome ? Color.crossButtonStrongBorder : Color.clear, lineWidth: 2))
+			.overlay(Rectangle().stroke(drawsChrome ? Color.crossButtonBorder : Color.clear, lineWidth: 1))
 			.shadow(
-				color: drawsChrome ? Color.black.opacity(configuration.isPressed ? 0.08 : 0.18) : Color.clear,
+				color: drawsChrome ? Color.black.opacity(configuration.isPressed ? 0.06 : 0.12) : Color.clear,
 				radius: 2,
 				x: 0,
 				y: 1

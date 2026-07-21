@@ -7,28 +7,13 @@
 
 import AppIntents
 import Foundation
-import SwiftUI
-
-private struct WatchIntentResultView: View {
-	var text: String
-
-	var body: some View {
-		Text(text)
-			.font(.body)
-			.multilineTextAlignment(.leading)
-			.lineLimit(nil)
-			.fixedSize(horizontal: false, vertical: true)
-			.padding()
-	}
-}
 
 private func watchIntersectorResult(
 	_ text: String
-) -> some IntentResult & ProvidesDialog & ReturnsValue<String> & ShowsSnippetView {
+) -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 	.result(
 		value: text,
-		dialog: IntentDialog(stringLiteral: text),
-		view: WatchIntentResultView(text: text)
+		dialog: IntentDialog(stringLiteral: text)
 	)
 }
 
@@ -38,7 +23,7 @@ struct WatchNearestIntersectionIntent: AppIntent {
 	static var openAppWhenRun = false
 
 	@MainActor
-	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> & ShowsSnippetView {
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 		let text = await IntersectorWatchReporter.reportText(for: .nearest)
 		return watchIntersectorResult(text)
 	}
@@ -50,7 +35,7 @@ struct WatchUpcomingIntersectionIntent: AppIntent {
 	static var openAppWhenRun = false
 
 	@MainActor
-	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> & ShowsSnippetView {
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 		let text = await IntersectorWatchReporter.reportText(for: .upcoming)
 		return watchIntersectorResult(text)
 	}
@@ -62,7 +47,7 @@ struct WatchMyDirectionIntent: AppIntent {
 	static var openAppWhenRun = false
 
 	@MainActor
-	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> & ShowsSnippetView {
+	func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
 		let text = await IntersectorWatchReporter.directionText()
 		return watchIntersectorResult(text)
 	}
