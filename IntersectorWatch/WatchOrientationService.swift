@@ -255,7 +255,6 @@ struct WatchOrientationService {
 	private let neighborhoodProvider = WatchNeighborhoodProvider()
 	private let finder = WatchIntersectionFinder()
 	private let neighborhoodResolver = WatchNeighborhoodResolver()
-	private let firstLookupGuard = WatchFirstLookupMapDetailGuard()
 	private static let spokenExpansionTimeout: Duration = .milliseconds(900)
 
 	@MainActor
@@ -412,13 +411,11 @@ struct WatchOrientationService {
 		rank: Int,
 		prefs: WatchAppPrefs
 	) async -> WatchAppPrefs {
-		guard
-			await firstLookupGuard.shouldUseCoreMapDetails(kind: kind, rank: rank, prefs: prefs)
-		else {
+		guard rank == 1 else {
 			return prefs
 		}
 		var lookupPrefs = prefs
-		lookupPrefs.mapDetails = WatchMapDetailOptions()
+		lookupPrefs.mapDetails.includeWalkingPaths = false
 		return lookupPrefs
 	}
 
@@ -471,11 +468,19 @@ struct WatchOrientationService {
 		let radii: [CLLocationDistance] = [225, 375, 750, 1_200]
 		var latestData = WatchMapDataSet(intersections: [], roads: [])
 		for radius in radii {
-			latestData = try await mapClient.mapData(
-				near: context.coordinate,
-				radiusMeters: radius,
-				options: prefs.mapDetails
-			)
+			if minimumCandidateCount == 1 {
+				latestData = try await mapClient.immediateMapData(
+					near: context.coordinate,
+					radiusMeters: radius,
+					options: prefs.mapDetails
+				)
+			} else {
+				latestData = try await mapClient.mapData(
+					near: context.coordinate,
+					radiusMeters: radius,
+					options: prefs.mapDetails
+				)
+			}
 			if hasEnoughCandidates(
 				for: kind,
 				from: context,
@@ -797,31 +802,6 @@ private extension Array where Element == WatchOrientationReport {
 				return existingStreet == reportStreet && existingCrossStreet == reportCrossStreet
 			}
 			return existing.cross == report.cross
-		}
-	}
-}
-
-actor WatchFirstLookupMapDetailGuard {
-	private var hasProtectedNearest = false
-	private var hasProtectedUpcoming = false
-
-	func shouldUseCoreMapDetails(kind: WatchReportKind, rank: Int, prefs: WatchAppPrefs) -> Bool {
-		guard rank == 1, prefs.mapDetails != WatchMapDetailOptions() else {
-			return false
-		}
-		switch kind {
-		case .nearest:
-			guard !hasProtectedNearest else {
-				return false
-			}
-			hasProtectedNearest = true
-			return true
-		case .upcoming:
-			guard !hasProtectedUpcoming else {
-				return false
-			}
-			hasProtectedUpcoming = true
-			return true
 		}
 	}
 }
@@ -1388,6 +1368,7 @@ struct WatchMapDataClient {
 	]
 	private let session: URLSession = .shared
 	private static let endpointHealth = WatchMapEndpointHealth()
+	private static let immediateCrossingTimeout: Duration = .milliseconds(650)
 	private static let crossingEnrichmentTimeout: Duration = .milliseconds(700)
 
 	func mapData(
@@ -1426,6 +1407,57 @@ struct WatchMapDataClient {
 				return data
 			}
 		} catch {
+			return coreData
+		}
+	}
+
+	func immediateMapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: WatchMapDetailOptions
+	) async throws -> WatchMapDataSet {
+		var coreOptions = options
+		coreOptions.includeCrossings = false
+		coreOptions.includeWalkingPaths = false
+
+		guard options.includeCrossings else {
+			return try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: coreOptions)
+		}
+
+		var crossingOptions = options
+		crossingOptions.includeCrossings = true
+		crossingOptions.includeWalkingPaths = false
+		let crossingRadius = min(radiusMeters, 175)
+		let crossingTask = Task {
+			try await fetchCrossingResponse(near: coordinate, radiusMeters: crossingRadius)
+		}
+		let coreData = try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: coreOptions)
+
+		do {
+			let crossingResponse = try await withThrowingTaskGroup(of: WatchOverpassResponse.self) { group in
+				group.addTask {
+					try await crossingTask.value
+				}
+				group.addTask {
+					try await Task.sleep(for: Self.immediateCrossingTimeout)
+					throw URLError(.timedOut)
+				}
+
+				defer {
+					group.cancelAll()
+				}
+				guard let response = try await group.next() else {
+					throw WatchReportError.invalidResponse
+				}
+				return response
+			}
+			return WatchIntersectionBuilder().mapData(
+				from: crossingResponse,
+				options: crossingOptions,
+				coreData: coreData
+			)
+		} catch {
+			crossingTask.cancel()
 			return coreData
 		}
 	}
@@ -1478,6 +1510,64 @@ struct WatchMapDataClient {
 		)
 		await Self.endpointHealth.markSuccess(endpoint)
 		return data
+	}
+
+	private func fetchCrossingResponse(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance
+	) async throws -> WatchOverpassResponse {
+		let endpoints = await Self.endpointHealth.orderedEndpoints(
+			primary: endpoint,
+			fallbacks: fallbackEndpoints
+		)
+		var lastError: Error?
+
+		for endpoint in endpoints {
+			do {
+				let response = try await crossingResponse(
+					from: endpoint,
+					near: coordinate,
+					radiusMeters: radiusMeters
+				)
+				await Self.endpointHealth.markSuccess(endpoint)
+				return response
+			} catch {
+				lastError = error
+				if isTemporary(error) {
+					await Self.endpointHealth.markTemporaryFailure(endpoint)
+				}
+				guard isTemporary(error), endpoint != endpoints.last else {
+					throw error
+				}
+			}
+		}
+
+		throw lastError ?? WatchReportError.invalidResponse
+	}
+
+	private func crossingResponse(
+		from endpoint: URL,
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance
+	) async throws -> WatchOverpassResponse {
+		var request = URLRequest(url: endpoint)
+		request.httpMethod = "POST"
+		request.timeoutInterval = 1.0
+		request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
+		request.httpBody = crossingQuery(near: coordinate, radiusMeters: radiusMeters).data(using: .utf8)
+
+		let (data, urlResponse) = try await session.data(for: request)
+		guard let httpResponse = urlResponse as? HTTPURLResponse else {
+			throw WatchReportError.invalidResponse
+		}
+		guard (200..<300).contains(httpResponse.statusCode) else {
+			throw WatchReportError.serverError(httpResponse.statusCode)
+		}
+		do {
+			return try JSONDecoder().decode(WatchOverpassResponse.self, from: data)
+		} catch {
+			throw WatchReportError.invalidMapData
+		}
 	}
 
 	private func mapData(

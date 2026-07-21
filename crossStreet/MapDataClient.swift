@@ -16,6 +16,7 @@ struct MapDataClient: MapDataFetching {
 	var session: URLSession = .shared
 	private static let cache = MapDataCache()
 	private static let endpointHealth = MapEndpointHealth()
+	private static let immediateCrossingTimeout: Duration = .milliseconds(650)
 	private static let crossingEnrichmentTimeout: Duration = .milliseconds(700)
 
 	func intersections(
@@ -43,12 +44,13 @@ struct MapDataClient: MapDataFetching {
 
 		var coreOptions = options
 		coreOptions.includeCrossings = false
+		let enrichmentCoreOptions = coreOptions
 		let coreData = try await Self.cache.data(
 			near: coordinate,
 			radiusMeters: radiusMeters,
-			options: coreOptions
+			options: enrichmentCoreOptions
 		) {
-			try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: coreOptions)
+			try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: enrichmentCoreOptions)
 		}
 
 		do {
@@ -79,6 +81,70 @@ struct MapDataClient: MapDataFetching {
 		}
 	}
 
+	func immediateMapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions = MapDetailOptions()
+	) async throws -> MapDataSet {
+		var coreOptions = options
+		coreOptions.includeCrossings = false
+		coreOptions.includeWalkingPaths = false
+		let immediateCoreOptions = coreOptions
+
+		guard options.includeCrossings else {
+			return try await Self.cache.data(
+				near: coordinate,
+				radiusMeters: radiusMeters,
+				options: immediateCoreOptions
+			) {
+				try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: immediateCoreOptions)
+			}
+		}
+
+		var crossingOptions = options
+		crossingOptions.includeCrossings = true
+		crossingOptions.includeWalkingPaths = false
+		let crossingRadius = min(radiusMeters, 175)
+		let crossingTask = Task {
+			try await fetchCrossingResponse(near: coordinate, radiusMeters: crossingRadius)
+		}
+		let coreData = try await Self.cache.data(
+			near: coordinate,
+			radiusMeters: radiusMeters,
+			options: immediateCoreOptions
+		) {
+			try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: immediateCoreOptions)
+		}
+
+		do {
+			let crossingResponse = try await withThrowingTaskGroup(of: OverpassResponse.self) { group in
+				group.addTask {
+					try await crossingTask.value
+				}
+				group.addTask {
+					try await Task.sleep(for: Self.immediateCrossingTimeout)
+					throw URLError(.timedOut)
+				}
+
+				defer {
+					group.cancelAll()
+				}
+				guard let response = try await group.next() else {
+					throw MapDataError.invalidResponse
+				}
+				return response
+			}
+			return IntersectionBuilder().mapData(
+				from: crossingResponse,
+				options: crossingOptions,
+				coreData: coreData
+			)
+		} catch {
+			crossingTask.cancel()
+			return coreData
+		}
+	}
+
 	private func fetchMapDataWithCrossingEnrichment(
 		near coordinate: CLLocationCoordinate2D,
 		radiusMeters: CLLocationDistance,
@@ -101,6 +167,67 @@ struct MapDataClient: MapDataFetching {
 		)
 		await Self.endpointHealth.markSuccess(endpoint)
 		return data
+	}
+
+	private func fetchCrossingResponse(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance
+	) async throws -> OverpassResponse {
+		let endpoints = await Self.endpointHealth.orderedEndpoints(
+			primary: endpoint,
+			fallbacks: fallbackEndpoints
+		)
+		var lastError: Error?
+
+		for endpoint in endpoints {
+			do {
+				let response = try await crossingResponse(
+					from: endpoint,
+					near: coordinate,
+					radiusMeters: radiusMeters
+				)
+				await Self.endpointHealth.markSuccess(endpoint)
+				return response
+			} catch {
+				lastError = error
+				if isTemporary(error) {
+					await Self.endpointHealth.markTemporaryFailure(endpoint)
+				}
+				guard isTemporary(error), endpoint != endpoints.last else {
+					throw error
+				}
+			}
+		}
+
+		throw lastError ?? MapDataError.invalidResponse
+	}
+
+	private func crossingResponse(
+		from endpoint: URL,
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance
+	) async throws -> OverpassResponse {
+		var request = URLRequest(url: endpoint)
+		request.httpMethod = "POST"
+		request.timeoutInterval = 1.0
+		request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
+		request.httpBody = crossingQuery(
+			near: coordinate,
+			radiusMeters: radiusMeters
+		).data(using: .utf8)
+
+		let (data, urlResponse) = try await session.data(for: request)
+		guard let httpResponse = urlResponse as? HTTPURLResponse else {
+			throw MapDataError.invalidResponse
+		}
+		guard (200..<300).contains(httpResponse.statusCode) else {
+			throw MapDataError.serverError(httpResponse.statusCode)
+		}
+		do {
+			return try JSONDecoder().decode(OverpassResponse.self, from: data)
+		} catch {
+			throw MapDataError.invalidMapData
+		}
 	}
 
 	private func fetchMapData(

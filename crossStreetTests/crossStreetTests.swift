@@ -1457,6 +1457,72 @@ struct IntersectorTests {
 		#expect(await locationProvider.freshHeadingRequests == [false, true])
 	}
 
+	@Test func firstNearestCanReturnImmediateCrossingWhenCrossingsEnabled() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapClient = ImmediateRecordingMapDataClient(
+			fullData: rankedStreetData(origin: origin),
+			immediateData: crossingFirstData(origin: origin)
+		)
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(context: DeviceContext(coordinate: origin, headingDegrees: 0)),
+			mapDataClient: mapClient,
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.mapDetails = MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
+
+		let report = try await service.report(.nearest, prefs: prefs)
+
+		#expect(report.cross == "Crossing on Oak Street near Pine Street")
+		#expect(await mapClient.immediateOptions == [MapDetailOptions(includeCrossings: true)])
+		#expect(await mapClient.fullOptions.isEmpty)
+	}
+
+	@Test func firstUpcomingCanReturnImmediateCrossingWhenCrossingsEnabled() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapClient = ImmediateRecordingMapDataClient(
+			fullData: rankedStreetData(origin: origin),
+			immediateData: crossingFirstData(origin: origin)
+		)
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(context: DeviceContext(coordinate: origin, headingDegrees: 0)),
+			mapDataClient: mapClient,
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.mapDetails = MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
+
+		let report = try await service.report(.upcoming, prefs: prefs)
+
+		#expect(report.cross == "Crossing on Oak Street near Pine Street")
+		#expect(await mapClient.immediateOptions == [MapDetailOptions(includeCrossings: true)])
+		#expect(await mapClient.fullOptions.isEmpty)
+	}
+
+	@Test func rankedNearestKeepsFullCrossingDetailsEnabled() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapClient = ImmediateRecordingMapDataClient(
+			fullData: rankedStreetData(origin: origin),
+			immediateData: crossingFirstData(origin: origin)
+		)
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(context: DeviceContext(coordinate: origin, headingDegrees: 0)),
+			mapDataClient: mapClient,
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.mapDetails = MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
+
+		let report = try await service.report(.nearest, rank: 2, prefs: prefs)
+
+		#expect(report.cross == "Oak Street and Second Street")
+		#expect(await mapClient.immediateOptions.isEmpty)
+		#expect(await mapClient.fullOptions == [MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)])
+	}
+
 	@Test func rankedNearestReturnsRequestedDistanceOrder() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let candidates = [
@@ -2116,6 +2182,105 @@ actor FreshHeadingRecordingLocationProvider: LocationProviding {
 	func currentContext(requiresFreshHeading: Bool) async throws -> DeviceContext {
 		freshHeadingRequests.append(requiresFreshHeading)
 		return context
+	}
+}
+
+private func rankedStreetData(origin: CLLocationCoordinate2D) -> MapDataSet {
+	MapDataSet(
+		intersections: [
+			IntersectionCandidate(
+				id: "rank-1",
+				names: ["Oak Street", "First Street"],
+				coordinate: CLLocationCoordinate2D(latitude: origin.latitude + 0.001, longitude: origin.longitude)
+			),
+			IntersectionCandidate(
+				id: "rank-2",
+				names: ["Oak Street", "Second Street"],
+				coordinate: CLLocationCoordinate2D(latitude: origin.latitude + 0.002, longitude: origin.longitude)
+			)
+		],
+		roads: [
+			MapRoad(
+				id: "oak",
+				name: "Oak Street",
+				nodeIDs: [1, 2],
+				coordinates: [
+					CLLocationCoordinate2D(latitude: origin.latitude - 0.002, longitude: origin.longitude),
+					CLLocationCoordinate2D(latitude: origin.latitude + 0.003, longitude: origin.longitude)
+				]
+			)
+		]
+	)
+}
+
+private func crossingFirstData(origin: CLLocationCoordinate2D) -> MapDataSet {
+	MapDataSet(
+		intersections: [
+			IntersectionCandidate(
+				id: "crossing-1",
+				names: ["Crossing on Oak Street near Pine Street"],
+				coordinate: CLLocationCoordinate2D(latitude: origin.latitude + 0.0002, longitude: origin.longitude),
+				associatedRoadNames: ["Oak Street"]
+			),
+			IntersectionCandidate(
+				id: "street-1",
+				names: ["Oak Street", "Pine Street"],
+				coordinate: CLLocationCoordinate2D(latitude: origin.latitude + 0.001, longitude: origin.longitude)
+			)
+		],
+		roads: [
+			MapRoad(
+				id: "oak",
+				name: "Oak Street",
+				nodeIDs: [1, 2],
+				coordinates: [
+					CLLocationCoordinate2D(latitude: origin.latitude - 0.002, longitude: origin.longitude),
+					CLLocationCoordinate2D(latitude: origin.latitude + 0.003, longitude: origin.longitude)
+				]
+			)
+		]
+	)
+}
+
+actor ImmediateRecordingMapDataClient: MapDataFetching {
+	private let fullData: MapDataSet
+	private let immediateData: MapDataSet
+	private(set) var fullOptions: [MapDetailOptions] = []
+	private(set) var immediateOptions: [MapDetailOptions] = []
+
+	init(fullData: MapDataSet, immediateData: MapDataSet) {
+		self.fullData = fullData
+		self.immediateData = immediateData
+	}
+
+	func intersections(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> [IntersectionCandidate] {
+		try await mapData(
+			near: coordinate,
+			radiusMeters: radiusMeters,
+			options: options
+		).intersections
+	}
+
+	func mapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> MapDataSet {
+		fullOptions.append(options)
+		return fullData
+	}
+
+	func immediateMapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> MapDataSet {
+		immediateOptions.append(options)
+		return immediateData
 	}
 }
 

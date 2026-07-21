@@ -52,6 +52,25 @@ protocol MapDataFetching {
 		radiusMeters: CLLocationDistance,
 		options: MapDetailOptions
 	) async throws -> MapDataSet
+	func immediateMapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> MapDataSet
+}
+
+extension MapDataFetching {
+	func immediateMapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> MapDataSet {
+		try await mapData(
+			near: coordinate,
+			radiusMeters: radiusMeters,
+			options: options
+		)
+	}
 }
 
 protocol NeighborhoodProviding {
@@ -65,7 +84,6 @@ struct OrientSvc {
 	var finder = IntersectionFinder()
 	var neighborhoodResolver = NeighborhoodResolver()
 	private var upcomingCache = UpcomingReportCache()
-	private let firstLookupGuard = FirstLookupMapDetailGuard()
 	private static let spokenExpansionTimeout: Duration = .milliseconds(900)
 
 	init(
@@ -215,14 +233,17 @@ struct OrientSvc {
 		rank: Int,
 		prefs: AppPrefs
 	) async -> AppPrefs {
-		guard
-			await firstLookupGuard.shouldUseCoreMapDetails(kind: kind, rank: rank, prefs: prefs)
-		else {
+		guard rank == 1 else {
 			return prefs
 		}
-		var lookupPrefs = prefs
-		lookupPrefs.mapDetails = MapDetailOptions()
-		return lookupPrefs
+		switch kind {
+		case .nearest, .upcoming:
+			var lookupPrefs = prefs
+			lookupPrefs.mapDetails.includeWalkingPaths = false
+			return lookupPrefs
+		case .scan:
+			return prefs
+		}
 	}
 
 	private func mapDataForSpokenExpansion(
@@ -428,11 +449,19 @@ struct OrientSvc {
 		var latestData = MapDataSet(intersections: [], roads: [])
 
 		for radius in radii {
-			latestData = try await mapDataClient.mapData(
-				near: context.coordinate,
-				radiusMeters: radius,
-				options: prefs.mapDetails
-			)
+			if minimumCandidateCount == 1, kind != .scan {
+				latestData = try await mapDataClient.immediateMapData(
+					near: context.coordinate,
+					radiusMeters: radius,
+					options: prefs.mapDetails
+				)
+			} else {
+				latestData = try await mapDataClient.mapData(
+					near: context.coordinate,
+					radiusMeters: radius,
+					options: prefs.mapDetails
+				)
+			}
 
 			if hasEnoughCandidates(
 				for: kind,
@@ -556,33 +585,6 @@ private extension Array where Element == OrientReport {
 				return existingStreet == reportStreet && existingCrossStreet == reportCrossStreet
 			}
 			return existing.cross == report.cross
-		}
-	}
-}
-
-actor FirstLookupMapDetailGuard {
-	private var hasProtectedNearest = false
-	private var hasProtectedUpcoming = false
-
-	func shouldUseCoreMapDetails(kind: ReportKind, rank: Int, prefs: AppPrefs) -> Bool {
-		guard rank == 1, prefs.mapDetails != MapDetailOptions() else {
-			return false
-		}
-		switch kind {
-		case .nearest:
-			guard !hasProtectedNearest else {
-				return false
-			}
-			hasProtectedNearest = true
-			return true
-		case .upcoming:
-			guard !hasProtectedUpcoming else {
-				return false
-			}
-			hasProtectedUpcoming = true
-			return true
-		case .scan:
-			return false
 		}
 	}
 }

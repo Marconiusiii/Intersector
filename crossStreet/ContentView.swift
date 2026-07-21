@@ -775,12 +775,14 @@ struct ContentView: View {
 				Text(lookupLoadingText)
 					.font(.caption)
 					.fontWeight(.semibold)
-					.foregroundStyle(Color.crossInv)
+					.foregroundStyle(Color.crossAccent)
 			}
 		}
 		.padding(.horizontal, 10)
 		.padding(.vertical, 6)
-		.background(Color.black.opacity(0.62), in: Capsule())
+		.background(Color.crossBg.opacity(0.94), in: Capsule())
+		.overlay(Capsule().stroke(Color.crossAccent.opacity(0.72), lineWidth: 1))
+		.shadow(color: Color.black.opacity(0.22), radius: 3, x: 0, y: 1)
 		.opacity(isVisible ? 1 : 0)
 		.animation(accessibilityReduceMotion ? nil : .easeInOut(duration: 0.2), value: isVisible)
 		.accessibilityHidden(true)
@@ -860,12 +862,13 @@ struct ContentView: View {
 			)
 		) {
 			actionLabel("Scan", systemImage: "dot.radiowaves.left.and.right")
+				.padding(.horizontal, 6)
 		}
 		.toggleStyle(.button)
 		.frame(maxWidth: .infinity, minHeight: actionMinHeight, alignment: .center)
 		.foregroundStyle(Color.crossButtonText)
 		.background(pointScanBackground)
-		.overlay(Rectangle().stroke(Color.crossButtonStrongBorder, lineWidth: 2))
+		.overlay(Rectangle().stroke(Color.crossButtonStrongBorder, lineWidth: 3))
 		.shadow(color: Color.black.opacity(0.18), radius: 2, x: 0, y: 1)
 		.contentShape(Rectangle())
 		.disabled(isLoading || isStartupLoading)
@@ -873,7 +876,7 @@ struct ContentView: View {
 	}
 
 	private var pointScanBackground: Color {
-		pointScanner.isScanning || pointScanner.isPreparing ? Color.crossScanActive : Color.crossBtn
+		pointScanner.isScanning || pointScanner.isPreparing ? Color.crossScanActive : Color.crossScanIdle
 	}
 
 	private func rankedActionRow(
@@ -1840,6 +1843,13 @@ extension Color {
 	static let crossButtonBorder = Color(red: 0.42, green: 0.28, blue: 0.00)
 	static let crossButtonStrongBorder = Color(red: 0.02, green: 0.02, blue: 0.02)
 	static let crossChevron = Color(red: 0.42, green: 0.28, blue: 0.00)
+	static let crossScanIdle = Color(
+		UIColor { traits in
+			traits.userInterfaceStyle == .dark
+				? UIColor(red: 1.00, green: 0.68, blue: 0.18, alpha: 1)
+				: UIColor(red: 1.00, green: 0.76, blue: 0.18, alpha: 1)
+		}
+	)
 	static let crossScanActive = Color(red: 1.00, green: 0.55, blue: 0.12)
 	static let crossInv = Color(red: 0.98, green: 0.98, blue: 0.96)
 	static let crossAccent = Color(
