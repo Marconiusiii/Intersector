@@ -334,9 +334,16 @@ struct WatchContentView: View {
 			return
 		}
 		isLoading = true
+		let showsProgressImmediately = rank > 1
+		if showsProgressImmediately {
+			statusText = watchLookupLoadingText
+		}
 		let loadingTask = Task { @MainActor in
 			do {
 				try await Task.sleep(for: .milliseconds(800))
+				guard !showsProgressImmediately else {
+					return
+				}
 				statusText = watchLookupLoadingText
 			} catch {}
 		}
@@ -359,7 +366,10 @@ struct WatchContentView: View {
 	}
 
 	private func reportFailureText(_ kind: WatchReportKind, rank: Int) -> String {
-		"Intersector is having trouble loading map data. Please try again."
+		if rank > 1 {
+			return "Intersector could not find the \(reportLabel(kind, rank: rank)) intersection. Please try again."
+		}
+		return "Intersector is having trouble loading map data. Please try again."
 	}
 
 	private func updateDirection() async {

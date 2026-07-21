@@ -82,9 +82,7 @@ struct OrientReport: Equatable {
 		} else {
 			text = directText(with: prefs)
 		}
-		let shouldIncludeLead = includeLead &&
-			(!prefs.announcementOptions.speaksIntersectionNamesOnly || rank != nil)
-		if shouldIncludeLead {
+		if includeLead {
 			text = "\(leadText(rank: rank)): \(text)"
 		}
 		if includeNeighborhood, let area = areaText(prefs) {

@@ -34,7 +34,7 @@ struct IntersectorTests {
 			conf: .medium
 		)
 
-		#expect(report.text(with: prefs) == "Amsterdam Avenue and West 94th Street.")
+		#expect(report.text(with: prefs) == "Upcoming: Amsterdam Avenue and West 94th Street.")
 	}
 
 	@Test func intersectionNameOnlyUsesCurrentStreetFirst() async throws {
@@ -58,7 +58,7 @@ struct IntersectorTests {
 			conf: .high
 		)
 
-		#expect(report.text(with: prefs) == "Oak Avenue and Main Street.")
+		#expect(report.text(with: prefs) == "Nearest: Oak Avenue and Main Street.")
 	}
 
 	@Test @MainActor func savedPreferencesLoadSiriSettings() async throws {

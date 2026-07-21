@@ -1581,9 +1581,17 @@ struct ContentView: View {
 		}
 		cancelStartupPreparationIfNeeded()
 		isLoading = true
+		let showsProgressImmediately = rank > 1
+		if showsProgressImmediately {
+			isLookupProgressVisible = true
+			LoadingThrobber.start(hapticsEnabled: prefs.haptics)
+		}
 		let loadingTask = Task { @MainActor in
 			do {
 				try await Task.sleep(for: .milliseconds(800))
+				guard !showsProgressImmediately else {
+					return
+				}
 				isLookupProgressVisible = true
 				LoadingThrobber.start(hapticsEnabled: prefs.haptics)
 			} catch {}
@@ -1613,7 +1621,10 @@ struct ContentView: View {
 	}
 
 	private func reportFailureText(_ kind: ReportKind, rank: Int) -> String {
-		"Intersector is having trouble loading map data. Please try again."
+		if rank > 1 {
+			return "Intersector could not find the \(reportLabel(kind, rank: rank)) intersection. Please try again."
+		}
+		return "Intersector is having trouble loading map data. Please try again."
 	}
 
 	private func reportLabel(_ kind: ReportKind, rank: Int) -> String {
