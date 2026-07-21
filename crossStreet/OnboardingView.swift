@@ -95,6 +95,7 @@ private struct OnboardingPageView: View {
 				Text(isRequestingPermission ? "Requesting..." : "Next")
 					.font(.title3)
 					.fontWeight(.semibold)
+					.foregroundStyle(Color.crossButtonText)
 					.multilineTextAlignment(.center)
 					.lineLimit(nil)
 					.fixedSize(horizontal: false, vertical: true)
