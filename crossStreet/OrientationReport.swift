@@ -449,12 +449,6 @@ struct MapDataSet: Equatable {
 		let positioned = intersections
 			.filter { $0.roadNames.contains(road.name) }
 			.compactMap { candidate -> (candidate: IntersectionCandidate, progress: CLLocationDistance)? in
-				if let heading = context.headingDegrees {
-					let bearing = Geo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
-					guard IntersectionFinder().angleDelta(from: heading, to: bearing) <= IntersectionFinder.upcomingConeDegrees else {
-						return nil
-					}
-				}
 				guard let distance = road.signedDistanceAlongRoad(
 					from: context.coordinate,
 					to: candidate.coordinate

@@ -884,12 +884,6 @@ struct WatchMapDataSet: Equatable {
 		let positioned = intersections
 			.filter { $0.roadNames.contains(road.name) }
 			.compactMap { candidate -> (candidate: WatchIntersectionCandidate, progress: CLLocationDistance)? in
-				if let heading = context.headingDegrees {
-					let bearing = WatchGeo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
-					guard WatchIntersectionFinder().angleDelta(from: heading, to: bearing) <= WatchIntersectionFinder.upcomingConeDegrees else {
-						return nil
-					}
-				}
 				guard let distance = road.signedDistanceAlongRoad(
 					from: context.coordinate,
 					to: candidate.coordinate
@@ -1357,47 +1351,13 @@ struct WatchMapDataClient {
 	]
 	private let session: URLSession = .shared
 	private static let endpointHealth = WatchMapEndpointHealth()
-	private static let immediateCrossingTimeout: Duration = .milliseconds(650)
-	private static let crossingEnrichmentTimeout: Duration = .milliseconds(700)
 
 	func mapData(
 		near coordinate: CLLocationCoordinate2D,
 		radiusMeters: CLLocationDistance,
 		options: WatchMapDetailOptions
 	) async throws -> WatchMapDataSet {
-		guard options.includeCrossings else {
-			return try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: options)
-		}
-
-		var coreOptions = options
-		coreOptions.includeCrossings = false
-		let coreData = try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: coreOptions)
-		do {
-			return try await withThrowingTaskGroup(of: WatchMapDataSet.self) { group in
-				group.addTask {
-					try await fetchMapDataWithCrossingEnrichment(
-						near: coordinate,
-						radiusMeters: radiusMeters,
-						options: options,
-						coreData: coreData
-					)
-				}
-				group.addTask {
-					try await Task.sleep(for: Self.crossingEnrichmentTimeout)
-					throw URLError(.timedOut)
-				}
-
-				defer {
-					group.cancelAll()
-				}
-				guard let data = try await group.next() else {
-					throw WatchReportError.invalidResponse
-				}
-				return data
-			}
-		} catch {
-			return coreData
-		}
+		try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: options)
 	}
 
 	func immediateMapData(
@@ -1406,49 +1366,9 @@ struct WatchMapDataClient {
 		options: WatchMapDetailOptions
 	) async throws -> WatchMapDataSet {
 		var coreOptions = options
-		coreOptions.includeCrossings = false
 		coreOptions.includeWalkingPaths = false
 
-		guard options.includeCrossings else {
-			return try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: coreOptions)
-		}
-
-		var crossingOptions = options
-		crossingOptions.includeCrossings = true
-		crossingOptions.includeWalkingPaths = false
-		let crossingRadius = min(radiusMeters, 175)
-		let crossingTask = Task {
-			try await fetchCrossingResponse(near: coordinate, radiusMeters: crossingRadius)
-		}
-		let coreData = try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: coreOptions)
-
-		do {
-			let crossingResponse = try await withThrowingTaskGroup(of: WatchOverpassResponse.self) { group in
-				group.addTask {
-					try await crossingTask.value
-				}
-				group.addTask {
-					try await Task.sleep(for: Self.immediateCrossingTimeout)
-					throw URLError(.timedOut)
-				}
-
-				defer {
-					group.cancelAll()
-				}
-				guard let response = try await group.next() else {
-					throw WatchReportError.invalidResponse
-				}
-				return response
-			}
-			return WatchIntersectionBuilder().mapData(
-				from: crossingResponse,
-				options: crossingOptions,
-				coreData: coreData
-			)
-		} catch {
-			crossingTask.cancel()
-			return coreData
-		}
+		return try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: coreOptions)
 	}
 
 	private func fetchMapData(
@@ -1475,117 +1395,6 @@ struct WatchMapDataClient {
 			}
 		}
 		throw WatchReportError.invalidResponse
-	}
-
-	private func fetchMapDataWithCrossingEnrichment(
-		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance,
-		options: WatchMapDetailOptions,
-		coreData: WatchMapDataSet
-	) async throws -> WatchMapDataSet {
-		let endpoints = await Self.endpointHealth.orderedEndpoints(
-			primary: endpoint,
-			fallbacks: fallbackEndpoints
-		)
-		guard let endpoint = endpoints.first else {
-			throw WatchReportError.invalidResponse
-		}
-		let data = try await mapData(
-			from: endpoint,
-			near: coordinate,
-			radiusMeters: radiusMeters,
-			options: options,
-			coreData: coreData
-		)
-		await Self.endpointHealth.markSuccess(endpoint)
-		return data
-	}
-
-	private func fetchCrossingResponse(
-		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance
-	) async throws -> WatchOverpassResponse {
-		let endpoints = await Self.endpointHealth.orderedEndpoints(
-			primary: endpoint,
-			fallbacks: fallbackEndpoints
-		)
-		var lastError: Error?
-
-		for endpoint in endpoints {
-			do {
-				let response = try await crossingResponse(
-					from: endpoint,
-					near: coordinate,
-					radiusMeters: radiusMeters
-				)
-				await Self.endpointHealth.markSuccess(endpoint)
-				return response
-			} catch {
-				lastError = error
-				if isTemporary(error) {
-					await Self.endpointHealth.markTemporaryFailure(endpoint)
-				}
-				guard isTemporary(error), endpoint != endpoints.last else {
-					throw error
-				}
-			}
-		}
-
-		throw lastError ?? WatchReportError.invalidResponse
-	}
-
-	private func crossingResponse(
-		from endpoint: URL,
-		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance
-	) async throws -> WatchOverpassResponse {
-		var request = URLRequest(url: endpoint)
-		request.httpMethod = "POST"
-		request.timeoutInterval = 1.0
-		request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
-		request.httpBody = crossingQuery(near: coordinate, radiusMeters: radiusMeters).data(using: .utf8)
-
-		let (data, urlResponse) = try await session.data(for: request)
-		guard let httpResponse = urlResponse as? HTTPURLResponse else {
-			throw WatchReportError.invalidResponse
-		}
-		guard (200..<300).contains(httpResponse.statusCode) else {
-			throw WatchReportError.serverError(httpResponse.statusCode)
-		}
-		do {
-			return try JSONDecoder().decode(WatchOverpassResponse.self, from: data)
-		} catch {
-			throw WatchReportError.invalidMapData
-		}
-	}
-
-	private func mapData(
-		from endpoint: URL,
-		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance,
-		options: WatchMapDetailOptions,
-		coreData: WatchMapDataSet
-	) async throws -> WatchMapDataSet {
-		let crossingRadius = min(radiusMeters, 225)
-		var request = URLRequest(url: endpoint)
-		request.httpMethod = "POST"
-		request.timeoutInterval = 1.2
-		request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
-		request.httpBody = crossingQuery(near: coordinate, radiusMeters: crossingRadius).data(using: .utf8)
-
-		let (data, urlResponse) = try await session.data(for: request)
-		guard let httpResponse = urlResponse as? HTTPURLResponse else {
-			throw WatchReportError.invalidResponse
-		}
-		guard (200..<300).contains(httpResponse.statusCode) else {
-			throw WatchReportError.serverError(httpResponse.statusCode)
-		}
-		do {
-			let response = try JSONDecoder().decode(WatchOverpassResponse.self, from: data)
-			return WatchIntersectionBuilder().mapData(from: response, options: options, coreData: coreData)
-		} catch {
-			throw WatchReportError.invalidMapData
-		}
 	}
 
 	private func mapData(
@@ -1649,28 +1458,18 @@ struct WatchMapDataClient {
 			highwayTypes += ["footway", "path", "steps", "bridleway"]
 		}
 		let highwayPattern = highwayTypes.joined(separator: "|")
+		let crossingRadius = Int(min(radiusMeters, 225).rounded())
+		let crossingQueries = options.includeCrossings ? """
+		  node(around:\(crossingRadius),\(coordinate.latitude),\(coordinate.longitude))["highway"="crossing"];
+		  node(around:\(crossingRadius),\(coordinate.latitude),\(coordinate.longitude))["crossing"];
+		""" : ""
 		let body = """
 		[out:json][timeout:5];
 		(
 		  way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"~"^(\(highwayPattern))$"]["name"];
+		\(crossingQueries)
 		);
 		(._;>;);
-		out body;
-		"""
-		return encodedBody(body)
-	}
-
-	private func crossingQuery(
-		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance
-	) -> String {
-		let radius = Int(radiusMeters.rounded())
-		let body = """
-		[out:json][timeout:1];
-		(
-		  node(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"="crossing"];
-		  node(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["crossing"];
-		);
 		out body;
 		"""
 		return encodedBody(body)
@@ -1797,9 +1596,12 @@ struct WatchIntersectionBuilder {
 					element.type == "node",
 					isCrossing(element.tags),
 					let coordinate = nodes[element.id],
-					let roadNames = namesByNode[element.id]?.sorted(),
-					roadNames.count == 1,
-					let roadName = roadNames.first
+					let road = crossingRoad(
+						for: element.id,
+						at: coordinate,
+						namesByNode: namesByNode,
+						roads: roads
+					)
 				else {
 					return nil
 				}
@@ -1809,19 +1611,17 @@ struct WatchIntersectionBuilder {
 				guard !duplicatesStreetIntersection else {
 					return nil
 				}
-				guard let anchor = nearestIntersection(
+				let anchor = nearestIntersection(
 					to: coordinate,
-					on: roadName,
+					on: road.name,
 					in: streetIntersections
-				) else {
-					return nil
-				}
-				let anchorName = anchor.contextLabel(on: roadName)
+				)
+				let title = crossingTitle(on: road.name, near: anchor)
 				let candidate = WatchIntersectionCandidate(
 					id: "crossing-\(element.id)",
-					names: ["Crossing on \(roadName) near \(anchorName)"],
+					names: [title],
 					coordinate: coordinate,
-					associatedRoadNames: [roadName],
+					associatedRoadNames: [road.name],
 					intersectionDetails: intersectionDetails(from: element.tags)
 				)
 				return candidate
@@ -1857,17 +1657,15 @@ struct WatchIntersectionBuilder {
 			guard !duplicatesStreetIntersection else {
 				return nil
 			}
-			guard let anchor = nearestIntersection(
+			let anchor = nearestIntersection(
 				to: coordinate,
 				on: road.name,
 				in: streetIntersections
-			) else {
-				return nil
-			}
-			let anchorName = anchor.contextLabel(on: road.name)
+			)
+			let title = crossingTitle(on: road.name, near: anchor)
 			return WatchIntersectionCandidate(
 				id: "crossing-\(element.id)",
-				names: ["Crossing on \(road.name) near \(anchorName)"],
+				names: [title],
 				coordinate: coordinate,
 				associatedRoadNames: [road.name],
 				intersectionDetails: intersectionDetails(from: element.tags)
@@ -1877,6 +1675,35 @@ struct WatchIntersectionBuilder {
 		let existingIDs = Set(intersections.map(\.id))
 		intersections.append(contentsOf: crossingCandidates.filter { !existingIDs.contains($0.id) })
 		return WatchMapDataSet(intersections: intersections, roads: coreData.roads)
+	}
+
+	private func crossingRoad(
+		for nodeID: Int64,
+		at coordinate: CLLocationCoordinate2D,
+		namesByNode: [Int64: Set<String>],
+		roads: [WatchMapRoad]
+	) -> WatchMapRoad? {
+		if
+			let roadNames = namesByNode[nodeID]?.sorted(),
+			roadNames.count == 1,
+			let roadName = roadNames.first,
+			let road = roads.first(where: { $0.name == roadName })
+		{
+			return road
+		}
+		return roads
+			.filter { $0.contains(coordinate) }
+			.min { $0.minimumDistance(to: coordinate) < $1.minimumDistance(to: coordinate) }
+	}
+
+	private func crossingTitle(
+		on roadName: String,
+		near anchor: WatchIntersectionCandidate?
+	) -> String {
+		guard let anchor else {
+			return "Crossing on \(roadName)"
+		}
+		return "Crossing on \(roadName) near \(anchor.contextLabel(on: roadName))"
 	}
 
 	private func nearestIntersection(
@@ -1939,7 +1766,7 @@ struct WatchIntersectionBuilder {
 }
 
 struct WatchIntersectionFinder {
-	static let upcomingConeDegrees: CLLocationDirection = 35
+	static let upcomingConeDegrees: CLLocationDirection = 20
 
 	func bestMatch(
 		for kind: WatchReportKind,
