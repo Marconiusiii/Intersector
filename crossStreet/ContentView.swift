@@ -495,6 +495,7 @@ struct ContentView: View {
 	@Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 	@Environment(\.openURL) private var openURL
 	@Environment(\.scenePhase) private var scenePhase
+	@ScaledMetric(relativeTo: .body) private var statusMinHeight: CGFloat = 112
 	@ScaledMetric(relativeTo: .title2) private var actionMinHeight: CGFloat = 76
 	@State private var statusText = "Choose an action."
 	@State private var isLoading = false
@@ -711,7 +712,7 @@ struct ContentView: View {
 				}
 			}
 		}
-		.frame(maxWidth: .infinity, minHeight: 60, alignment: usesCenteredStatusLayout ? .center : .leading)
+		.frame(maxWidth: .infinity, minHeight: statusMinHeight, alignment: usesCenteredStatusLayout ? .center : .topLeading)
 		.background(Color.crossPanel)
 		.contentShape(Rectangle())
 	}
@@ -722,7 +723,7 @@ struct ContentView: View {
 	) -> some View {
 		HStack(alignment: .center, spacing: 8) {
 			Text("Current Info")
-				.font(.headline)
+				.font(.title2)
 				.fontWeight(.semibold)
 				.foregroundStyle(.white)
 				.lineLimit(1)
