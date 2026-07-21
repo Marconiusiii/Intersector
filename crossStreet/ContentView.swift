@@ -864,8 +864,8 @@ struct ContentView: View {
 				.frame(width: 48, alignment: .center)
 		}
 		.background(Color.crossBtn)
-		.overlay(Rectangle().stroke(Color.crossButtonBorder, lineWidth: 1))
-		.shadow(color: Color.black.opacity(0.12), radius: 2, x: 0, y: 1)
+		.overlay(Rectangle().stroke(Color.crossButtonStrongBorder, lineWidth: 2))
+		.shadow(color: Color.black.opacity(0.18), radius: 2, x: 0, y: 1)
 		.contentShape(Rectangle())
 	}
 
@@ -1750,9 +1750,9 @@ private struct IntersectorActionButtonStyle: ButtonStyle {
 		configuration.label
 			.foregroundStyle(Color.crossButtonText)
 			.background(drawsChrome ? Color.crossBtn : Color.clear)
-			.overlay(Rectangle().stroke(drawsChrome ? Color.crossButtonBorder : Color.clear, lineWidth: 1))
+			.overlay(Rectangle().stroke(drawsChrome ? Color.crossButtonStrongBorder : Color.clear, lineWidth: 2))
 			.shadow(
-				color: drawsChrome ? Color.black.opacity(configuration.isPressed ? 0.06 : 0.12) : Color.clear,
+				color: drawsChrome ? Color.black.opacity(configuration.isPressed ? 0.08 : 0.18) : Color.clear,
 				radius: 2,
 				x: 0,
 				y: 1
