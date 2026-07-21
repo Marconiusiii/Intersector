@@ -47,9 +47,7 @@ struct AppPrefs {
 			areaMode: AreaMode(rawValue: defaults.string(forKey: "areaMode") ?? "") ?? .near,
 			measurementUnit: MeasurementUnit(rawValue: defaults.string(forKey: "measurementUnit") ?? "") ?? .feet,
 			directionStyle: DirectionStyle(rawValue: defaults.string(forKey: "directionStyle") ?? "") ?? .words,
-			intersectionWording: IntersectionWording(
-				rawValue: defaults.string(forKey: "intersectionWording") ?? ""
-			) ?? .direct,
+			intersectionWording: .direct,
 			spokenIntersectionCount: SpokenIntersectionCount(
 				rawValue: defaults.integer(forKey: "spokenIntersectionCount")
 			) ?? .one,
@@ -212,15 +210,6 @@ enum IntersectionWording: String, CaseIterable, Identifiable {
 	case streetContext
 
 	var id: String { rawValue }
-
-	var label: String {
-		switch self {
-		case .direct:
-			"Direct"
-		case .streetContext:
-			"Street Context"
-		}
-	}
 }
 
 enum SpokenIntersectionCount: Int, CaseIterable, Identifiable {

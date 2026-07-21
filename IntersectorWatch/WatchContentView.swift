@@ -56,7 +56,6 @@ private final class WatchSettingsReceiver: NSObject, WCSessionDelegate {
 		setString("areaMode", from: settings, in: defaults)
 		setString("measurementUnit", from: settings, in: defaults)
 		setString("directionStyle", from: settings, in: defaults)
-		setString("intersectionWording", from: settings, in: defaults)
 		setInt("spokenIntersectionCount", from: settings, in: defaults)
 		setBool("includeAnnouncementDistance", from: settings, in: defaults)
 		setBool("includeAnnouncementDirection", from: settings, in: defaults)
@@ -93,7 +92,6 @@ struct WatchContentView: View {
 	@AppStorage("areaMode") private var areaModeRaw = WatchAreaMode.near.rawValue
 	@AppStorage("measurementUnit") private var measurementUnitRaw = WatchMeasurementUnit.feet.rawValue
 	@AppStorage("directionStyle") private var directionStyleRaw = WatchDirectionStyle.words.rawValue
-	@AppStorage("intersectionWording") private var intersectionWordingRaw = WatchIntersectionWording.direct.rawValue
 	@AppStorage("spokenIntersectionCount") private var spokenIntersectionCountRaw = WatchSpokenIntersectionCount.one.rawValue
 	@AppStorage("includeAnnouncementDistance") private var includeAnnouncementDistance = true
 	@AppStorage("includeAnnouncementDirection") private var includeAnnouncementDirection = true
@@ -113,7 +111,7 @@ struct WatchContentView: View {
 			areaMode: WatchAreaMode(rawValue: areaModeRaw) ?? .near,
 			measurementUnit: WatchMeasurementUnit(rawValue: measurementUnitRaw) ?? .feet,
 			directionStyle: WatchDirectionStyle(rawValue: directionStyleRaw) ?? .words,
-			intersectionWording: WatchIntersectionWording(rawValue: intersectionWordingRaw) ?? .direct,
+			intersectionWording: .direct,
 			spokenIntersectionCount: WatchSpokenIntersectionCount(rawValue: spokenIntersectionCountRaw) ?? .one,
 			announcementOptions: WatchAnnouncementOptions(
 				includeDistance: includeAnnouncementDistance,

@@ -21,7 +21,6 @@ private enum SettingsFocusTarget: Hashable {
 	case announcementDirection
 	case announcementNeighborhood
 	case intersectionDetails
-	case intersectionWording
 	case spokenIntersections
 	case rankedControls
 	case manhattanSnobMode
@@ -384,7 +383,6 @@ private struct WatchSettingsPayload {
 	let areaMode: String
 	let measurementUnit: String
 	let directionStyle: String
-	let intersectionWording: String
 	let spokenIntersectionCount: Int
 	let includeAnnouncementDistance: Bool
 	let includeAnnouncementDirection: Bool
@@ -399,7 +397,6 @@ private struct WatchSettingsPayload {
 			areaMode,
 			measurementUnit,
 			directionStyle,
-			intersectionWording,
 			String(spokenIntersectionCount),
 			String(includeAnnouncementDistance),
 			String(includeAnnouncementDirection),
@@ -416,7 +413,6 @@ private struct WatchSettingsPayload {
 			"areaMode": areaMode,
 			"measurementUnit": measurementUnit,
 			"directionStyle": directionStyle,
-			"intersectionWording": intersectionWording,
 			"spokenIntersectionCount": spokenIntersectionCount,
 			"includeAnnouncementDistance": includeAnnouncementDistance,
 			"includeAnnouncementDirection": includeAnnouncementDirection,
@@ -479,7 +475,6 @@ struct ContentView: View {
 	@AppStorage("areaMode") private var areaModeRaw = AreaMode.near.rawValue
 	@AppStorage("measurementUnit") private var measurementUnitRaw = MeasurementUnit.feet.rawValue
 	@AppStorage("directionStyle") private var directionStyleRaw = DirectionStyle.words.rawValue
-	@AppStorage("intersectionWording") private var intersectionWordingRaw = IntersectionWording.direct.rawValue
 	@AppStorage("spokenIntersectionCount") private var spokenIntersectionCountRaw = SpokenIntersectionCount.one.rawValue
 	@AppStorage("includeAnnouncementDistance") private var includeAnnouncementDistance = true
 	@AppStorage("includeAnnouncementDirection") private var includeAnnouncementDirection = true
@@ -518,7 +513,7 @@ struct ContentView: View {
 			areaMode: AreaMode(rawValue: areaModeRaw) ?? .near,
 			measurementUnit: MeasurementUnit(rawValue: measurementUnitRaw) ?? .feet,
 			directionStyle: DirectionStyle(rawValue: directionStyleRaw) ?? .words,
-			intersectionWording: IntersectionWording(rawValue: intersectionWordingRaw) ?? .direct,
+			intersectionWording: .direct,
 			spokenIntersectionCount: SpokenIntersectionCount(rawValue: spokenIntersectionCountRaw) ?? .one,
 			announcementOptions: AnnouncementOptions(
 				includeDistance: includeAnnouncementDistance,
@@ -540,7 +535,6 @@ struct ContentView: View {
 			areaMode: areaModeRaw,
 			measurementUnit: measurementUnitRaw,
 			directionStyle: directionStyleRaw,
-			intersectionWording: intersectionWordingRaw,
 			spokenIntersectionCount: spokenIntersectionCountRaw,
 			includeAnnouncementDistance: includeAnnouncementDistance,
 			includeAnnouncementDirection: includeAnnouncementDirection,
@@ -948,24 +942,6 @@ struct ContentView: View {
 		}
 	}
 
-	private var streetContextBinding: Binding<Bool> {
-		Binding {
-			prefs.intersectionWording == .streetContext
-		} set: { isEnabled in
-			intersectionWordingRaw = (isEnabled ? IntersectionWording.streetContext : .direct).rawValue
-			settingsFocusTarget = .intersectionWording
-		}
-	}
-
-	private var intersectionWordingDescription: String {
-		switch prefs.intersectionWording {
-		case .direct:
-			"Speaks the intersection as street names."
-		case .streetContext:
-			"Speaks the current street first, then the cross street."
-		}
-	}
-
 	private var announcementDistanceBinding: Binding<Bool> {
 		Binding {
 			includeAnnouncementDistance
@@ -1263,11 +1239,6 @@ struct ContentView: View {
 				}
 			}
 			settingsControlRow {
-				Toggle("Street Context", isOn: streetContextBinding)
-					.accessibilityFocused($settingsFocusTarget, equals: .intersectionWording)
-			}
-			settingsHelperText(intersectionWordingDescription)
-			settingsControlRow {
 				Toggle("Intersection Details", isOn: intersectionDetailsBinding)
 					.accessibilityFocused($settingsFocusTarget, equals: .intersectionDetails)
 			}
@@ -1404,7 +1375,7 @@ struct ContentView: View {
 
 					helpSection(
 						title: "Nearest Intersection",
-						body: "Use Nearest Intersection to find the intersection closest to your current location. If Street Context is on, Intersector tries to say the street you are on first, followed by the cross street."
+						body: "Use Nearest Intersection to find the intersection closest to your current location."
 					)
 
 					helpSection(

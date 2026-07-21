@@ -73,9 +73,7 @@ struct WatchAppPrefs: Equatable, Hashable {
 			areaMode: WatchAreaMode(rawValue: defaults.string(forKey: "areaMode") ?? "") ?? .near,
 			measurementUnit: WatchMeasurementUnit(rawValue: defaults.string(forKey: "measurementUnit") ?? "") ?? .feet,
 			directionStyle: WatchDirectionStyle(rawValue: defaults.string(forKey: "directionStyle") ?? "") ?? .words,
-			intersectionWording: WatchIntersectionWording(
-				rawValue: defaults.string(forKey: "intersectionWording") ?? ""
-			) ?? .direct,
+			intersectionWording: .direct,
 			spokenIntersectionCount: WatchSpokenIntersectionCount(
 				rawValue: defaults.integer(forKey: "spokenIntersectionCount")
 			) ?? .one,
@@ -208,15 +206,6 @@ enum WatchIntersectionWording: String, CaseIterable, Identifiable {
 	case streetContext
 
 	var id: String { rawValue }
-
-	var label: String {
-		switch self {
-		case .direct:
-			"Direct"
-		case .streetContext:
-			"Street Context"
-		}
-	}
 }
 
 enum WatchSpokenIntersectionCount: Int, CaseIterable, Identifiable {
