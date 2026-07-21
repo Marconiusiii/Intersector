@@ -1005,7 +1005,9 @@ struct ContentView: View {
 	private var announcementSampleText: String {
 		let report = OrientReport(
 			kind: .nearest,
-			cross: "Crossing on Amsterdam Avenue near West 94th Street",
+			cross: includeCrossings
+				? "Crossing on Amsterdam Avenue near West 94th Street"
+				: "Amsterdam Avenue and West 94th Street",
 			dist: "120 feet",
 			relDir: "ahead",
 			relDegrees: 0,
@@ -1705,14 +1707,18 @@ struct ContentView: View {
 				VoiceOverAnnouncer.reportUpdated(text)
 				return
 			}
-			Task {
-				_ = await OrientSvc.shared.prewarmInitialNearestMapData(prefs: prefs)
-			}
+			let hasMapData = await OrientSvc.shared.prewarmInitialNearestMapData(prefs: prefs)
 			guard !Task.isCancelled else {
 				return
 			}
 			LoadingThrobber.stop()
 			isStartupLoading = false
+			guard hasMapData else {
+				let text = "Intersector is having trouble loading map data. Please try again."
+				statusText = text
+				VoiceOverAnnouncer.reportUpdated(text)
+				return
+			}
 			ReadyEarcon.play(hapticsEnabled: prefs.haptics)
 			statusText = readyText
 			Task { @MainActor in

@@ -1364,8 +1364,7 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 struct WatchMapDataClient {
 	private let endpoint = URL(string: "https://overpass-api.de/api/interpreter")!
 	private let fallbackEndpoints = [
-		URL(string: "https://overpass.kumi.systems/api/interpreter")!,
-		URL(string: "https://overpass.osm.ch/api/interpreter")!
+		URL(string: "https://overpass.kumi.systems/api/interpreter")!
 	]
 	private let session: URLSession = .shared
 	private static let endpointHealth = WatchMapEndpointHealth()
@@ -1422,7 +1421,7 @@ struct WatchMapDataClient {
 		coreOptions.includeWalkingPaths = false
 
 		guard options.includeCrossings else {
-			return try await fetchImmediateCoreMapData(near: coordinate, radiusMeters: radiusMeters, options: coreOptions)
+			return try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: coreOptions)
 		}
 
 		var crossingOptions = options
@@ -1432,7 +1431,7 @@ struct WatchMapDataClient {
 		let crossingTask = Task {
 			try await fetchCrossingResponse(near: coordinate, radiusMeters: crossingRadius)
 		}
-		let coreData = try await fetchImmediateCoreMapData(near: coordinate, radiusMeters: radiusMeters, options: coreOptions)
+		let coreData = try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: coreOptions)
 
 		do {
 			let crossingResponse = try await withThrowingTaskGroup(of: WatchOverpassResponse.self) { group in
@@ -1487,67 +1486,6 @@ struct WatchMapDataClient {
 			}
 		}
 		throw WatchReportError.invalidResponse
-	}
-
-	private func fetchImmediateCoreMapData(
-		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance,
-		options: WatchMapDetailOptions
-	) async throws -> WatchMapDataSet {
-		let endpoints = await Self.endpointHealth.orderedEndpoints(
-			primary: endpoint,
-			fallbacks: fallbackEndpoints
-		)
-		guard !endpoints.isEmpty else {
-			throw WatchReportError.invalidResponse
-		}
-
-		let result: WatchImmediateMapFetchResult = await withTaskGroup(of: WatchImmediateMapFetchResult.self) { group in
-			for (index, endpoint) in endpoints.enumerated() {
-				group.addTask {
-					if index > 0 {
-						try? await Task.sleep(for: .milliseconds(450 * index))
-					}
-					do {
-						let data = try await mapData(
-							from: endpoint,
-							near: coordinate,
-							radiusMeters: radiusMeters,
-							options: options
-						)
-						return .success(endpoint, data)
-					} catch {
-						return .failure(endpoint, error)
-					}
-				}
-			}
-
-			defer {
-				group.cancelAll()
-			}
-			var lastError: Error?
-			while let result = await group.next() {
-				switch result {
-				case .success(let endpoint, let data):
-					await Self.endpointHealth.markSuccess(endpoint)
-					return WatchImmediateMapFetchResult.success(endpoint, data)
-				case .failure(let endpoint, let error):
-					lastError = error
-					if isTemporary(error) {
-						await Self.endpointHealth.markTemporaryFailure(endpoint)
-					}
-				}
-			}
-
-			return WatchImmediateMapFetchResult.failure(endpoints[0], lastError ?? WatchReportError.invalidResponse)
-		}
-
-		switch result {
-		case .success(_, let data):
-			return data
-		case .failure(_, let error):
-			throw error
-		}
 	}
 
 	private func fetchMapDataWithCrossingEnrichment(
@@ -2488,11 +2426,6 @@ enum WatchGeo {
 		let kilometers = meters / 1_000
 		return String(format: "%.1f kilometers", kilometers)
 	}
-}
-
-private enum WatchImmediateMapFetchResult {
-	case success(URL, WatchMapDataSet)
-	case failure(URL, Error)
 }
 
 actor WatchMapEndpointHealth {
