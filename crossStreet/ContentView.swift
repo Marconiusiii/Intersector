@@ -706,8 +706,9 @@ struct ContentView: View {
 			} else {
 				HStack(alignment: .top, spacing: 0) {
 					currentInfoHeading(alignment: .leading, isCentered: false)
-						.frame(width: 168, alignment: .leading)
-					currentInfoBody(alignment: .trailing, textAlignment: .trailing)
+						.layoutPriority(1)
+					currentInfoBody(alignment: .leading, textAlignment: .leading)
+						.layoutPriority(2)
 				}
 			}
 		}
@@ -727,14 +728,11 @@ struct ContentView: View {
 				.lineLimit(nil)
 				.fixedSize(horizontal: false, vertical: true)
 				.accessibilityAddTraits(.isHeader)
-			if !isCentered {
-				Spacer(minLength: 8)
-			}
 			statusActivityIndicator
 		}
 		.padding(.horizontal, 16)
 		.padding(.vertical, 6)
-		.frame(maxWidth: .infinity, minHeight: 56, alignment: alignment)
+		.frame(maxWidth: isCentered ? .infinity : nil, minHeight: 56, alignment: alignment)
 		.contentShape(Rectangle())
 	}
 
@@ -1097,7 +1095,8 @@ struct ContentView: View {
 			}
 			.background(Color.crossBg)
 			.tint(Color.crossAccent)
-			.navigationTitle("Settings")
+			.navigationTitle("")
+			.navigationBarTitleDisplayMode(.inline)
 			.toolbar {
 				ToolbarItem(placement: .confirmationAction) {
 					Button("Done") {
@@ -1132,17 +1131,43 @@ struct ContentView: View {
 
 	private var settingsIntroSection: some View {
 		Group {
-			settingsControlRow {
-				Button {
-					isShowingHelp = true
-				} label: {
-					settingsButtonLabel("Help")
-				}
-				.buttonStyle(.plain)
-				.accessibilityHint("Opens instructions for using Intersector.")
-			}
+			settingsTitleRow
 			settingsHelperText("Intersection directions and distances are estimates based on your location, device heading, and available map data. Accuracy can vary with GPS and compass conditions.")
 		}
+	}
+
+	private var settingsTitleRow: some View {
+		HStack(alignment: .center, spacing: 12) {
+			Text("Settings")
+				.font(.largeTitle)
+				.fontWeight(.bold)
+				.foregroundStyle(Color.crossText)
+				.lineLimit(nil)
+				.fixedSize(horizontal: false, vertical: true)
+				.frame(maxWidth: .infinity, alignment: .leading)
+				.accessibilityAddTraits(.isHeader)
+			Button {
+				isShowingHelp = true
+			} label: {
+				Text("Help")
+					.font(.body)
+					.fontWeight(.semibold)
+					.foregroundStyle(Color.crossAccent)
+					.lineLimit(1)
+					.minimumScaleFactor(0.75)
+					.padding(.horizontal, 14)
+					.padding(.vertical, 6)
+					.frame(minWidth: 72, minHeight: 52, alignment: .center)
+					.contentShape(Rectangle())
+			}
+			.buttonStyle(.plain)
+			.accessibilityHint("Opens instructions for using Intersector.")
+		}
+		.padding(.horizontal, 16)
+		.padding(.vertical, 8)
+		.frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
+		.background(Color.crossSettingsHeader)
+		.contentShape(Rectangle())
 	}
 
 	private var settingsDisplaySection: some View {
