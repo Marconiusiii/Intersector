@@ -11,7 +11,8 @@ import Foundation
 struct MapDataClient: MapDataFetching {
 	var endpoint = URL(string: "https://overpass-api.de/api/interpreter")!
 	var fallbackEndpoints = [
-		URL(string: "https://overpass.kumi.systems/api/interpreter")!
+		URL(string: "https://overpass.kumi.systems/api/interpreter")!,
+		URL(string: "https://overpass.osm.ch/api/interpreter")!
 	]
 	var session: URLSession = .shared
 	private static let cache = MapDataCache()
@@ -97,7 +98,11 @@ struct MapDataClient: MapDataFetching {
 				radiusMeters: radiusMeters,
 				options: immediateCoreOptions
 			) {
-				try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: immediateCoreOptions)
+				try await fetchImmediateCoreMapData(
+					near: coordinate,
+					radiusMeters: radiusMeters,
+					options: immediateCoreOptions
+				)
 			}
 		}
 
@@ -113,7 +118,11 @@ struct MapDataClient: MapDataFetching {
 			radiusMeters: radiusMeters,
 			options: immediateCoreOptions
 		) {
-			try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: immediateCoreOptions)
+			try await fetchImmediateCoreMapData(
+				near: coordinate,
+				radiusMeters: radiusMeters,
+				options: immediateCoreOptions
+			)
 		}
 
 		do {
@@ -302,6 +311,67 @@ struct MapDataClient: MapDataFetching {
 		throw lastError ?? MapDataError.invalidResponse
 	}
 
+	private func fetchImmediateCoreMapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> MapDataSet {
+		let endpoints = await Self.endpointHealth.orderedEndpoints(
+			primary: endpoint,
+			fallbacks: fallbackEndpoints
+		)
+		guard !endpoints.isEmpty else {
+			throw MapDataError.invalidResponse
+		}
+
+		let result: ImmediateMapFetchResult = await withTaskGroup(of: ImmediateMapFetchResult.self) { group in
+			for (index, endpoint) in endpoints.enumerated() {
+				group.addTask {
+					if index > 0 {
+						try? await Task.sleep(for: .milliseconds(450 * index))
+					}
+					do {
+						let data = try await fetchMapData(
+							from: endpoint,
+							near: coordinate,
+							radiusMeters: radiusMeters,
+							options: options
+						)
+						return .success(endpoint, data)
+					} catch {
+						return .failure(endpoint, error)
+					}
+				}
+			}
+
+			defer {
+				group.cancelAll()
+			}
+			var lastError: Error?
+			while let result = await group.next() {
+				switch result {
+				case .success(let endpoint, let data):
+					await Self.endpointHealth.markSuccess(endpoint)
+					return ImmediateMapFetchResult.success(endpoint, data)
+				case .failure(let endpoint, let error):
+					lastError = error
+					if isTemporary(error) {
+						await Self.endpointHealth.markTemporaryFailure(endpoint)
+					}
+				}
+			}
+
+			return ImmediateMapFetchResult.failure(endpoints[0], lastError ?? MapDataError.invalidResponse)
+		}
+
+		switch result {
+		case .success(_, let data):
+			return data
+		case .failure(_, let error):
+			throw error
+		}
+	}
+
 	private func fetchMapData(
 		from endpoint: URL,
 		near coordinate: CLLocationCoordinate2D,
@@ -416,6 +486,11 @@ struct MapDataClient: MapDataFetching {
 		let encoded = body.addingPercentEncoding(withAllowedCharacters: allowed) ?? body
 		return "data=\(encoded)"
 	}
+}
+
+private enum ImmediateMapFetchResult {
+	case success(URL, MapDataSet)
+	case failure(URL, Error)
 }
 
 actor MapEndpointHealth {

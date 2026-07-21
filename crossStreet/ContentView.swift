@@ -1705,18 +1705,14 @@ struct ContentView: View {
 				VoiceOverAnnouncer.reportUpdated(text)
 				return
 			}
-			let hasMapData = await OrientSvc.shared.prewarmInitialNearestMapData(prefs: prefs)
+			Task {
+				_ = await OrientSvc.shared.prewarmInitialNearestMapData(prefs: prefs)
+			}
 			guard !Task.isCancelled else {
 				return
 			}
 			LoadingThrobber.stop()
 			isStartupLoading = false
-			guard hasMapData else {
-				let text = "Intersector is having trouble loading map data. Please try again."
-				statusText = text
-				VoiceOverAnnouncer.reportUpdated(text)
-				return
-			}
 			ReadyEarcon.play(hapticsEnabled: prefs.haptics)
 			statusText = readyText
 			Task { @MainActor in

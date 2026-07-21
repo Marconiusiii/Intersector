@@ -1479,6 +1479,28 @@ struct IntersectorTests {
 		#expect(await mapClient.fullOptions.isEmpty)
 	}
 
+	@Test func firstNearestUsesImmediateCoreLookupWhenCrossingsAreOff() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapClient = ImmediateRecordingMapDataClient(
+			fullData: rankedStreetData(origin: origin),
+			immediateData: rankedStreetData(origin: origin)
+		)
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(context: DeviceContext(coordinate: origin, headingDegrees: 0)),
+			mapDataClient: mapClient,
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.mapDetails = MapDetailOptions()
+
+		let report = try await service.report(.nearest, prefs: prefs)
+
+		#expect(report.cross == "Oak Street and First Street")
+		#expect(await mapClient.immediateOptions == [MapDetailOptions()])
+		#expect(await mapClient.fullOptions.isEmpty)
+	}
+
 	@Test func firstUpcomingCanReturnImmediateCrossingWhenCrossingsEnabled() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let mapClient = ImmediateRecordingMapDataClient(
@@ -1498,6 +1520,28 @@ struct IntersectorTests {
 
 		#expect(report.cross == "Crossing on Oak Street near Pine Street")
 		#expect(await mapClient.immediateOptions == [MapDetailOptions(includeCrossings: true)])
+		#expect(await mapClient.fullOptions.isEmpty)
+	}
+
+	@Test func firstUpcomingUsesImmediateCoreLookupWhenCrossingsAreOff() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapClient = ImmediateRecordingMapDataClient(
+			fullData: rankedStreetData(origin: origin),
+			immediateData: rankedStreetData(origin: origin)
+		)
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(context: DeviceContext(coordinate: origin, headingDegrees: 0)),
+			mapDataClient: mapClient,
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.mapDetails = MapDetailOptions()
+
+		let report = try await service.report(.upcoming, prefs: prefs)
+
+		#expect(report.cross == "Oak Street and First Street")
+		#expect(await mapClient.immediateOptions == [MapDetailOptions()])
 		#expect(await mapClient.fullOptions.isEmpty)
 	}
 
@@ -2070,7 +2114,7 @@ struct IntersectorTests {
 		])
 	}
 
-	@Test func firstNearestWithOptionalMapDetailsUsesCoreLookup() async throws {
+	@Test func firstNearestWithOptionalMapDetailsKeepsCrossingsOnImmediateLookup() async throws {
 		let mapClient = AdaptiveMapDataClient()
 		var prefs = AppPrefs()
 		prefs.areaMode = .off
@@ -2092,8 +2136,8 @@ struct IntersectorTests {
 
 		#expect(await mapClient.requestedRadii == [225, 225])
 		#expect(await mapClient.requestedOptions == [
-			MapDetailOptions(),
-			MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
+			MapDetailOptions(includeCrossings: true),
+			MapDetailOptions(includeCrossings: true)
 		])
 	}
 
