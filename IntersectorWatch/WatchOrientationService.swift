@@ -1595,6 +1595,7 @@ struct WatchIntersectionBuilder {
 				guard
 					element.type == "node",
 					isCrossing(element.tags),
+					!isRoadJunctionCrossing(element.id, namesByNode: namesByNode),
 					let coordinate = nodes[element.id],
 					let road = crossingRoad(
 						for: element.id,
@@ -1675,6 +1676,13 @@ struct WatchIntersectionBuilder {
 		let existingIDs = Set(intersections.map(\.id))
 		intersections.append(contentsOf: crossingCandidates.filter { !existingIDs.contains($0.id) })
 		return WatchMapDataSet(intersections: intersections, roads: coreData.roads)
+	}
+
+	private func isRoadJunctionCrossing(
+		_ nodeID: Int64,
+		namesByNode: [Int64: Set<String>]
+	) -> Bool {
+		(namesByNode[nodeID]?.count ?? 0) >= 2
 	}
 
 	private func crossingRoad(

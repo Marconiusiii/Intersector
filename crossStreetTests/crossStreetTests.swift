@@ -1916,6 +1916,24 @@ struct IntersectorTests {
 		])
 	}
 
+	@Test func intersectionBuilderSuppressesCrossingAtStreetIntersectionNode() async throws {
+		let response = OverpassResponse(
+			elements: [
+				OverpassElement(type: "node", id: 1, lat: 37.0, lon: -122.0, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 2, lat: 37.001, lon: -122.0, nodes: nil, tags: ["highway": "crossing"]),
+				OverpassElement(type: "node", id: 3, lat: 37.002, lon: -122.0, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 4, lat: 37.001, lon: -122.001, nodes: nil, tags: nil),
+				OverpassElement(type: "way", id: 10, lat: nil, lon: nil, nodes: [1, 2, 3], tags: ["highway": "residential", "name": "Oak Street"]),
+				OverpassElement(type: "way", id: 11, lat: nil, lon: nil, nodes: [4, 2], tags: ["highway": "residential", "name": "Pine Street"])
+			]
+		)
+		let options = MapDetailOptions(includeCrossings: true)
+
+		let data = IntersectionBuilder().mapData(from: response, options: options)
+
+		#expect(data.intersections.map(\.title) == ["Oak Street and Pine Street"])
+	}
+
 	@Test func intersectionBuilderAddsCrossingsFromOptionalEnrichmentResponse() async throws {
 		let coreResponse = OverpassResponse(
 			elements: [
