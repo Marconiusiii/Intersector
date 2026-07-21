@@ -457,19 +457,14 @@ struct WatchOrientationService {
 		let radii: [CLLocationDistance] = [225, 375, 750, 1_200]
 		var latestData = WatchMapDataSet(intersections: [], roads: [])
 		for radius in radii {
-			if minimumCandidateCount == 1 {
-				latestData = try await mapClient.immediateMapData(
-					near: context.coordinate,
-					radiusMeters: radius,
-					options: prefs.mapDetails
-				)
-			} else {
-				latestData = try await mapClient.mapData(
-					near: context.coordinate,
-					radiusMeters: radius,
-					options: prefs.mapDetails
-				)
-			}
+			latestData = try await mapData(
+				for: kind,
+				from: context,
+				radius: radius,
+				minimumCandidateCount: minimumCandidateCount,
+				prefs: prefs,
+				previousData: latestData
+			)
 			if hasEnoughCandidates(
 				for: kind,
 				from: context,
@@ -480,6 +475,57 @@ struct WatchOrientationService {
 			}
 		}
 		return latestData
+	}
+
+	private func mapData(
+		for kind: WatchReportKind,
+		from context: WatchDeviceContext,
+		radius: CLLocationDistance,
+		minimumCandidateCount: Int,
+		prefs: WatchAppPrefs,
+		previousData: WatchMapDataSet
+	) async throws -> WatchMapDataSet {
+		if minimumCandidateCount == 1 {
+			return try await mapClient.immediateMapData(
+				near: context.coordinate,
+				radiusMeters: radius,
+				options: prefs.mapDetails
+			)
+		}
+
+		do {
+			return try await mapClient.mapData(
+				near: context.coordinate,
+				radiusMeters: radius,
+				options: prefs.mapDetails
+			)
+		} catch {
+			guard shouldRetryRankedUpcomingWithoutCrossings(
+				kind: kind,
+				minimumCandidateCount: minimumCandidateCount,
+				prefs: prefs
+			) else {
+				throw error
+			}
+			var fallbackOptions = prefs.mapDetails
+			fallbackOptions.includeCrossings = false
+			let fallbackData = try await mapClient.mapData(
+				near: context.coordinate,
+				radiusMeters: radius,
+				options: fallbackOptions
+			)
+			return previousData.merging(fallbackData)
+		}
+	}
+
+	private func shouldRetryRankedUpcomingWithoutCrossings(
+		kind: WatchReportKind,
+		minimumCandidateCount: Int,
+		prefs: WatchAppPrefs
+	) -> Bool {
+		kind == .upcoming &&
+			minimumCandidateCount > 1 &&
+			prefs.mapDetails.includeCrossings
 	}
 
 	private func hasEnoughCandidates(
@@ -871,9 +917,21 @@ struct WatchMapDataSet: Equatable {
 	var intersections: [WatchIntersectionCandidate]
 	var roads: [WatchMapRoad]
 
+	func merging(_ other: WatchMapDataSet) -> WatchMapDataSet {
+		var mergedIntersections = intersections
+		let existingIntersectionIDs = Set(mergedIntersections.map(\.id))
+		mergedIntersections.append(contentsOf: other.intersections.filter { !existingIntersectionIDs.contains($0.id) })
+
+		var mergedRoads = roads
+		let existingRoadIDs = Set(mergedRoads.map(\.id))
+		mergedRoads.append(contentsOf: other.roads.filter { !existingRoadIDs.contains($0.id) })
+
+		return WatchMapDataSet(intersections: mergedIntersections, roads: mergedRoads)
+	}
+
 	func rankedUpcoming(from context: WatchDeviceContext) -> [WatchIntersectionCandidate]? {
 		guard
-			let direction = context.dependableTravelDirection,
+			let direction = context.headingDegrees,
 			let road = nearestRoad(to: context.coordinate),
 			road.minimumDistance(to: context.coordinate) <= currentRoadDistanceThreshold(for: context),
 			let directionSign = road.directionSign(for: direction, at: context.coordinate)

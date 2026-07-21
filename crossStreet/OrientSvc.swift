@@ -449,19 +449,14 @@ struct OrientSvc {
 		var latestData = MapDataSet(intersections: [], roads: [])
 
 		for radius in radii {
-			if minimumCandidateCount == 1, kind != .scan {
-				latestData = try await mapDataClient.immediateMapData(
-					near: context.coordinate,
-					radiusMeters: radius,
-					options: prefs.mapDetails
-				)
-			} else {
-				latestData = try await mapDataClient.mapData(
-					near: context.coordinate,
-					radiusMeters: radius,
-					options: prefs.mapDetails
-				)
-			}
+			latestData = try await mapData(
+				for: kind,
+				from: context,
+				radius: radius,
+				minimumCandidateCount: minimumCandidateCount,
+				prefs: prefs,
+				previousData: latestData
+			)
 
 			if hasEnoughCandidates(
 				for: kind,
@@ -474,6 +469,57 @@ struct OrientSvc {
 		}
 
 		return latestData
+	}
+
+	private func mapData(
+		for kind: ReportKind,
+		from context: DeviceContext,
+		radius: CLLocationDistance,
+		minimumCandidateCount: Int,
+		prefs: AppPrefs,
+		previousData: MapDataSet
+	) async throws -> MapDataSet {
+		if minimumCandidateCount == 1, kind != .scan {
+			return try await mapDataClient.immediateMapData(
+				near: context.coordinate,
+				radiusMeters: radius,
+				options: prefs.mapDetails
+			)
+		}
+
+		do {
+			return try await mapDataClient.mapData(
+				near: context.coordinate,
+				radiusMeters: radius,
+				options: prefs.mapDetails
+			)
+		} catch {
+			guard shouldRetryRankedUpcomingWithoutCrossings(
+				kind: kind,
+				minimumCandidateCount: minimumCandidateCount,
+				prefs: prefs
+			) else {
+				throw error
+			}
+			var fallbackOptions = prefs.mapDetails
+			fallbackOptions.includeCrossings = false
+			let fallbackData = try await mapDataClient.mapData(
+				near: context.coordinate,
+				radiusMeters: radius,
+				options: fallbackOptions
+			)
+			return previousData.merging(fallbackData)
+		}
+	}
+
+	private func shouldRetryRankedUpcomingWithoutCrossings(
+		kind: ReportKind,
+		minimumCandidateCount: Int,
+		prefs: AppPrefs
+	) -> Bool {
+		kind == .upcoming &&
+			minimumCandidateCount > 1 &&
+			prefs.mapDetails.includeCrossings
 	}
 
 	private func hasEnoughCandidates(

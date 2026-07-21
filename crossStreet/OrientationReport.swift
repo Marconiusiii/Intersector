@@ -412,6 +412,18 @@ struct MapDataSet: Equatable {
 	var intersections: [IntersectionCandidate]
 	var roads: [MapRoad]
 
+	func merging(_ other: MapDataSet) -> MapDataSet {
+		var mergedIntersections = intersections
+		let existingIntersectionIDs = Set(mergedIntersections.map(\.id))
+		mergedIntersections.append(contentsOf: other.intersections.filter { !existingIntersectionIDs.contains($0.id) })
+
+		var mergedRoads = roads
+		let existingRoadIDs = Set(mergedRoads.map(\.id))
+		mergedRoads.append(contentsOf: other.roads.filter { !existingRoadIDs.contains($0.id) })
+
+		return MapDataSet(intersections: mergedIntersections, roads: mergedRoads)
+	}
+
 	func currentStreetIntersections(from coordinate: CLLocationCoordinate2D) -> [IntersectionCandidate] {
 		currentStreetScanTargets(from: coordinate, includeCrossings: false)
 	}
@@ -438,7 +450,7 @@ struct MapDataSet: Equatable {
 
 	func rankedUpcoming(from context: DeviceContext) -> [IntersectionCandidate]? {
 		guard
-			let direction = context.dependableTravelDirection,
+			let direction = context.headingDegrees,
 			let road = nearestRoad(to: context.coordinate),
 			road.minimumDistance(to: context.coordinate) <= currentRoadDistanceThreshold(for: context),
 			let directionSign = road.directionSign(for: direction, at: context.coordinate)

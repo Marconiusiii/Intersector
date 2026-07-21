@@ -1056,6 +1056,47 @@ struct IntersectorTests {
 		#expect(ranked.map(\.id) == ["ahead"])
 	}
 
+	@Test func currentRoadUpcomingUsesPhoneHeadingInsteadOfWalkingCourse() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapData = MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: "north",
+					names: ["Oak Street", "North Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "south",
+					names: ["Oak Street", "South Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 36.999, longitude: -122.0)
+				)
+			],
+			roads: [
+				MapRoad(
+					id: "oak",
+					name: "Oak Street",
+					nodeIDs: [1, 2],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 36.999, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+					]
+				)
+			]
+		)
+		let context = DeviceContext(
+			coordinate: origin,
+			headingDegrees: 0,
+			courseDegrees: 180,
+			courseAccuracy: 5,
+			speedMetersPerSecond: 1.2,
+			horizontalAccuracy: 10
+		)
+
+		let ranked = IntersectionFinder().rankedUpcoming(from: context, in: mapData)
+
+		#expect(ranked.map(\.id) == ["north"])
+	}
+
 	@Test func currentRoadUpcomingKeepsRoadAlignedCandidateOutsideFallbackCone() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let mapData = MapDataSet(
@@ -2241,6 +2282,35 @@ struct IntersectorTests {
 		#expect(await mapClient.requestedRadii == [225, 375, 750])
 	}
 
+	@Test func rankedUpcomingRetriesExpandedCrossingFailuresWithoutDroppingRoadResults() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.mapDetails = MapDetailOptions(includeCrossings: true)
+		let mapClient = CrossingExpansionFailingMapDataClient()
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(
+					coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0),
+					headingDegrees: 0
+				)
+			),
+			mapDataClient: mapClient,
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+
+		let report = try await service.report(.upcoming, rank: 3, prefs: prefs)
+
+		#expect(report.cross == "Oak Street and Third Street")
+		#expect(await mapClient.requestedRadii == [225, 375, 375, 750, 750])
+		#expect(await mapClient.requestedOptions == [
+			MapDetailOptions(includeCrossings: true),
+			MapDetailOptions(includeCrossings: true),
+			MapDetailOptions(),
+			MapDetailOptions(includeCrossings: true),
+			MapDetailOptions()
+		])
+	}
+
 }
 
 actor FetchCounter {
@@ -2481,6 +2551,68 @@ actor AdaptiveMapDataClient: MapDataFetching {
 	) async throws -> MapDataSet {
 		requestedRadii.append(radiusMeters)
 		requestedOptions.append(options)
+		let availableCount = radiusMeters < 375 ? 1 : (radiusMeters < 750 ? 2 : 3)
+		let names = ["First Street", "Second Street", "Third Street"]
+		let candidates = (0..<availableCount).map { index in
+			IntersectionCandidate(
+				id: "rank-\(index + 1)",
+				names: ["Oak Street", names[index]],
+				coordinate: CLLocationCoordinate2D(
+					latitude: coordinate.latitude + Double(index + 1) * 0.001,
+					longitude: coordinate.longitude
+				)
+			)
+		}
+		return MapDataSet(
+			intersections: candidates,
+			roads: [
+				MapRoad(
+					id: "oak",
+					name: "Oak Street",
+					nodeIDs: [1, 2],
+					coordinates: [
+						CLLocationCoordinate2D(
+							latitude: coordinate.latitude - 0.005,
+							longitude: coordinate.longitude
+						),
+						CLLocationCoordinate2D(
+							latitude: coordinate.latitude + 0.005,
+							longitude: coordinate.longitude
+						)
+					]
+				)
+			]
+		)
+	}
+}
+
+actor CrossingExpansionFailingMapDataClient: MapDataFetching {
+	private(set) var requestedRadii: [CLLocationDistance] = []
+	private(set) var requestedOptions: [MapDetailOptions] = []
+
+	func intersections(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> [IntersectionCandidate] {
+		try await mapData(
+			near: coordinate,
+			radiusMeters: radiusMeters,
+			options: options
+		).intersections
+	}
+
+	func mapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> MapDataSet {
+		requestedRadii.append(radiusMeters)
+		requestedOptions.append(options)
+		if options.includeCrossings && radiusMeters > 225 {
+			throw URLError(.timedOut)
+		}
+
 		let availableCount = radiusMeters < 375 ? 1 : (radiusMeters < 750 ? 2 : 3)
 		let names = ["First Street", "Second Street", "Third Street"]
 		let candidates = (0..<availableCount).map { index in
