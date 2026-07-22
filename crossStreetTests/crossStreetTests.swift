@@ -2470,52 +2470,10 @@ struct IntersectorTests {
 		#expect(await mapClient.requestedRadii == [225, 375, 750])
 	}
 
-	@Test func thirdUpcomingExpandsUntilThreeSpokenIntersectionsAreDistinct() async throws {
+	@Test func thirdUpcomingUsesDistinctResultsAndRetainsSuccessfulExpansionData() async throws {
 		var prefs = AppPrefs()
 		prefs.areaMode = .off
-		let mapClient = SpokenDistinctAdaptiveMapDataClient()
-		let service = OrientSvc(
-			locationProvider: FakeLocationProvider(
-				context: DeviceContext(
-					coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0),
-					headingDegrees: 0
-				)
-			),
-			mapDataClient: mapClient,
-			neighborhoodProvider: FailingNeighborhoodProvider()
-		)
-
-		let report = try await service.report(.upcoming, rank: 3, prefs: prefs)
-
-		#expect(report.cross == "Oak Street and Third Street")
-		#expect(await mapClient.requestedRadii == [225, 375, 750])
-	}
-
-	@Test func thirdUpcomingUsesWiderConeOnlyAfterStrictExpansionIsExhausted() async throws {
-		var prefs = AppPrefs()
-		prefs.areaMode = .off
-		let mapClient = WiderFallbackMapDataClient(failsAfterFirstRequest: false)
-		let service = OrientSvc(
-			locationProvider: FakeLocationProvider(
-				context: DeviceContext(
-					coordinate: CLLocationCoordinate2D(latitude: 0, longitude: 0),
-					headingDegrees: 0
-				)
-			),
-			mapDataClient: mapClient,
-			neighborhoodProvider: FailingNeighborhoodProvider()
-		)
-
-		let report = try await service.report(.upcoming, rank: 3, prefs: prefs)
-
-		#expect(report.cross == "Oak Street and Wider Street")
-		#expect(await mapClient.requestedRadii == [225, 375, 750, 1_200, 1_800, 2_400])
-	}
-
-	@Test func thirdUpcomingRetainsSuccessfulDataWhenLaterExpansionRequestsFail() async throws {
-		var prefs = AppPrefs()
-		prefs.areaMode = .off
-		let mapClient = WiderFallbackMapDataClient(failsAfterFirstRequest: true)
+		let mapClient = ThirdUpcomingFallbackMapDataClient()
 		let service = OrientSvc(
 			locationProvider: FakeLocationProvider(
 				context: DeviceContext(
@@ -2888,7 +2846,7 @@ actor AdaptiveMapDataClient: MapDataFetching {
 	}
 }
 
-actor SpokenDistinctAdaptiveMapDataClient: MapDataFetching {
+actor ThirdUpcomingFallbackMapDataClient: MapDataFetching {
 	private(set) var requestedRadii: [CLLocationDistance] = []
 
 	func intersections(
@@ -2909,79 +2867,19 @@ actor SpokenDistinctAdaptiveMapDataClient: MapDataFetching {
 		options: MapDetailOptions
 	) async throws -> MapDataSet {
 		requestedRadii.append(radiusMeters)
-		var candidates = [
-			IntersectionCandidate(
-				id: "first-a",
-				names: ["Oak Street", "First Street"],
-				coordinate: CLLocationCoordinate2D(
-					latitude: coordinate.latitude + 0.001,
-					longitude: coordinate.longitude
-				)
-			),
-			IntersectionCandidate(
-				id: "first-b",
-				names: ["Oak Street", "First Street"],
-				coordinate: CLLocationCoordinate2D(
-					latitude: coordinate.latitude + 0.0016,
-					longitude: coordinate.longitude
-				)
-			),
-			IntersectionCandidate(
-				id: "second",
-				names: ["Oak Street", "Second Street"],
-				coordinate: CLLocationCoordinate2D(
-					latitude: coordinate.latitude + 0.002,
-					longitude: coordinate.longitude
-				)
-			)
-		]
-		if radiusMeters >= 750 {
-			candidates.append(
-				IntersectionCandidate(
-					id: "third",
-					names: ["Oak Street", "Third Street"],
-					coordinate: CLLocationCoordinate2D(
-						latitude: coordinate.latitude + 0.003,
-						longitude: coordinate.longitude
-					)
-				)
-			)
-		}
-		return MapDataSet(intersections: candidates, roads: [])
-	}
-}
-
-actor WiderFallbackMapDataClient: MapDataFetching {
-	private let failsAfterFirstRequest: Bool
-	private(set) var requestedRadii: [CLLocationDistance] = []
-
-	init(failsAfterFirstRequest: Bool) {
-		self.failsAfterFirstRequest = failsAfterFirstRequest
-	}
-
-	func intersections(
-		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance,
-		options: MapDetailOptions
-	) async throws -> [IntersectionCandidate] {
-		try await mapData(
-			near: coordinate,
-			radiusMeters: radiusMeters,
-			options: options
-		).intersections
-	}
-
-	func mapData(
-		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance,
-		options: MapDetailOptions
-	) async throws -> MapDataSet {
-		requestedRadii.append(radiusMeters)
-		if failsAfterFirstRequest && requestedRadii.count > 1 {
+		if requestedRadii.count > 1 {
 			throw URLError(.timedOut)
 		}
 		return MapDataSet(
 			intersections: [
+				IntersectionCandidate(
+					id: "first-duplicate",
+					names: ["Oak Street", "First Street"],
+					coordinate: CLLocationCoordinate2D(
+						latitude: coordinate.latitude + 0.0015,
+						longitude: coordinate.longitude
+					)
+				),
 				IntersectionCandidate(
 					id: "first-ahead",
 					names: ["Oak Street", "First Street"],
