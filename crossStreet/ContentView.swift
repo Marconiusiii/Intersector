@@ -1380,7 +1380,7 @@ struct ContentView: View {
 
 					helpSection(
 						title: "Upcoming Intersection",
-						body: "Use Upcoming Intersection to find the next intersection in the direction your phone is facing. The 2nd and 3rd Upcoming actions follow your current street forward, so they describe what comes after the first result instead of simply picking nearby intersections by distance."
+						body: "Use Upcoming Intersection to find what comes next along the road you are on in the direction your phone is facing. Every Upcoming action follows the mapped path of that road through bends. If Intersector cannot identify the road or direction confidently, it reports no result instead of choosing an intersection on a nearby street."
 					)
 
 					helpSection(
@@ -1700,20 +1700,13 @@ struct ContentView: View {
 				VoiceOverAnnouncer.reportUpdated(text)
 				return
 			}
-			let hasMapData = await OrientSvc.shared.prewarmInitialNearestMapData(prefs: prefs)
-			guard !Task.isCancelled else {
-				return
-			}
 			LoadingThrobber.stop()
 			isStartupLoading = false
-			guard hasMapData else {
-				let text = "Intersector is having trouble loading map data. Please try again."
-				statusText = text
-				VoiceOverAnnouncer.reportUpdated(text)
-				return
-			}
 			ReadyEarcon.play(hapticsEnabled: prefs.haptics)
 			statusText = readyText
+			Task {
+				_ = await OrientSvc.shared.prewarmInitialNearestMapData(prefs: prefs)
+			}
 			Task { @MainActor in
 				try? await Task.sleep(for: .milliseconds(1_350))
 				VoiceOverAnnouncer.reportUpdated(readyText)

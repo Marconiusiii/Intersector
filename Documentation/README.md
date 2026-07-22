@@ -207,7 +207,7 @@ The shared service code is mostly the same, but the matching rule changes in `In
 
 For nearest, the app picks the closest candidate.
 
-For upcoming, the app tries to use heading data. The first result looks for intersections within 20 degrees of the direction the device is facing. If it cannot find one in that strict forward window, the single-result path falls back to the nearest candidate. If a fresh heading request times out, the location provider can retain a heading that is no more than two seconds old instead of immediately discarding useful direction data.
+For upcoming, the app first identifies the named road nearest the user's location. It uses the phone heading only to choose which direction to travel along that road, then follows the connected road geometry through bends and separately mapped segments. Upcoming does not select intersections from a compass cone and does not fall back to a nearby intersection on another street. If the road or travel direction cannot be established confidently, the request returns no Upcoming result instead of guessing. If a fresh heading request times out, the location provider can retain a heading that is no more than two seconds old instead of immediately discarding useful direction data.
 
 The useful pattern here is that `ReportKind` changes behavior without duplicating the whole lookup flow.
 
@@ -539,9 +539,9 @@ It finds the nearest road by measuring from the user's coordinate to the full li
 
 For Street Context wording, the same distance calculation is limited to the roads that form the selected intersection. A nearby unrelated road therefore cannot force the report back to Direct wording.
 
-For Spoken Intersections values 2 and 3, Nearest Intersection ranks mapped candidates by distance. Upcoming Intersection first follows intersections along the detected current road, then fills from a strict 20-degree forward cone. If a full expanded lookup still has too few distinct spoken intersections, only the missing ranked positions can be filled from a 45-degree cone. Existing strict results stay first, and intersections behind the phone remain excluded. If a heading is unavailable, Upcoming falls back to one nearest result instead of guessing a multi-result forward sequence.
+For Spoken Intersections values 2 and 3, Nearest Intersection ranks mapped candidates by distance. Upcoming Intersection follows only intersections connected along the detected current road. It orders them by cumulative distance traveled through the road geometry rather than straight-line distance. It never fills a missing position with an intersection from a nearby street.
 
-Ranked one-shot requests, such as 2nd Nearest, 3rd Nearest, 2nd Upcoming, and 3rd Upcoming, are different from the Spoken Intersections setting. A ranked one-shot request speaks only the requested intersection. Explicit ranked Upcoming requests expand through 225, 375, 750, 1,200, 1,800, and, for the third rank, 2,400 meters. Expansion continues until enough distinct spoken intersections exist rather than stopping at the raw map-candidate count. If a later expanded request fails, the service retains the best earlier successful data for the fill-only fallback. The spoken lead includes the rank, such as `2nd Upcoming:` or `3rd Nearest:`.
+Ranked one-shot requests, such as 2nd Nearest, 3rd Nearest, 2nd Upcoming, and 3rd Upcoming, are different from the Spoken Intersections setting. A ranked one-shot request speaks only the requested intersection. Ranked Upcoming begins with a small 225-meter discovery lookup. If that does not contain enough current-road intersections, one focused request fetches the detected road and the named roads connected to it, using 750 meters for the second rank or 1,200 meters for the third. This avoids repeated large circular queries across every named Manhattan street. The spoken lead includes the rank, such as `2nd Upcoming:` or `3rd Nearest:`.
 
 ## MapDataCache
 
@@ -564,7 +564,7 @@ This avoids unnecessary network calls and reduces how often a temporary map serv
 
 ## Endpoint Fallback
 
-`MapDataClient` has one primary endpoint and one fallback endpoint.
+`MapDataClient` has one primary endpoint and two fallback endpoints. Requests identify Intersector with a `User-Agent`, use a practical network timeout, and remember temporarily unhealthy endpoints so the next request can prefer a working server.
 
 If the primary endpoint fails with a temporary network or server problem, the client tries the fallback endpoint.
 
@@ -592,13 +592,12 @@ It compares the distance from the device coordinate to each candidate and picks 
 
 For upcoming:
 
-1. Get the bearing from the device to each candidate.
-2. Compare that bearing to the device heading.
-3. Keep candidates within a strict 20-degree forward window.
-4. Pick the nearest of those.
-5. Fall back to nearest if no forward candidate exists.
-
-Ranked Upcoming requests first preserve current-road and strict-cone ordering. After strict radius expansion is exhausted, they may append candidates from a 45-degree fill cone without reordering or replacing the stricter results.
+1. Match the user to a nearby named road.
+2. Find the closest segment of that road.
+3. Use the phone heading to choose a direction along the segment.
+4. Traverse connected nodes carrying the same road name.
+5. Order intersections by cumulative distance along that road path.
+6. Return no result when the road or direction cannot be established confidently.
 
 For scan:
 
@@ -811,7 +810,7 @@ Announcement content uses three toggles: Distance, Direction, and Neighborhood. 
 
 The Announcements section progressively reveals dependent controls. When Distance is on, Measurement Unit appears so the user can choose feet or meters. When Direction is on, Direction Style appears so the user can choose word directions, such as `ahead and right`, or clock-face directions, such as `at 2 o'clock`. Clock-face directions treat the direction the phone is pointing as 12 o'clock. When Direction Style is Words, Manhattan Snob Mode appears. Manhattan Snob Mode changes cardinal word directions into New York-style wording. North and northeast become `Uptown`, east and southeast become `East Side`, south and southwest become `Downtown`, and west and northwest become `West Side`. My Direction can say copy like `Facing Uptown.` Nearest and Upcoming reports append copy like `towards Uptown` when the app is using word directions. Clock-face directions stay clock-face directions. When Neighborhood is on, Neighborhood Context appears so the user can choose whether neighborhood wording is nearby-only or heading-aware. A sample string below the toggles updates as these settings change.
 
-Spoken Intersections is a menu picker with values 1, 2, and 3. The selected number controls how many results the app requests. Nearest orders multiple results by distance. Upcoming uses the phone heading and orders only forward-facing results from closest to farthest. VoiceOver receives the complete labels `One intersection`, `Two intersections`, and `Three intersections`. The explanatory text for values 2 and 3 states exactly how many results Nearest and Upcoming will speak.
+Spoken Intersections is a menu picker with values 1, 2, and 3. The selected number controls how many results the app requests. Nearest orders multiple results by straight-line distance. Upcoming uses the phone heading to choose a travel direction and orders intersections along the connected path of the current road. VoiceOver receives the complete labels `One intersection`, `Two intersections`, and `Three intersections`. The explanatory text for values 2 and 3 states exactly how many results Nearest and Upcoming will speak.
 
 The `Show 2nd and 3rd Controls` toggle controls whether the main screen shows chevron menus for ranked Nearest and Upcoming results. Turning it off removes those visible menus, but Siri, Shortcuts, and VoiceOver custom actions still provide ranked access.
 
@@ -894,7 +893,7 @@ let text = try await OrientSvc.shared.spokenText(.nearest, prefs: prefs)
 
 That is the important architecture choice. Siri does not have a separate intersection engine. It reuses the same app logic.
 
-Dedicated 2nd Nearest, 3rd Nearest, 2nd Upcoming, and 3rd Upcoming intents request one exact rank directly. The service sorts nearest candidates by straight-line distance. Upcoming ranks preserve the detected current-road sequence first, then strict forward candidates, and finally use the wider fill cone only when strict expansion cannot provide enough distinct results. These ranked shortcut actions speak only the requested intersection, not the intersections leading up to it, and their spoken prefixes include the requested rank.
+Dedicated 2nd Nearest, 3rd Nearest, 2nd Upcoming, and 3rd Upcoming intents request one exact rank directly. The service sorts nearest candidates by straight-line distance. Upcoming ranks follow only the connected geometry of the detected current road and do not substitute nearby off-road intersections. These ranked shortcut actions speak only the requested intersection, not the intersections leading up to it, and their spoken prefixes include the requested rank.
 
 `IntersectorShortcuts` defines default shortcut phrases. Those phrases include `.applicationName`, which lets the system insert the app name.
 

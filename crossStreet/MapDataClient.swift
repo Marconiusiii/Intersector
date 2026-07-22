@@ -11,7 +11,8 @@ import Foundation
 struct MapDataClient: MapDataFetching {
 	var endpoint = URL(string: "https://overpass-api.de/api/interpreter")!
 	var fallbackEndpoints = [
-		URL(string: "https://overpass.kumi.systems/api/interpreter")!
+		URL(string: "https://overpass.private.coffee/api/interpreter")!,
+		URL(string: "https://maps.mail.ru/osm/tools/overpass/api/interpreter")!
 	]
 	var session: URLSession = .shared
 	private static let cache = MapDataCache()
@@ -65,10 +66,44 @@ struct MapDataClient: MapDataFetching {
 		}
 	}
 
+	func roadMapData(
+		near coordinate: CLLocationCoordinate2D,
+		roadName: String,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions = MapDetailOptions()
+	) async throws -> MapDataSet {
+		try await fetchMapData(
+			near: coordinate,
+			options: options,
+			query: focusedRoadQuery(
+				near: coordinate,
+				roadName: roadName,
+				radiusMeters: radiusMeters,
+				options: options
+			)
+		)
+	}
+
 	private func fetchMapData(
 		near coordinate: CLLocationCoordinate2D,
 		radiusMeters: CLLocationDistance,
 		options: MapDetailOptions
+	) async throws -> MapDataSet {
+		try await fetchMapData(
+			near: coordinate,
+			options: options,
+			query: roadQuery(
+				near: coordinate,
+				radiusMeters: radiusMeters,
+				options: options
+			)
+		)
+	}
+
+	private func fetchMapData(
+		near coordinate: CLLocationCoordinate2D,
+		options: MapDetailOptions,
+		query: String
 	) async throws -> MapDataSet {
 		let endpoints = await Self.endpointHealth.orderedEndpoints(
 			primary: endpoint,
@@ -80,9 +115,8 @@ struct MapDataClient: MapDataFetching {
 			do {
 				let data = try await fetchMapData(
 					from: endpoint,
-					near: coordinate,
-					radiusMeters: radiusMeters,
-					options: options
+					options: options,
+					query: query
 				)
 				await Self.endpointHealth.markSuccess(endpoint)
 				return data
@@ -102,19 +136,15 @@ struct MapDataClient: MapDataFetching {
 
 	private func fetchMapData(
 		from endpoint: URL,
-		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance,
-		options: MapDetailOptions
+		options: MapDetailOptions,
+		query: String
 	) async throws -> MapDataSet {
 		var request = URLRequest(url: endpoint)
 		request.httpMethod = "POST"
-		request.timeoutInterval = 5
+		request.timeoutInterval = 12
 		request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
-		request.httpBody = roadQuery(
-			near: coordinate,
-			radiusMeters: radiusMeters,
-			options: options
-		).data(using: .utf8)
+		request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+		request.httpBody = query.data(using: .utf8)
 
 		let (data, urlResponse) = try await session.data(for: request)
 		guard let httpResponse = urlResponse as? HTTPURLResponse else {
@@ -188,7 +218,7 @@ struct MapDataClient: MapDataFetching {
 		  node(around:\(crossingRadius),\(coordinate.latitude),\(coordinate.longitude))["crossing"];
 		""" : ""
 		let body = """
-		[out:json][timeout:5];
+		[out:json][timeout:10];
 		(
 		  way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"~"^(\(highwayPattern))$"]["name"];
 		\(crossingQueries)
@@ -197,6 +227,41 @@ struct MapDataClient: MapDataFetching {
 		out body;
 		"""
 		return encodedBody(body)
+	}
+
+	private func focusedRoadQuery(
+		near coordinate: CLLocationCoordinate2D,
+		roadName: String,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) -> String {
+		let radius = Int(radiusMeters.rounded())
+		let escapedRoadName = roadName
+			.replacingOccurrences(of: "\\", with: "\\\\")
+			.replacingOccurrences(of: "\"", with: "\\\"")
+		var highwayTypes = [
+			"primary", "primary_link", "secondary", "secondary_link", "tertiary",
+			"tertiary_link", "unclassified", "residential", "living_street", "pedestrian", "road"
+		]
+		if options.includeWalkingPaths {
+			highwayTypes += ["footway", "path", "steps", "bridleway"]
+		}
+		let highwayPattern = highwayTypes.joined(separator: "|")
+		let body = """
+		[out:json][timeout:10];
+		way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"~"^(\(highwayPattern))$"]["name"="\(escapedRoadName)"]->.currentRoad;
+		node(w.currentRoad)->.currentRoadNodes;
+		way(bn.currentRoadNodes)["highway"~"^(\(highwayPattern))$"]["name"]->.connectedRoads;
+		(.currentRoad;.connectedRoads;);
+		(._;>;);
+		out body;
+		"""
+		return encodedBody(body)
+	}
+
+	private var userAgent: String {
+		let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+		return "Intersector/\(version) (com.marconius.crossStreet; marco@marconius.com)"
 	}
 
 	private func encodedBody(_ body: String) -> String {

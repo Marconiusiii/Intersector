@@ -9,8 +9,6 @@ import CoreLocation
 import Foundation
 
 struct IntersectionFinder {
-	static let upcomingConeDegrees: CLLocationDirection = 20
-	static let rankedUpcomingFallbackConeDegrees: CLLocationDirection = 45
 	static let scanMaxDistanceMeters: CLLocationDistance = 600 / 3.28084
 
 	func bestMatch(
@@ -21,24 +19,13 @@ struct IntersectionFinder {
 		switch kind {
 		case .nearest:
 			return rankedNearest(from: context.coordinate, in: candidates).first
-		case .upcoming, .scan:
-			guard let heading = context.headingDegrees else {
-				return nearestCandidate(from: context.coordinate, in: candidates)
+		case .upcoming:
+			return nil
+		case .scan:
+			guard context.headingDegrees != nil else {
+				return nil
 			}
-			if kind == .scan {
-				return scanMatch(from: context, in: candidates)?.candidate
-			}
-			return candidates.reduce(nil) { best, candidate in
-				let bearing = Geo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
-				guard angleDelta(from: heading, to: bearing) <= Self.upcomingConeDegrees else {
-					return best
-				}
-				return nearest(
-					best,
-					or: candidate,
-					from: context.coordinate
-				)
-			} ?? nearestCandidate(from: context.coordinate, in: candidates)
+			return scanMatch(from: context, in: candidates)?.candidate
 		}
 	}
 
@@ -79,21 +66,6 @@ struct IntersectionFinder {
 
 	func rankedUpcoming(
 		from context: DeviceContext,
-		in candidates: [IntersectionCandidate],
-		coneDegrees: CLLocationDirection = Self.upcomingConeDegrees
-	) -> [IntersectionCandidate] {
-		guard let heading = context.headingDegrees else {
-			return []
-		}
-		let forwardCandidates = candidates.filter { candidate in
-			let bearing = Geo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
-			return angleDelta(from: heading, to: bearing) <= coneDegrees
-		}
-		return rankedNearest(from: context.coordinate, in: forwardCandidates)
-	}
-
-	func rankedUpcoming(
-		from context: DeviceContext,
 		in mapData: MapDataSet
 	) -> [IntersectionCandidate] {
 		upcomingSequence(from: context, in: mapData)
@@ -101,39 +73,9 @@ struct IntersectionFinder {
 
 	func upcomingSequence(
 		from context: DeviceContext,
-		in mapData: MapDataSet,
-		fillMissingRanks: Bool = false
+		in mapData: MapDataSet
 	) -> [IntersectionCandidate] {
-		let roadSequence = mapData.upcomingRoadSequence(from: context) ?? []
-		let strictHeadingSequence = rankedUpcoming(
-			from: context,
-			in: mapData.intersections
-		)
-		let strictSequence = mergedUpcomingCandidates(roadSequence, strictHeadingSequence)
-		guard fillMissingRanks else {
-			return strictSequence
-		}
-		let widerHeadingSequence = rankedUpcoming(
-			from: context,
-			in: mapData.intersections,
-			coneDegrees: Self.rankedUpcomingFallbackConeDegrees
-		)
-		return mergedUpcomingCandidates(strictSequence, widerHeadingSequence)
-	}
-
-	func upcoming(
-		rank: Int,
-		from context: DeviceContext,
-		in candidates: [IntersectionCandidate]
-	) -> IntersectionCandidate? {
-		guard rank > 0 else {
-			return nil
-		}
-		let ranked = rankedUpcoming(from: context, in: candidates)
-		guard ranked.indices.contains(rank - 1) else {
-			return nil
-		}
-		return ranked[rank - 1]
+		mapData.upcomingRoadSequence(from: context) ?? []
 	}
 
 	func upcoming(
@@ -194,35 +136,8 @@ struct IntersectionFinder {
 		return min(delta, 360 - delta)
 	}
 
-	private func nearestCandidate(
-		from coordinate: CLLocationCoordinate2D,
-		in candidates: [IntersectionCandidate]
-	) -> IntersectionCandidate? {
-		candidates.reduce(nil) { best, candidate in
-			nearest(best, or: candidate, from: coordinate)
-		}
-	}
-
 	private func normalizedNames(_ names: [String]) -> Set<String> {
 		Set(names.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
-	}
-
-	private func mergedUpcomingCandidates(
-		_ preferred: [IntersectionCandidate],
-		_ fallback: [IntersectionCandidate]
-	) -> [IntersectionCandidate] {
-		fallback.reduce(into: preferred) { merged, candidate in
-			let alreadyIncluded = merged.contains { existing in
-				existing.id == candidate.id ||
-					(
-						normalizedNames(existing.names) == normalizedNames(candidate.names) &&
-							Geo.distanceMeters(from: existing.coordinate, to: candidate.coordinate) < 30
-					)
-			}
-			if !alreadyIncluded {
-				merged.append(candidate)
-			}
-		}
 	}
 
 	private func nearest(

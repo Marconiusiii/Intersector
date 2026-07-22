@@ -62,6 +62,12 @@ protocol MapDataFetching {
 		radiusMeters: CLLocationDistance,
 		options: MapDetailOptions
 	) async throws -> MapDataSet
+	func roadMapData(
+		near coordinate: CLLocationCoordinate2D,
+		roadName: String,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> MapDataSet
 }
 
 extension MapDataFetching {
@@ -88,6 +94,19 @@ extension MapDataFetching {
 			options: options
 		)
 	}
+
+	func roadMapData(
+		near coordinate: CLLocationCoordinate2D,
+		roadName: String,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> MapDataSet {
+		try await mapData(
+			near: coordinate,
+			radiusMeters: radiusMeters,
+			options: options
+		)
+	}
 }
 
 protocol NeighborhoodProviding {
@@ -101,7 +120,7 @@ struct OrientSvc {
 	var finder = IntersectionFinder()
 	var neighborhoodResolver = NeighborhoodResolver()
 	private var upcomingCache = UpcomingReportCache()
-	private static let spokenExpansionTimeout: Duration = .milliseconds(900)
+	private static let spokenExpansionTimeout: Duration = .seconds(8)
 
 	init(
 		locationProvider: LocationProviding,
@@ -156,23 +175,21 @@ struct OrientSvc {
 		prefs: AppPrefs = AppPrefs()
 	) async throws -> OrientReport {
 		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming || kind == .scan)
-		let requiresFreshRankedLookup = kind == .upcoming && rank > 1
+		let requiresRankedRoadLookup = kind == .upcoming && rank > 1
 		let lookupPrefs = await prefsForFirstLookup(kind: kind, rank: rank, prefs: prefs)
 		let mapData = try await mapData(
 			for: kind,
 			from: context,
 			minimumCandidateCount: rank,
 			prefs: lookupPrefs,
-			allowsRankedExpansion: requiresFreshRankedLookup,
-			bypassesCache: requiresFreshRankedLookup
+			allowsRankedExpansion: requiresRankedRoadLookup
 		)
 		if kind == .upcoming {
 			let reports = await upcomingReports(
 				from: context,
 				mapData: mapData,
 				prefs: prefs,
-				maxCount: rank == 1 ? 1 : 3,
-				fillMissingRanks: rank > 1
+				maxCount: rank == 1 ? 1 : 3
 			)
 			await upcomingCache.store(reports: reports, prefs: prefs, context: context)
 			guard reports.indices.contains(rank - 1) else {
@@ -199,7 +216,7 @@ struct OrientSvc {
 
 		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming || kind == .scan)
 		let requestedCount = prefs.spokenIntersectionCount.rawValue
-		let resultCount = kind == .upcoming && context.headingDegrees == nil ? 1 : requestedCount
+		let resultCount = requestedCount
 		let firstLookupPrefs = await prefsForFirstLookup(kind: kind, rank: 1, prefs: prefs)
 		let firstMapData = try await mapData(
 			for: kind,
@@ -230,8 +247,7 @@ struct OrientSvc {
 					from: context,
 					mapData: expandedMapData,
 					prefs: prefs,
-					maxCount: resultCount,
-					fillMissingRanks: kind == .upcoming && resultCount > 1
+					maxCount: resultCount
 				)
 				if expandedReports.count > reports.count {
 					reports = expandedReports
@@ -298,23 +314,17 @@ struct OrientSvc {
 		from context: DeviceContext,
 		mapData: MapDataSet,
 		prefs: AppPrefs,
-		maxCount: Int,
-		fillMissingRanks: Bool = false
+		maxCount: Int
 	) async -> [OrientReport] {
 		let ranked: [IntersectionCandidate]
 		switch kind {
 		case .nearest:
 			ranked = finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
-			case .upcoming:
-				if context.headingDegrees == nil {
-					ranked = finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
-				} else {
-					ranked = finder.upcomingSequence(
-						from: context,
-						in: mapData,
-						fillMissingRanks: fillMissingRanks
-					)
-				}
+		case .upcoming:
+			ranked = finder.upcomingSequence(
+				from: context,
+				in: mapData
+			)
 		case .scan:
 			ranked = finder.scanMatch(from: context, in: mapData.intersections).map { [$0.candidate] } ?? []
 		}
@@ -343,19 +353,13 @@ struct OrientSvc {
 		from context: DeviceContext,
 		mapData: MapDataSet,
 		prefs: AppPrefs,
-		maxCount: Int,
-		fillMissingRanks: Bool
+		maxCount: Int
 	) async -> [OrientReport] {
 		let ranked: [IntersectionCandidate]
-		if context.headingDegrees == nil {
-			ranked = finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
-		} else {
-			ranked = finder.upcomingSequence(
-				from: context,
-				in: mapData,
-				fillMissingRanks: fillMissingRanks
-			)
-		}
+		ranked = finder.upcomingSequence(
+			from: context,
+			in: mapData
+		)
 		let neighborhoodContext = await neighborhoodContext(for: prefs, from: context)
 		var reports: [OrientReport] = []
 		for match in ranked {
@@ -474,11 +478,57 @@ struct OrientSvc {
 		allowsRankedExpansion: Bool = false,
 		bypassesCache: Bool = false
 	) async throws -> MapDataSet {
-		let radii = lookupRadii(
-			for: kind,
-			minimumCandidateCount: minimumCandidateCount,
-			allowsRankedExpansion: allowsRankedExpansion
-		)
+		if kind == .upcoming, minimumCandidateCount > 1, allowsRankedExpansion {
+			let initialData = try await mapData(
+				for: kind,
+				from: context,
+				radius: 225,
+				minimumCandidateCount: minimumCandidateCount,
+				prefs: prefs,
+				previousData: MapDataSet(intersections: [], roads: []),
+				bypassesCache: false
+			)
+			if hasEnoughCandidates(
+				for: kind,
+				from: context,
+				minimumCandidateCount: minimumCandidateCount,
+				mapData: initialData,
+				prefs: prefs
+			) {
+				return initialData
+			}
+			guard let roadName = initialData.currentRoadName(from: context) else {
+				return initialData
+			}
+			do {
+				let focusedData = try await mapDataClient.roadMapData(
+					near: context.coordinate,
+					roadName: roadName,
+					radiusMeters: minimumCandidateCount >= 3 ? 1_200 : 750,
+					options: prefs.mapDetails
+				)
+				return initialData.merging(focusedData)
+			} catch {
+				guard prefs.mapDetails.includeCrossings else {
+					return initialData
+				}
+				var fallbackOptions = prefs.mapDetails
+				fallbackOptions.includeCrossings = false
+				do {
+					let focusedData = try await mapDataClient.roadMapData(
+						near: context.coordinate,
+						roadName: roadName,
+						radiusMeters: minimumCandidateCount >= 3 ? 1_200 : 750,
+						options: fallbackOptions
+					)
+					return initialData.merging(focusedData)
+				} catch {
+					return initialData
+				}
+			}
+		}
+
+		let radii = lookupRadii()
 		var latestData = MapDataSet(intersections: [], roads: [])
 
 		for radius in radii {
@@ -513,18 +563,8 @@ struct OrientSvc {
 		return latestData
 	}
 
-	private func lookupRadii(
-		for kind: ReportKind,
-		minimumCandidateCount: Int,
-		allowsRankedExpansion: Bool
-	) -> [CLLocationDistance] {
-		guard kind == .upcoming, minimumCandidateCount > 1, allowsRankedExpansion else {
-			return [225, 375, 750, 1_200]
-		}
-		if minimumCandidateCount >= 3 {
-			return [225, 375, 750, 1_200, 1_800, 2_400]
-		}
-		return [225, 375, 750, 1_200, 1_800]
+	private func lookupRadii() -> [CLLocationDistance] {
+		[225, 375, 750, 1_200]
 	}
 
 	private func mapData(
@@ -610,11 +650,7 @@ struct OrientSvc {
 		if kind == .scan {
 			return finder.scanMatch(from: context, in: mapData.intersections) != nil
 		}
-		let ranked = if context.headingDegrees == nil {
-			finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
-		} else {
-			finder.upcomingSequence(from: context, in: mapData)
-		}
+		let ranked = finder.upcomingSequence(from: context, in: mapData)
 		let neighborhoodContext = NeighborhoodContext(area: nil, toward: nil)
 		var reports: [OrientReport] = []
 		for match in ranked {

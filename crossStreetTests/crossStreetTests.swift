@@ -773,139 +773,6 @@ struct IntersectorTests {
 		#expect(uncertainCourse.dependableTravelDirection == 180)
 	}
 
-	@Test func upcomingPrefersCandidateAhead() async throws {
-		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
-		let context = DeviceContext(coordinate: origin, headingDegrees: 0)
-		let candidates = [
-			IntersectionCandidate(
-				id: "west",
-				names: ["First Street", "West Street"],
-				coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -122.001)
-			),
-			IntersectionCandidate(
-				id: "north",
-				names: ["First Street", "North Street"],
-				coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
-			)
-		]
-
-		let match = IntersectionFinder().bestMatch(
-			for: .upcoming,
-			from: context,
-			in: candidates
-		)
-
-		#expect(match?.id == "north")
-	}
-
-	@Test func rankedUpcomingExcludesCloserIntersectionBehindPhone() async throws {
-		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
-		let context = DeviceContext(coordinate: origin, headingDegrees: 0)
-		let candidates = [
-			IntersectionCandidate(
-				id: "behind",
-				names: ["Oak Street", "Behind Street"],
-				coordinate: CLLocationCoordinate2D(latitude: 36.9995, longitude: -122.0)
-			),
-			IntersectionCandidate(
-				id: "second-ahead",
-				names: ["Oak Street", "Second Street"],
-				coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
-			),
-			IntersectionCandidate(
-				id: "first-ahead",
-				names: ["Oak Street", "First Street"],
-				coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
-			)
-		]
-
-		let ranked = IntersectionFinder().rankedUpcoming(from: context, in: candidates)
-
-		#expect(ranked.map(\.id) == ["first-ahead", "second-ahead"])
-	}
-
-	@Test func rankedUpcomingExcludesIntersectionsOutsideUrbanForwardCone() async throws {
-		let origin = CLLocationCoordinate2D(latitude: 0, longitude: 0)
-		let context = DeviceContext(coordinate: origin, headingDegrees: 0)
-		let candidates = [
-			IntersectionCandidate(
-				id: "side-street",
-				names: ["Oak Street", "Side Street"],
-				coordinate: CLLocationCoordinate2D(latitude: 0.001, longitude: 0.0012)
-			),
-			IntersectionCandidate(
-				id: "ahead",
-				names: ["Oak Street", "Ahead Street"],
-				coordinate: CLLocationCoordinate2D(latitude: 0.002, longitude: 0)
-			)
-		]
-
-		let ranked = IntersectionFinder().rankedUpcoming(from: context, in: candidates)
-
-		#expect(ranked.map(\.id) == ["ahead"])
-	}
-
-	@Test func rankedUpcomingUsesTwentyDegreeFallbackCone() async throws {
-		let origin = CLLocationCoordinate2D(latitude: 0, longitude: 0)
-		let context = DeviceContext(coordinate: origin, headingDegrees: 0)
-		let candidates = [
-			IntersectionCandidate(
-				id: "twenty-five-degrees",
-				names: ["Oak Street", "Wide Street"],
-				coordinate: CLLocationCoordinate2D(latitude: 0.001, longitude: 0.00047)
-			),
-			IntersectionCandidate(
-				id: "ahead",
-				names: ["Oak Street", "Ahead Street"],
-				coordinate: CLLocationCoordinate2D(latitude: 0.002, longitude: 0)
-			)
-		]
-
-		let ranked = IntersectionFinder().rankedUpcoming(from: context, in: candidates)
-
-		#expect(ranked.map(\.id) == ["ahead"])
-	}
-
-	@Test func rankedUpcomingWiderFallbackOnlyFillsMissingRanks() async throws {
-		let origin = CLLocationCoordinate2D(latitude: 0, longitude: 0)
-		let context = DeviceContext(coordinate: origin, headingDegrees: 0)
-		let mapData = MapDataSet(
-			intersections: [
-				IntersectionCandidate(
-					id: "first-ahead",
-					names: ["Oak Street", "First Street"],
-					coordinate: CLLocationCoordinate2D(latitude: 0.001, longitude: 0)
-				),
-				IntersectionCandidate(
-					id: "second-ahead",
-					names: ["Oak Street", "Second Street"],
-					coordinate: CLLocationCoordinate2D(latitude: 0.002, longitude: 0)
-				),
-				IntersectionCandidate(
-					id: "wider-third",
-					names: ["Oak Street", "Wider Street"],
-					coordinate: CLLocationCoordinate2D(latitude: 0.003, longitude: 0.00173)
-				),
-				IntersectionCandidate(
-					id: "behind",
-					names: ["Oak Street", "Behind Street"],
-					coordinate: CLLocationCoordinate2D(latitude: -0.001, longitude: 0)
-				)
-			],
-			roads: []
-		)
-
-		let strict = IntersectionFinder().upcomingSequence(from: context, in: mapData)
-		let filled = IntersectionFinder().upcomingSequence(
-			from: context,
-			in: mapData,
-			fillMissingRanks: true
-		)
-
-		#expect(strict.map(\.id) == ["first-ahead", "second-ahead"])
-		#expect(filled.map(\.id) == ["first-ahead", "second-ahead", "wider-third"])
-	}
-
 	@Test func scanMatchIgnoresAlignedIntersectionsBeyondImmediateRange() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let context = DeviceContext(coordinate: origin, headingDegrees: 0)
@@ -1137,112 +1004,66 @@ struct IntersectorTests {
 		#expect(ranked.map(\.id) == ["north"])
 	}
 
-	@Test func currentRoadUpcomingKeepsRoadAlignedCandidateOutsideFallbackCone() async throws {
+	@Test func upcomingFollowsCurvedRoadAndNeverFillsFromNearbyStreet() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
-		let mapData = MapDataSet(
-			intersections: [
-				IntersectionCandidate(
-					id: "ahead-on-road",
-					names: ["Oak Street", "Ahead Street"],
-					coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0006)
-				),
-				IntersectionCandidate(
-					id: "behind-on-road",
-					names: ["Oak Street", "Behind Street"],
-					coordinate: CLLocationCoordinate2D(latitude: 36.999, longitude: -121.9994)
-				)
-			],
-			roads: [
-				MapRoad(
-					id: "oak",
-					name: "Oak Street",
-					nodeIDs: [1, 2],
-					coordinates: [
-						CLLocationCoordinate2D(latitude: 36.999, longitude: -121.9994),
-						CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0006)
-					]
-				)
-			]
-		)
-
-		let ranked = IntersectionFinder().rankedUpcoming(
-			from: DeviceContext(coordinate: origin, headingDegrees: 0),
-			in: mapData
-		)
-
-		#expect(ranked.map(\.id) == ["ahead-on-road"])
-	}
-
-	@Test func rankedUpcomingFillsPartialRoadResultsWithHeadingCandidates() async throws {
-		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let first = CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+		let second = CLLocationCoordinate2D(latitude: 37.001, longitude: -121.999)
+		let third = CLLocationCoordinate2D(latitude: 37.002, longitude: -121.999)
+		let sameNameBranch = CLLocationCoordinate2D(latitude: 37.0005, longitude: -121.9995)
 		let mapData = MapDataSet(
 			intersections: [
 				IntersectionCandidate(
 					id: "first-on-road",
 					names: ["Oak Street", "First Street"],
-					coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0004)
-				),
-				IntersectionCandidate(
-					id: "second-heading",
-					names: ["Second Avenue", "Cross Street"],
-					coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
-				),
-				IntersectionCandidate(
-					id: "third-heading",
-					names: ["Third Avenue", "Cross Street"],
-					coordinate: CLLocationCoordinate2D(latitude: 37.003, longitude: -122.0)
-				)
-			],
-			roads: [
-				MapRoad(
-					id: "oak",
-					name: "Oak Street",
-					nodeIDs: [1, 2],
-					coordinates: [
-						CLLocationCoordinate2D(latitude: 36.999, longitude: -121.9996),
-						CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0004)
-					]
-				)
-			]
-		)
-
-		let ranked = IntersectionFinder().rankedUpcoming(
-			from: DeviceContext(coordinate: origin, headingDegrees: 0),
-			in: mapData
-		)
-
-		#expect(ranked.map(\.id) == ["first-on-road", "second-heading", "third-heading"])
-	}
-
-	@Test func upcomingSequenceKeepsRoadOrderBeforeUnrelatedHeadingCandidates() async throws {
-		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
-		let mapData = MapDataSet(
-			intersections: [
-				IntersectionCandidate(
-					id: "first-on-road",
-					names: ["Oak Street", "First Street"],
-					coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+					coordinate: first
 				),
 				IntersectionCandidate(
 					id: "second-on-road",
 					names: ["Oak Street", "Second Street"],
-					coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+					coordinate: second
 				),
 				IntersectionCandidate(
-					id: "closer-heading-only",
-					names: ["Pine Avenue", "Closer Street"],
-					coordinate: CLLocationCoordinate2D(latitude: 37.0005, longitude: -122.0)
+					id: "third-on-road",
+					names: ["Oak Street", "Third Street"],
+					coordinate: third
+				),
+				IntersectionCandidate(
+					id: "off-road",
+					names: ["Pine Avenue", "Nearby Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.0005, longitude: -121.9998)
+				),
+				IntersectionCandidate(
+					id: "same-name-branch",
+					names: ["Oak Street", "Branch Street"],
+					coordinate: sameNameBranch
 				)
 			],
 			roads: [
 				MapRoad(
+					id: "pine-crossing",
+					name: "Pine Avenue",
+					nodeIDs: [10, 11],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 37.0, longitude: -122.001),
+						CLLocationCoordinate2D(latitude: 37.0, longitude: -121.999)
+					]
+				),
+				MapRoad(
 					id: "oak",
 					name: "Oak Street",
-					nodeIDs: [1, 2],
+					nodeIDs: [1, 2, 3, 4],
 					coordinates: [
 						CLLocationCoordinate2D(latitude: 36.999, longitude: -122.0),
-						CLLocationCoordinate2D(latitude: 37.003, longitude: -122.0)
+						first,
+						second,
+						third
 					]
+				),
+				MapRoad(
+					id: "oak-branch",
+					name: "Oak Street",
+					nodeIDs: [3, 5],
+					coordinates: [second, sameNameBranch]
 				)
 			]
 		)
@@ -1252,7 +1073,7 @@ struct IntersectorTests {
 			in: mapData
 		)
 
-		#expect(sequence.map(\.id) == ["first-on-road", "second-on-road", "closer-heading-only"])
+		#expect(sequence.map(\.id) == ["first-on-road", "second-on-road", "third-on-road"])
 	}
 
 	@Test func upcomingSequenceCanIncludeForwardCrossingOnRoad() async throws {
@@ -1279,9 +1100,12 @@ struct IntersectorTests {
 				MapRoad(
 					id: "oak",
 					name: "Oak Street",
-					nodeIDs: [1, 2],
+					nodeIDs: [1, 2, 3, 4, 5],
 					coordinates: [
 						CLLocationCoordinate2D(latitude: 36.999, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 37.0015, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0),
 						CLLocationCoordinate2D(latitude: 37.003, longitude: -122.0)
 					]
 				)
@@ -1535,7 +1359,7 @@ struct IntersectorTests {
 					coordinate: CLLocationCoordinate2D(latitude: 37.003, longitude: -122.0)
 				)
 			],
-			roads: []
+			roads: [northboundOakRoad(near: origin)]
 		)
 		let service = OrientSvc(
 			locationProvider: FakeLocationProvider(
@@ -1561,9 +1385,9 @@ struct IntersectorTests {
 		#expect(!text.contains("Third Street"))
 	}
 
-	@Test func explicitRankedUpcomingUsesFreshMapData() async throws {
+	@Test func explicitRankedUpcomingUsesFocusedRoadData() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
-		let mapDataClient = RankedFreshMapDataClient()
+		let mapDataClient = RankedFocusedMapDataClient()
 		let service = OrientSvc(
 			locationProvider: FakeLocationProvider(
 				context: DeviceContext(coordinate: origin, headingDegrees: 0)
@@ -1583,7 +1407,7 @@ struct IntersectorTests {
 		let thirdReport = try await service.report(.upcoming, rank: 3, prefs: prefs)
 
 		#expect(thirdReport.cross == "Oak Street and Third Street")
-		#expect(await mapDataClient.freshMapRequestCount > 0)
+		#expect(await mapDataClient.focusedRoadRequestCount == 1)
 	}
 
 	@Test func rankedUpcomingReusesLastUpcomingSnapshotWhenHeadingStillMatches() async throws {
@@ -1606,7 +1430,7 @@ struct IntersectorTests {
 					coordinate: CLLocationCoordinate2D(latitude: 37.0, longitude: -121.999)
 				)
 			],
-			roads: []
+			roads: [northboundOakRoad(near: origin)]
 		)
 		let locationProvider = SequentialLocationProvider(contexts: [
 			DeviceContext(coordinate: origin, headingDegrees: 0),
@@ -1708,7 +1532,7 @@ struct IntersectorTests {
 							coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
 						)
 					],
-					roads: []
+					roads: [northboundOakRoad(near: origin)]
 				)
 			),
 			neighborhoodProvider: FailingNeighborhoodProvider()
@@ -2449,7 +2273,7 @@ struct IntersectorTests {
 		])
 	}
 
-	@Test func thirdUpcomingStillExpandsRadiusWhenCacheIsMissing() async throws {
+	@Test func thirdUpcomingUsesOneFocusedRoadExpansion() async throws {
 		var prefs = AppPrefs()
 		prefs.areaMode = .off
 		let mapClient = AdaptiveMapDataClient()
@@ -2467,28 +2291,7 @@ struct IntersectorTests {
 		let report = try await service.report(.upcoming, rank: 3, prefs: prefs)
 
 		#expect(report.cross == "Oak Street and Third Street")
-		#expect(await mapClient.requestedRadii == [225, 375, 750])
-	}
-
-	@Test func thirdUpcomingUsesDistinctResultsAndRetainsSuccessfulExpansionData() async throws {
-		var prefs = AppPrefs()
-		prefs.areaMode = .off
-		let mapClient = ThirdUpcomingFallbackMapDataClient()
-		let service = OrientSvc(
-			locationProvider: FakeLocationProvider(
-				context: DeviceContext(
-					coordinate: CLLocationCoordinate2D(latitude: 0, longitude: 0),
-					headingDegrees: 0
-				)
-			),
-			mapDataClient: mapClient,
-			neighborhoodProvider: FailingNeighborhoodProvider()
-		)
-
-		let report = try await service.report(.upcoming, rank: 3, prefs: prefs)
-
-		#expect(report.cross == "Oak Street and Wider Street")
-		#expect(await mapClient.requestedRadii == [225, 375, 750, 1_200, 1_800, 2_400])
+		#expect(await mapClient.requestedRadii == [225, 1_200])
 	}
 
 	@Test func rankedUpcomingRetriesExpandedCrossingFailuresWithoutDroppingRoadResults() async throws {
@@ -2510,11 +2313,9 @@ struct IntersectorTests {
 		let report = try await service.report(.upcoming, rank: 3, prefs: prefs)
 
 		#expect(report.cross == "Oak Street and Third Street")
-		#expect(await mapClient.requestedRadii == [225, 375, 375, 750, 750])
+		#expect(await mapClient.requestedRadii == [225, 1_200, 1_200])
 		#expect(await mapClient.requestedOptions == [
 			MapDetailOptions(includeCrossings: true),
-			MapDetailOptions(includeCrossings: true),
-			MapDetailOptions(),
 			MapDetailOptions(includeCrossings: true),
 			MapDetailOptions()
 		])
@@ -2611,6 +2412,18 @@ private func rankedStreetData(origin: CLLocationCoordinate2D) -> MapDataSet {
 					CLLocationCoordinate2D(latitude: origin.latitude + 0.003, longitude: origin.longitude)
 				]
 			)
+		]
+	)
+}
+
+private func northboundOakRoad(near origin: CLLocationCoordinate2D) -> MapRoad {
+	MapRoad(
+		id: "oak",
+		name: "Oak Street",
+		nodeIDs: [1, 2],
+		coordinates: [
+			CLLocationCoordinate2D(latitude: origin.latitude - 0.002, longitude: origin.longitude),
+			CLLocationCoordinate2D(latitude: origin.latitude + 0.005, longitude: origin.longitude)
 		]
 	)
 }
@@ -2737,8 +2550,8 @@ struct StaticMapDataClient: MapDataFetching {
 	}
 }
 
-actor RankedFreshMapDataClient: MapDataFetching {
-	private(set) var freshMapRequestCount = 0
+actor RankedFocusedMapDataClient: MapDataFetching {
+	private(set) var focusedRoadRequestCount = 0
 
 	func intersections(
 		near coordinate: CLLocationCoordinate2D,
@@ -2760,12 +2573,13 @@ actor RankedFreshMapDataClient: MapDataFetching {
 		rankedData(near: coordinate, count: 1)
 	}
 
-	func freshMapData(
+	func roadMapData(
 		near coordinate: CLLocationCoordinate2D,
+		roadName: String,
 		radiusMeters: CLLocationDistance,
 		options: MapDetailOptions
 	) async throws -> MapDataSet {
-		freshMapRequestCount += 1
+		focusedRoadRequestCount += 1
 		return rankedData(near: coordinate, count: 3)
 	}
 
@@ -2784,7 +2598,10 @@ actor RankedFreshMapDataClient: MapDataFetching {
 				)
 			)
 		}
-		return MapDataSet(intersections: candidates, roads: [])
+		return MapDataSet(
+			intersections: candidates,
+			roads: [northboundOakRoad(near: coordinate)]
+		)
 	}
 }
 
@@ -2842,70 +2659,6 @@ actor AdaptiveMapDataClient: MapDataFetching {
 					]
 				)
 			]
-		)
-	}
-}
-
-actor ThirdUpcomingFallbackMapDataClient: MapDataFetching {
-	private(set) var requestedRadii: [CLLocationDistance] = []
-
-	func intersections(
-		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance,
-		options: MapDetailOptions
-	) async throws -> [IntersectionCandidate] {
-		try await mapData(
-			near: coordinate,
-			radiusMeters: radiusMeters,
-			options: options
-		).intersections
-	}
-
-	func mapData(
-		near coordinate: CLLocationCoordinate2D,
-		radiusMeters: CLLocationDistance,
-		options: MapDetailOptions
-	) async throws -> MapDataSet {
-		requestedRadii.append(radiusMeters)
-		if requestedRadii.count > 1 {
-			throw URLError(.timedOut)
-		}
-		return MapDataSet(
-			intersections: [
-				IntersectionCandidate(
-					id: "first-duplicate",
-					names: ["Oak Street", "First Street"],
-					coordinate: CLLocationCoordinate2D(
-						latitude: coordinate.latitude + 0.0015,
-						longitude: coordinate.longitude
-					)
-				),
-				IntersectionCandidate(
-					id: "first-ahead",
-					names: ["Oak Street", "First Street"],
-					coordinate: CLLocationCoordinate2D(
-						latitude: coordinate.latitude + 0.001,
-						longitude: coordinate.longitude
-					)
-				),
-				IntersectionCandidate(
-					id: "second-ahead",
-					names: ["Oak Street", "Second Street"],
-					coordinate: CLLocationCoordinate2D(
-						latitude: coordinate.latitude + 0.002,
-						longitude: coordinate.longitude
-					)
-				),
-				IntersectionCandidate(
-					id: "wider-third",
-					names: ["Oak Street", "Wider Street"],
-					coordinate: CLLocationCoordinate2D(
-						latitude: coordinate.latitude + 0.003,
-						longitude: coordinate.longitude + 0.00173
-					)
-				)
-			],
-			roads: []
 		)
 	}
 }

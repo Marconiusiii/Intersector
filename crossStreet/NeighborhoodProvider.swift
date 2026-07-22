@@ -11,7 +11,8 @@ import Foundation
 struct NeighborhoodProvider: NeighborhoodProviding {
 	var endpoint = URL(string: "https://overpass-api.de/api/interpreter")!
 	var fallbackEndpoints = [
-		URL(string: "https://overpass.kumi.systems/api/interpreter")!
+		URL(string: "https://overpass.private.coffee/api/interpreter")!,
+		URL(string: "https://maps.mail.ru/osm/tools/overpass/api/interpreter")!
 	]
 	var session: URLSession = .shared
 	private static let cache = NeighborhoodCache()
@@ -68,8 +69,9 @@ struct NeighborhoodProvider: NeighborhoodProviding {
 	) async throws -> [NeighborhoodCandidate] {
 		var request = URLRequest(url: endpoint)
 		request.httpMethod = "POST"
-		request.timeoutInterval = 6
+		request.timeoutInterval = 12
 		request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
+		request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 		request.httpBody = query(
 			near: coordinate,
 			radiusMeters: radiusMeters
@@ -91,6 +93,11 @@ struct NeighborhoodProvider: NeighborhoodProviding {
 		}
 
 		return NeighborhoodBuilder().candidates(from: response)
+	}
+
+	private var userAgent: String {
+		let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+		return "Intersector/\(version) (com.marconius.crossStreet; marco@marconius.com)"
 	}
 
 	private func isTemporary(_ error: Error) -> Bool {
@@ -121,7 +128,7 @@ struct NeighborhoodProvider: NeighborhoodProviding {
 	) -> String {
 		let radius = Int(radiusMeters.rounded())
 		let body = """
-		[out:json][timeout:5];
+		[out:json][timeout:10];
 		(
 		  node(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["place"~"^(neighbourhood|quarter|suburb|locality)$"]["name"];
 		  way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["place"~"^(neighbourhood|quarter|suburb|locality)$"]["name"];

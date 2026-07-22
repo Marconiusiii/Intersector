@@ -406,6 +406,21 @@ struct MapRoad: Equatable, Identifiable {
 	var coordinates: [CLLocationCoordinate2D]
 }
 
+private struct RoadGraphEdge {
+	var nodeID: Int64
+	var distance: CLLocationDistance
+}
+
+private struct RoadStartSegment {
+	var startNodeID: Int64
+	var endNodeID: Int64
+	var length: CLLocationDistance
+	var projection: Double
+	var distance: CLLocationDistance
+	var tangentX: Double
+	var tangentY: Double
+}
+
 struct MapDataSet: Equatable {
 	var intersections: [IntersectionCandidate]
 	var roads: [MapRoad]
@@ -424,6 +439,10 @@ struct MapDataSet: Equatable {
 
 	func currentStreetIntersections(from coordinate: CLLocationCoordinate2D) -> [IntersectionCandidate] {
 		currentStreetScanTargets(from: coordinate, includeCrossings: false)
+	}
+
+	func currentRoadName(from context: DeviceContext) -> String? {
+		currentRoad(from: context)?.name
 	}
 
 	func currentStreetScanTargets(
@@ -446,27 +465,58 @@ struct MapDataSet: Equatable {
 			}
 	}
 
-		func upcomingRoadSequence(from context: DeviceContext) -> [IntersectionCandidate]? {
-			guard
-				let direction = context.headingDegrees,
-				let road = nearestRoad(to: context.coordinate),
-			road.minimumDistance(to: context.coordinate) <= currentRoadDistanceThreshold(for: context),
-			let directionSign = road.directionSign(for: direction, at: context.coordinate)
+	func upcomingRoadSequence(from context: DeviceContext) -> [IntersectionCandidate]? {
+		guard
+			let heading = context.headingDegrees,
+			let road = currentRoad(from: context)
 		else {
 			return nil
 		}
 
+		let matchingRoads = roads.filter { $0.name == road.name }
+		let graph = roadGraph(from: matchingRoads)
+		guard
+			let start = nearestRoadSegment(to: context.coordinate, in: matchingRoads),
+			start.distance <= currentRoadDistanceThreshold(for: context)
+		else {
+			return nil
+		}
+
+		let radians = heading * Double.pi / 180
+		let headingX = sin(radians)
+		let headingY = cos(radians)
+		let alignment = headingX * start.tangentX + headingY * start.tangentY
+		guard abs(alignment) >= 0.35 else {
+			return nil
+		}
+
+		let forwardNodeID = alignment >= 0 ? start.endNodeID : start.startNodeID
+		let backwardNodeID = alignment >= 0 ? start.startNodeID : start.endNodeID
+		let distanceToForwardNode = alignment >= 0
+			? start.length * (1 - start.projection)
+			: start.length * start.projection
+		let routeDistances = roadDistances(
+			from: forwardNodeID,
+			initialDistance: distanceToForwardNode,
+			blockedFirstNode: backwardNodeID,
+			adjacency: graph.adjacency,
+			coordinates: graph.coordinates
+		)
+
 		let positioned = intersections
 			.filter { $0.roadNames.contains(road.name) }
 			.compactMap { candidate -> (candidate: IntersectionCandidate, progress: CLLocationDistance)? in
-				guard let distance = road.signedDistanceAlongRoad(
-					from: context.coordinate,
-					to: candidate.coordinate
-				) else {
-					return nil
-				}
-				let progress = distance * directionSign
-				guard progress > 3 else {
+				guard
+					let progress = routeProgress(
+						to: candidate.coordinate,
+						start: start,
+						alignment: alignment,
+						coordinates: graph.coordinates,
+						adjacency: graph.adjacency,
+						distances: routeDistances
+					),
+					progress > 3
+				else {
 					return nil
 				}
 				return (candidate, progress)
@@ -479,11 +529,8 @@ struct MapDataSet: Equatable {
 					< Geo.distanceMeters(from: context.coordinate, to: rhs.candidate.coordinate)
 			}
 
-		guard !positioned.isEmpty else {
-			return nil
-			}
-			return positioned.map(\.candidate)
-		}
+		return positioned.isEmpty ? nil : positioned.map(\.candidate)
+	}
 
 	func streetPosition(
 		from context: DeviceContext,
@@ -572,9 +619,245 @@ struct MapDataSet: Equatable {
 		}
 	}
 
+	private func currentRoad(from context: DeviceContext) -> MapRoad? {
+		guard let heading = context.headingDegrees else {
+			return nil
+		}
+		let threshold = currentRoadDistanceThreshold(for: context)
+		return roads
+			.compactMap { road -> (road: MapRoad, score: Double)? in
+				let distance = road.minimumDistance(to: context.coordinate)
+				guard
+					distance <= threshold,
+					let directionSign = road.directionSign(for: heading, at: context.coordinate),
+					abs(directionSign) >= 0.35
+				else {
+					return nil
+				}
+				let alignmentPenalty = (1 - abs(directionSign)) * 40
+				return (road, distance + alignmentPenalty)
+			}
+			.min { $0.score < $1.score }?
+			.road
+	}
+
 	private func currentRoadDistanceThreshold(for context: DeviceContext) -> CLLocationDistance {
 		let accuracy = context.horizontalAccuracy ?? 25
 		return max(25, min(accuracy + 10, 60))
+	}
+
+	private func roadGraph(
+		from roads: [MapRoad]
+	) -> (adjacency: [Int64: [RoadGraphEdge]], coordinates: [Int64: CLLocationCoordinate2D]) {
+		var adjacency: [Int64: [RoadGraphEdge]] = [:]
+		var coordinates: [Int64: CLLocationCoordinate2D] = [:]
+		for road in roads where road.nodeIDs.count == road.coordinates.count && road.nodeIDs.count > 1 {
+			for (nodeID, coordinate) in zip(road.nodeIDs, road.coordinates) {
+				coordinates[nodeID] = coordinate
+			}
+			for index in 0..<(road.nodeIDs.count - 1) {
+				let startNodeID = road.nodeIDs[index]
+				let endNodeID = road.nodeIDs[index + 1]
+				let distance = Geo.distanceMeters(
+					from: road.coordinates[index],
+					to: road.coordinates[index + 1]
+				)
+				guard distance > 0 else {
+					continue
+				}
+				adjacency[startNodeID, default: []].append(
+					RoadGraphEdge(nodeID: endNodeID, distance: distance)
+				)
+				adjacency[endNodeID, default: []].append(
+					RoadGraphEdge(nodeID: startNodeID, distance: distance)
+				)
+			}
+		}
+		return (adjacency, coordinates)
+	}
+
+	private func nearestRoadSegment(
+		to coordinate: CLLocationCoordinate2D,
+		in roads: [MapRoad]
+	) -> RoadStartSegment? {
+		roads
+			.filter { $0.nodeIDs.count == $0.coordinates.count && $0.nodeIDs.count > 1 }
+			.flatMap { road in
+				(0..<(road.nodeIDs.count - 1)).compactMap { index in
+					roadSegment(
+						from: coordinate,
+						startNodeID: road.nodeIDs[index],
+						start: road.coordinates[index],
+						endNodeID: road.nodeIDs[index + 1],
+						end: road.coordinates[index + 1]
+					)
+				}
+			}
+			.min { $0.distance < $1.distance }
+	}
+
+	private func roadSegment(
+		from origin: CLLocationCoordinate2D,
+		startNodeID: Int64,
+		start: CLLocationCoordinate2D,
+		endNodeID: Int64,
+		end: CLLocationCoordinate2D
+	) -> RoadStartSegment? {
+		let earthRadius = 6_371_000.0
+		let latitudeScale = Double.pi / 180
+		let longitudeScale = latitudeScale * cos(origin.latitude * latitudeScale)
+		let startX = (start.longitude - origin.longitude) * longitudeScale * earthRadius
+		let startY = (start.latitude - origin.latitude) * latitudeScale * earthRadius
+		let endX = (end.longitude - origin.longitude) * longitudeScale * earthRadius
+		let endY = (end.latitude - origin.latitude) * latitudeScale * earthRadius
+		let segmentX = endX - startX
+		let segmentY = endY - startY
+		let length = hypot(segmentX, segmentY)
+		guard length > 0 else {
+			return nil
+		}
+		let projection = min(1, max(0, -(startX * segmentX + startY * segmentY) / (length * length)))
+		let closestX = startX + projection * segmentX
+		let closestY = startY + projection * segmentY
+		return RoadStartSegment(
+			startNodeID: startNodeID,
+			endNodeID: endNodeID,
+			length: length,
+			projection: projection,
+			distance: hypot(closestX, closestY),
+			tangentX: segmentX / length,
+			tangentY: segmentY / length
+		)
+	}
+
+	private func roadDistances(
+		from startNodeID: Int64,
+		initialDistance: CLLocationDistance,
+		blockedFirstNode: Int64,
+		adjacency: [Int64: [RoadGraphEdge]],
+		coordinates: [Int64: CLLocationCoordinate2D]
+	) -> [Int64: CLLocationDistance] {
+		var distances = [startNodeID: initialDistance]
+		var visited: Set<Int64> = [blockedFirstNode, startNodeID]
+		var previousNodeID = blockedFirstNode
+		var currentNodeID = startNodeID
+		var currentDistance = initialDistance
+
+		while
+			let previousCoordinate = coordinates[previousNodeID],
+			let currentCoordinate = coordinates[currentNodeID]
+		{
+			let nextEdge = adjacency[currentNodeID, default: []]
+				.filter { !visited.contains($0.nodeID) && coordinates[$0.nodeID] != nil }
+				.max { lhs, rhs in
+					let lhsAlignment = continuationAlignment(
+						previous: previousCoordinate,
+						current: currentCoordinate,
+						next: coordinates[lhs.nodeID]!
+					)
+					let rhsAlignment = continuationAlignment(
+						previous: previousCoordinate,
+						current: currentCoordinate,
+						next: coordinates[rhs.nodeID]!
+					)
+					if abs(lhsAlignment - rhsAlignment) > 0.001 {
+						return lhsAlignment < rhsAlignment
+					}
+					return lhs.nodeID > rhs.nodeID
+				}
+			guard let nextEdge else {
+				break
+			}
+
+			currentDistance += nextEdge.distance
+			distances[nextEdge.nodeID] = currentDistance
+			previousNodeID = currentNodeID
+			currentNodeID = nextEdge.nodeID
+			visited.insert(currentNodeID)
+		}
+		return distances
+	}
+
+	private func continuationAlignment(
+		previous: CLLocationCoordinate2D,
+		current: CLLocationCoordinate2D,
+		next: CLLocationCoordinate2D
+	) -> Double {
+		let latitudeScale = Double.pi / 180
+		let longitudeScale = latitudeScale * cos(current.latitude * latitudeScale)
+		let incomingX = (current.longitude - previous.longitude) * longitudeScale
+		let incomingY = (current.latitude - previous.latitude) * latitudeScale
+		let outgoingX = (next.longitude - current.longitude) * longitudeScale
+		let outgoingY = (next.latitude - current.latitude) * latitudeScale
+		let incomingLength = hypot(incomingX, incomingY)
+		let outgoingLength = hypot(outgoingX, outgoingY)
+		guard incomingLength > 0, outgoingLength > 0 else {
+			return -1
+		}
+		return (incomingX * outgoingX + incomingY * outgoingY) / (incomingLength * outgoingLength)
+	}
+
+	private func routeProgress(
+		to coordinate: CLLocationCoordinate2D,
+		start: RoadStartSegment,
+		alignment: Double,
+		coordinates: [Int64: CLLocationCoordinate2D],
+		adjacency: [Int64: [RoadGraphEdge]],
+		distances: [Int64: CLLocationDistance]
+	) -> CLLocationDistance? {
+		if
+			let startCoordinate = coordinates[start.startNodeID],
+			let endCoordinate = coordinates[start.endNodeID],
+			let candidateSegment = roadSegment(
+				from: coordinate,
+				startNodeID: start.startNodeID,
+				start: startCoordinate,
+				endNodeID: start.endNodeID,
+				end: endCoordinate
+			),
+			candidateSegment.distance <= 15
+		{
+			let progress = alignment >= 0
+				? (candidateSegment.projection - start.projection) * start.length
+				: (start.projection - candidateSegment.projection) * start.length
+			return progress > 0 ? progress : nil
+		}
+
+		var best: CLLocationDistance?
+		for (startNodeID, edges) in adjacency {
+			guard let startCoordinate = coordinates[startNodeID] else {
+				continue
+			}
+			for edge in edges where startNodeID < edge.nodeID {
+				guard
+					let endCoordinate = coordinates[edge.nodeID],
+					let projection = roadSegment(
+						from: coordinate,
+						startNodeID: startNodeID,
+						start: startCoordinate,
+						endNodeID: edge.nodeID,
+						end: endCoordinate
+					),
+					projection.distance <= 15
+				else {
+					continue
+				}
+				guard
+					let startDistance = distances[startNodeID],
+					let endDistance = distances[edge.nodeID],
+					abs(abs(endDistance - startDistance) - projection.length) <= max(1, projection.length * 0.01)
+				else {
+					continue
+				}
+				let value = startDistance < endDistance
+					? startDistance + projection.projection * projection.length
+					: endDistance + (1 - projection.projection) * projection.length
+				if value > 0, best == nil || value < best! {
+					best = value
+				}
+			}
+		}
+		return best
 	}
 
 	private func splitIntersectionCandidates(
