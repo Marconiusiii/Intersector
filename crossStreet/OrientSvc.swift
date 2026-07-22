@@ -174,23 +174,52 @@ struct OrientSvc {
 		rank: Int = 1,
 		prefs: AppPrefs = AppPrefs()
 	) async throws -> OrientReport {
-		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming || kind == .scan)
+		var context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming || kind == .scan)
 		let requiresRankedRoadLookup = kind == .upcoming && rank > 1
 		let lookupPrefs = await prefsForFirstLookup(kind: kind, rank: rank, prefs: prefs)
-		let mapData = try await mapData(
-			for: kind,
-			from: context,
-			minimumCandidateCount: rank,
-			prefs: lookupPrefs,
-			allowsRankedExpansion: requiresRankedRoadLookup
-		)
+		var mapData = if kind == .upcoming, rank == 1 {
+			try await initialUpcomingMapData(from: context, prefs: lookupPrefs)
+		} else {
+			try await mapData(
+				for: kind,
+				from: context,
+				minimumCandidateCount: rank,
+				prefs: lookupPrefs,
+				allowsRankedExpansion: requiresRankedRoadLookup
+			)
+		}
 		if kind == .upcoming {
-			let reports = await upcomingReports(
+			var reports = await upcomingReports(
 				from: context,
 				mapData: mapData,
 				prefs: prefs,
 				maxCount: rank == 1 ? 1 : 3
 			)
+			if reports.isEmpty,
+			   let retryContext = try? await locationProvider.currentContext(requiresFreshHeading: true) {
+				let retryReports = await upcomingReports(
+					from: retryContext,
+					mapData: mapData,
+					prefs: prefs,
+					maxCount: rank == 1 ? 1 : 3
+				)
+				context = retryContext
+				reports = retryReports
+			}
+			if reports.isEmpty, rank == 1 {
+				mapData = try await self.mapData(
+					for: kind,
+					from: context,
+					minimumCandidateCount: 1,
+					prefs: lookupPrefs
+				)
+				reports = await upcomingReports(
+					from: context,
+					mapData: mapData,
+					prefs: prefs,
+					maxCount: 1
+				)
+			}
 			await upcomingCache.store(reports: reports, prefs: prefs, context: context)
 			guard reports.indices.contains(rank - 1) else {
 				throw OrientError.noIntersections
@@ -214,16 +243,20 @@ struct OrientSvc {
 			return try await report(kind, prefs: prefs).text(with: prefs)
 		}
 
-		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming || kind == .scan)
+		var context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming || kind == .scan)
 		let requestedCount = prefs.spokenIntersectionCount.rawValue
 		let resultCount = requestedCount
 		let firstLookupPrefs = await prefsForFirstLookup(kind: kind, rank: 1, prefs: prefs)
-		let firstMapData = try await mapData(
-			for: kind,
-			from: context,
-			minimumCandidateCount: 1,
-			prefs: firstLookupPrefs
-		)
+		var firstMapData = if kind == .upcoming {
+			try await initialUpcomingMapData(from: context, prefs: firstLookupPrefs)
+		} else {
+			try await mapData(
+				for: kind,
+				from: context,
+				minimumCandidateCount: 1,
+				prefs: firstLookupPrefs
+			)
+		}
 		var reports = await spokenReports(
 			for: kind,
 			from: context,
@@ -231,6 +264,33 @@ struct OrientSvc {
 			prefs: prefs,
 			maxCount: resultCount
 		)
+		if kind == .upcoming, reports.isEmpty,
+		   let retryContext = try? await locationProvider.currentContext(requiresFreshHeading: true) {
+			let retryReports = await spokenReports(
+				for: kind,
+				from: retryContext,
+				mapData: firstMapData,
+				prefs: prefs,
+				maxCount: resultCount
+			)
+			context = retryContext
+			reports = retryReports
+		}
+		if kind == .upcoming, reports.isEmpty {
+			firstMapData = try await mapData(
+				for: kind,
+				from: context,
+				minimumCandidateCount: 1,
+				prefs: firstLookupPrefs
+			)
+			reports = await spokenReports(
+				for: kind,
+				from: context,
+				mapData: firstMapData,
+				prefs: prefs,
+				maxCount: resultCount
+			)
+		}
 		guard !reports.isEmpty else {
 			throw OrientError.noIntersections
 		}
@@ -269,13 +329,28 @@ struct OrientSvc {
 			return prefs
 		}
 		switch kind {
-		case .nearest, .upcoming:
+		case .nearest:
 			var lookupPrefs = prefs
 			lookupPrefs.mapDetails.includeWalkingPaths = false
 			return lookupPrefs
-		case .scan:
+		case .upcoming, .scan:
 			return prefs
 		}
+	}
+
+	private func initialUpcomingMapData(
+		from context: DeviceContext,
+		prefs: AppPrefs
+	) async throws -> MapDataSet {
+		try await mapData(
+			for: .upcoming,
+			from: context,
+			radius: 225,
+			minimumCandidateCount: 1,
+			prefs: prefs,
+			previousData: MapDataSet(intersections: [], roads: []),
+			bypassesCache: false
+		)
 	}
 
 	private func mapDataForSpokenExpansion(
@@ -577,6 +652,13 @@ struct OrientSvc {
 		bypassesCache: Bool
 	) async throws -> MapDataSet {
 		if minimumCandidateCount == 1, kind != .scan {
+			if kind == .upcoming, prefs.mapDetails.includeWalkingPaths {
+				return try await mapDataClient.mapData(
+					near: context.coordinate,
+					radiusMeters: radius,
+					options: prefs.mapDetails
+				)
+			}
 			return try await mapDataClient.immediateMapData(
 				near: context.coordinate,
 				radiusMeters: radius,

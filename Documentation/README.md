@@ -425,7 +425,7 @@ manager.stopUpdatingLocation()
 
 That matters because location updates can continue until stopped. Good app code starts expensive system work only when needed and stops it when the task is done.
 
-Heading updates are handled similarly. Point and Scan keeps heading updates active while scanning. Other one-shot heading requests stop when they are finished if no stream still needs them.
+Heading updates are handled similarly. Point and Scan keeps heading updates active while scanning. A one-shot fresh heading ignores invalid Core Location samples and briefly collects updates before using the latest value, which avoids treating the first intermediate reading during a quick phone movement as settled. If Upcoming still cannot align that heading with the loaded road geometry, it requests one more settled heading and reevaluates the same map data without forcing another network request. Other one-shot heading requests stop when they are finished if no stream still needs them.
 
 ## MapDataClient
 
@@ -471,7 +471,7 @@ Important pieces:
 - `name` means the app only asks for named ways.
 - `(._;>;);` also asks for the nodes that make up those ways.
 
-Standard street data is always included. Named walking paths are included only when Walking Paths is turned on. Crossing nodes are included only when Crossings is turned on.
+Standard street data is always included. Named walking paths are included from the first Upcoming lookup when Walking Paths is turned on, allowing Upcoming to follow a named park path and find its mapped junctions. The query deliberately requires names, so an unnamed path cannot produce a named intersection and is not used as a guessed result. Crossing nodes are included only when Crossings is turned on.
 
 OpenStreetMap ways are made from nodes. A way might be a street, and each node is a point along that street. Intersections are found by looking for nodes shared by two or more named ways.
 
@@ -804,7 +804,7 @@ Intersection wording uses a segmented control. Direct wording names both roads a
 
 Map detail controls whether extra OpenStreetMap details are included in the lookup. Crossings can add mapped crossing points on a named road. Walking Paths can include named paths such as footways when they intersect with streets or other named paths.
 
-Walking Paths remains off by default. The Settings explanation makes clear that leaving it off keeps results focused on the street grid.
+Walking Paths remains off by default. When enabled, first Upcoming as well as ranked Upcoming can follow a named mapped path and report its junction with a named street or another named path. Unnamed paths remain excluded because the app cannot provide an accurate intersection name for them. The Settings explanation makes clear that leaving the option off keeps results focused on the street grid.
 
 Announcement content uses three toggles: Distance, Direction, and Neighborhood. The intersection name is always included. Turning all three toggles off gives compact intersection-name-only output. When several results share the same street, compact output names that street in the first intersection and then lists the remaining cross streets, such as `Amsterdam Avenue and West 93rd Street, West 94th Street`. When the results do not share a street, each intersection remains complete, such as `Foothill Boulevard and Frazier Avenue, Stanley Avenue and Talbot Avenue`.
 

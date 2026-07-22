@@ -252,16 +252,20 @@ struct WatchOrientationService {
 			return try await report(kind, prefs: prefs).text(with: prefs)
 		}
 
-		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming)
+		var context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming)
 		let requestedCount = prefs.spokenIntersectionCount.rawValue
 		let resultCount = requestedCount
 		let firstLookupPrefs = await prefsForFirstLookup(kind: kind, rank: 1, prefs: prefs)
-		let firstMapData = try await mapData(
-			for: kind,
-			from: context,
-			minimumCandidateCount: 1,
-			prefs: firstLookupPrefs
-		)
+		var firstMapData = if kind == .upcoming {
+			try await initialUpcomingMapData(from: context, prefs: firstLookupPrefs)
+		} else {
+			try await mapData(
+				for: kind,
+				from: context,
+				minimumCandidateCount: 1,
+				prefs: firstLookupPrefs
+			)
+		}
 		var reports = await spokenReports(
 			for: kind,
 			from: context,
@@ -269,6 +273,33 @@ struct WatchOrientationService {
 			prefs: prefs,
 			maxCount: resultCount
 		)
+		if kind == .upcoming, reports.isEmpty,
+		   let retryContext = try? await locationProvider.currentContext(requiresFreshHeading: true) {
+			let retryReports = await spokenReports(
+				for: kind,
+				from: retryContext,
+				mapData: firstMapData,
+				prefs: prefs,
+				maxCount: resultCount
+			)
+			context = retryContext
+			reports = retryReports
+		}
+		if kind == .upcoming, reports.isEmpty {
+			firstMapData = try await mapData(
+				for: kind,
+				from: context,
+				minimumCandidateCount: 1,
+				prefs: firstLookupPrefs
+			)
+			reports = await spokenReports(
+				for: kind,
+				from: context,
+				mapData: firstMapData,
+				prefs: prefs,
+				maxCount: resultCount
+			)
+		}
 		guard !reports.isEmpty else {
 			throw WatchReportError.noIntersections
 		}
@@ -368,16 +399,20 @@ struct WatchOrientationService {
 
 	@MainActor
 	func report(_ kind: WatchReportKind, rank: Int = 1, prefs: WatchAppPrefs) async throws -> WatchOrientationReport {
-		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming)
+		var context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming)
 		let lookupPrefs = await prefsForFirstLookup(kind: kind, rank: rank, prefs: prefs)
-		let mapData = try await mapData(
-			for: kind,
-			from: context,
-			minimumCandidateCount: rank,
-			prefs: lookupPrefs,
-			allowsRankedExpansion: rank > 1
-		)
-		let match = if kind == .nearest {
+		var mapData = if kind == .upcoming, rank == 1 {
+			try await initialUpcomingMapData(from: context, prefs: lookupPrefs)
+		} else {
+			try await mapData(
+				for: kind,
+				from: context,
+				minimumCandidateCount: rank,
+				prefs: lookupPrefs,
+				allowsRankedExpansion: rank > 1
+			)
+		}
+		var match = if kind == .nearest {
 			finder.nearest(rank: rank, from: context.coordinate, in: mapData.intersections)
 		} else {
 			finder.upcoming(
@@ -385,6 +420,21 @@ struct WatchOrientationService {
 				from: context,
 				in: mapData
 			)
+		}
+		if kind == .upcoming, match == nil,
+		   let retryContext = try? await locationProvider.currentContext(requiresFreshHeading: true) {
+			let retryMatch = finder.upcoming(rank: rank, from: retryContext, in: mapData)
+			context = retryContext
+			match = retryMatch
+		}
+		if kind == .upcoming, match == nil, rank == 1 {
+			mapData = try await self.mapData(
+				for: kind,
+				from: context,
+				minimumCandidateCount: 1,
+				prefs: lookupPrefs
+			)
+			match = finder.upcoming(rank: 1, from: context, in: mapData)
 		}
 		guard let match else {
 			throw WatchReportError.noIntersections
@@ -408,9 +458,26 @@ struct WatchOrientationService {
 		guard rank == 1 else {
 			return prefs
 		}
+		guard kind == .nearest else {
+			return prefs
+		}
 		var lookupPrefs = prefs
 		lookupPrefs.mapDetails.includeWalkingPaths = false
 		return lookupPrefs
+	}
+
+	private func initialUpcomingMapData(
+		from context: WatchDeviceContext,
+		prefs: WatchAppPrefs
+	) async throws -> WatchMapDataSet {
+		try await mapData(
+			for: .upcoming,
+			from: context,
+			radius: 225,
+			minimumCandidateCount: 1,
+			prefs: prefs,
+			previousData: WatchMapDataSet(intersections: [], roads: [])
+		)
 	}
 
 	private func makeReport(
@@ -553,6 +620,13 @@ struct WatchOrientationService {
 		previousData: WatchMapDataSet
 	) async throws -> WatchMapDataSet {
 		if minimumCandidateCount == 1 {
+			if kind == .upcoming, prefs.mapDetails.includeWalkingPaths {
+				return try await mapClient.mapData(
+					near: context.coordinate,
+					radiusMeters: radius,
+					options: prefs.mapDetails
+				)
+			}
 			return try await mapClient.immediateMapData(
 				near: context.coordinate,
 				radiusMeters: radius,
@@ -1594,6 +1668,8 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 	private var continuation: CheckedContinuation<WatchDeviceContext, Error>?
 	private var authorizationContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
 	private var headingContinuation: CheckedContinuation<CLLocationDirection, Error>?
+	private var headingTimeoutTask: Task<Void, Never>?
+	private var headingSettlingTask: Task<Void, Never>?
 	private var latestHeading: CLLocationDirection?
 	private var latestHeadingDate: Date?
 
@@ -1659,7 +1735,10 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 		manager.startUpdatingHeading()
 		return try await withCheckedThrowingContinuation { continuation in
 			headingContinuation = continuation
-			Task { [weak self] in
+			headingSettlingTask?.cancel()
+			headingSettlingTask = nil
+			headingTimeoutTask?.cancel()
+			headingTimeoutTask = Task { [weak self] in
 				let nanoseconds = UInt64(timeout * 1_000_000_000)
 				try? await Task.sleep(nanoseconds: nanoseconds)
 				await MainActor.run {
@@ -1721,13 +1800,26 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 		_ manager: CLLocationManager,
 		didUpdateHeading newHeading: CLHeading
 	) {
+		guard newHeading.headingAccuracy >= 0 else {
+			return
+		}
 		let heading = newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading
 		guard heading >= 0 else {
 			return
 		}
 		latestHeading = heading
 		latestHeadingDate = Date()
-		finishHeading(with: .success(heading))
+		if headingContinuation != nil, headingSettlingTask == nil {
+			headingSettlingTask = Task { [weak self] in
+				try? await Task.sleep(for: .milliseconds(250))
+				await MainActor.run {
+					guard let self, let settledHeading = self.latestHeading else {
+						return
+					}
+					self.finishHeading(with: .success(settledHeading))
+				}
+			}
+		}
 	}
 
 	private func finish(_ result: Result<WatchDeviceContext, Error>) {
@@ -1750,6 +1842,10 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 			return
 		}
 		self.headingContinuation = nil
+		headingTimeoutTask?.cancel()
+		headingTimeoutTask = nil
+		headingSettlingTask?.cancel()
+		headingSettlingTask = nil
 		stopHeadingIfIdle()
 		switch result {
 		case .success(let heading):

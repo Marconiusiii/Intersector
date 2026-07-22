@@ -1301,7 +1301,7 @@ struct ContentView: View {
 				Toggle("Include walking paths", isOn: walkingPathsBinding)
 					.accessibilityFocused($settingsFocusTarget, equals: .walkingPaths)
 			}
-			settingsHelperText("Keep Walking Paths off to focus results on the street grid.")
+			settingsHelperText("Includes named mapped paths in Upcoming and other intersection results. Unnamed paths cannot provide a named intersection. Keep this off to focus results on the street grid.")
 		}
 	}
 
@@ -1405,7 +1405,7 @@ struct ContentView: View {
 
 					helpSection(
 						title: "Map Detail",
-						body: "Crossings can include mapped crossing points on named roads. Walking Paths can include named paths such as footways. Keep Walking Paths off if you want results focused on the regular street grid."
+						body: "Crossings can include mapped crossing points on named roads. Walking Paths lets Upcoming follow named mapped paths and find their junctions with streets or other named paths. Unnamed paths cannot provide a named intersection. Keep Walking Paths off if you want results focused on the regular street grid."
 					)
 
 					helpSection(
@@ -1612,7 +1612,7 @@ struct ContentView: View {
 			loadingTask.cancel()
 			LoadingThrobber.stop()
 			isLookupProgressVisible = false
-			let text = reportFailureText(kind, rank: rank)
+			let text = reportFailureText(kind, rank: rank, error: error)
 			statusText = text
 			VoiceOverAnnouncer.reportUpdated(text)
 		}
@@ -1620,9 +1620,21 @@ struct ContentView: View {
 		isLoading = false
 	}
 
-	private func reportFailureText(_ kind: ReportKind, rank: Int) -> String {
+	private func reportFailureText(_ kind: ReportKind, rank: Int, error: Error) -> String {
 		if rank > 1 {
 			return "Intersector could not find the \(rankedFailureLabel(kind, rank: rank)). Please try again."
+		}
+		if let orientError = error as? OrientError {
+			switch orientError {
+			case .noIntersections where kind == .upcoming:
+				return "Intersector could not identify an Upcoming intersection for that direction. Please try again."
+			case .headingUnavailable:
+				return "Intersector could not get a stable direction yet. Please try again."
+			case .locationUnavailable:
+				return "Intersector could not get your location yet. Please try again."
+			default:
+				break
+			}
 		}
 		return "Intersector is having trouble loading map data. Please try again."
 	}

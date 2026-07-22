@@ -1457,6 +1457,32 @@ struct IntersectorTests {
 		#expect(await locationProvider.requestCount == 2)
 	}
 
+	@Test func upcomingRetriesASettledHeadingWithoutReloadingMapData() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let locationProvider = SequentialLocationProvider(contexts: [
+			DeviceContext(coordinate: origin, headingDegrees: 90),
+			DeviceContext(coordinate: origin, headingDegrees: 0)
+		])
+		let mapClient = ImmediateRecordingMapDataClient(
+			fullData: rankedStreetData(origin: origin),
+			immediateData: rankedStreetData(origin: origin)
+		)
+		let service = OrientSvc(
+			locationProvider: locationProvider,
+			mapDataClient: mapClient,
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+
+		let report = try await service.report(.upcoming, prefs: prefs)
+
+		#expect(report.cross == "Oak Street and First Street")
+		#expect(await locationProvider.requestCount == 2)
+		#expect(await mapClient.immediateOptions == [MapDetailOptions()])
+		#expect(await mapClient.fullOptions.isEmpty)
+	}
+
 	@Test func secondAndThirdUpcomingDoNotReturnSameIntersection() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let mapData = MapDataSet(
@@ -1590,10 +1616,10 @@ struct IntersectorTests {
 		#expect(await mapClient.fullOptions.isEmpty)
 	}
 
-	@Test func firstUpcomingCanReturnImmediateCrossingWhenCrossingsEnabled() async throws {
+	@Test func firstUpcomingPreservesEnabledWalkingPathOptions() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let mapClient = ImmediateRecordingMapDataClient(
-			fullData: rankedStreetData(origin: origin),
+			fullData: crossingFirstData(origin: origin),
 			immediateData: crossingFirstData(origin: origin)
 		)
 		let service = OrientSvc(
@@ -1608,8 +1634,64 @@ struct IntersectorTests {
 		let report = try await service.report(.upcoming, prefs: prefs)
 
 		#expect(report.cross == "Crossing on Oak Street near Pine Street")
-		#expect(await mapClient.immediateOptions == [MapDetailOptions(includeCrossings: true)])
-		#expect(await mapClient.fullOptions.isEmpty)
+		#expect(await mapClient.immediateOptions.isEmpty)
+		#expect(await mapClient.fullOptions == [MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)])
+	}
+
+	@Test func firstUpcomingCanFollowANamedWalkingPathWhenEnabled() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let junction = CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+		let pathData = MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: "garden-lake",
+					names: ["Garden Path", "Lake Path"],
+					coordinate: junction
+				)
+			],
+			roads: [
+				MapRoad(
+					id: "garden-path",
+					name: "Garden Path",
+					nodeIDs: [1, 2, 3],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 36.999, longitude: -122.0),
+						origin,
+						junction
+					]
+				),
+				MapRoad(
+					id: "lake-path",
+					name: "Lake Path",
+					nodeIDs: [4, 3, 5],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 37.001, longitude: -122.001),
+						junction,
+						CLLocationCoordinate2D(latitude: 37.001, longitude: -121.999)
+					]
+				)
+			]
+		)
+		let mapClient = ImmediateRecordingMapDataClient(
+			fullData: pathData,
+			immediateData: MapDataSet(intersections: [], roads: [])
+		)
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(coordinate: origin, headingDegrees: 0)
+			),
+			mapDataClient: mapClient,
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.mapDetails = MapDetailOptions(includeWalkingPaths: true)
+
+		let report = try await service.report(.upcoming, prefs: prefs)
+
+		#expect(report.cross == "Garden Path and Lake Path")
+		#expect(await mapClient.immediateOptions.isEmpty)
+		#expect(await mapClient.fullOptions == [MapDetailOptions(includeWalkingPaths: true)])
 	}
 
 	@Test func firstUpcomingUsesImmediateCoreLookupWhenCrossingsAreOff() async throws {

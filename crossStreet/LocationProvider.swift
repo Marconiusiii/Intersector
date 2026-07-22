@@ -20,6 +20,7 @@ final class LocationProvider: NSObject, LocationProviding {
 	private var prewarmTimeoutTask: Task<Void, Never>?
 	private var headingContinuation: CheckedContinuation<CLLocationDirection, Error>?
 	private var headingTimeoutTask: Task<Void, Never>?
+	private var headingSettlingTask: Task<Void, Never>?
 	private var latestHeading: CLLocationDirection?
 	private var latestHeadingDate: Date?
 	private var headingContinuations: [UUID: AsyncStream<CLLocationDirection>.Continuation] = [:]
@@ -158,6 +159,8 @@ final class LocationProvider: NSObject, LocationProviding {
 		manager.startUpdatingHeading()
 		return try await withCheckedThrowingContinuation { continuation in
 			headingContinuation = continuation
+			headingSettlingTask?.cancel()
+			headingSettlingTask = nil
 			headingTimeoutTask?.cancel()
 			headingTimeoutTask = Task { [weak self] in
 				let nanoseconds = UInt64(timeout * 1_000_000_000)
@@ -275,6 +278,8 @@ final class LocationProvider: NSObject, LocationProviding {
 		self.headingContinuation = nil
 		headingTimeoutTask?.cancel()
 		headingTimeoutTask = nil
+		headingSettlingTask?.cancel()
+		headingSettlingTask = nil
 
 		stopHeadingIfIdle()
 
@@ -344,11 +349,24 @@ extension LocationProvider: CLLocationManagerDelegate {
 		_ manager: CLLocationManager,
 		didUpdateHeading newHeading: CLHeading
 	) {
+		guard newHeading.headingAccuracy >= 0 else {
+			return
+		}
 		let heading = newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading
 		latestHeading = heading >= 0 ? heading : nil
 		if let latestHeading {
 			latestHeadingDate = Date()
-			finishHeading(with: .success(latestHeading))
+			if headingContinuation != nil, headingSettlingTask == nil {
+				headingSettlingTask = Task { [weak self] in
+					try? await Task.sleep(for: .milliseconds(250))
+					await MainActor.run {
+						guard let self, let settledHeading = self.latestHeading else {
+							return
+						}
+						self.finishHeading(with: .success(settledHeading))
+					}
+				}
+			}
 			for continuation in headingContinuations.values {
 				continuation.yield(latestHeading)
 			}
