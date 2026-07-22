@@ -367,9 +367,18 @@ struct WatchContentView: View {
 
 	private func reportFailureText(_ kind: WatchReportKind, rank: Int) -> String {
 		if rank > 1 {
-			return "Intersector could not find the \(reportLabel(kind, rank: rank)) intersection. Please try again."
+			return "Intersector could not find the \(rankedFailureLabel(kind, rank: rank)). Please try again."
 		}
 		return "Intersector is having trouble loading map data. Please try again."
+	}
+
+	private func rankedFailureLabel(_ kind: WatchReportKind, rank: Int) -> String {
+		switch kind {
+		case .nearest:
+			return "\(ordinal(rank)) Nearest intersection"
+		case .upcoming:
+			return "\(ordinal(rank)) Upcoming intersection"
+		}
 	}
 
 	private func updateDirection() async {

@@ -374,7 +374,8 @@ struct WatchOrientationService {
 			for: kind,
 			from: context,
 			minimumCandidateCount: rank,
-			prefs: lookupPrefs
+			prefs: lookupPrefs,
+			allowsRankedExpansion: rank > 1
 		)
 		let match = if kind == .nearest {
 			finder.nearest(rank: rank, from: context.coordinate, in: mapData.intersections)
@@ -452,9 +453,14 @@ struct WatchOrientationService {
 		for kind: WatchReportKind,
 		from context: WatchDeviceContext,
 		minimumCandidateCount: Int,
-		prefs: WatchAppPrefs
+		prefs: WatchAppPrefs,
+		allowsRankedExpansion: Bool = false
 	) async throws -> WatchMapDataSet {
-		let radii: [CLLocationDistance] = [225, 375, 750, 1_200]
+		let radii = lookupRadii(
+			for: kind,
+			minimumCandidateCount: minimumCandidateCount,
+			allowsRankedExpansion: allowsRankedExpansion
+		)
 		var latestData = WatchMapDataSet(intersections: [], roads: [])
 		for radius in radii {
 			latestData = try await mapData(
@@ -475,6 +481,20 @@ struct WatchOrientationService {
 			}
 		}
 		return latestData
+	}
+
+	private func lookupRadii(
+		for kind: WatchReportKind,
+		minimumCandidateCount: Int,
+		allowsRankedExpansion: Bool
+	) -> [CLLocationDistance] {
+		guard kind == .upcoming, minimumCandidateCount > 1, allowsRankedExpansion else {
+			return [225, 375, 750, 1_200]
+		}
+		if minimumCandidateCount >= 3 {
+			return [225, 375, 750, 1_200, 1_800, 2_400]
+		}
+		return [225, 375, 750, 1_200, 1_800]
 	}
 
 	private func mapData(

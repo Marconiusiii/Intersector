@@ -150,7 +150,8 @@ struct OrientSvc {
 			for: kind,
 			from: context,
 			minimumCandidateCount: rank,
-			prefs: lookupPrefs
+			prefs: lookupPrefs,
+			allowsRankedExpansion: rank > 1
 		)
 		if kind == .upcoming {
 			let reports = await upcomingReports(
@@ -443,9 +444,14 @@ struct OrientSvc {
 		for kind: ReportKind,
 		from context: DeviceContext,
 		minimumCandidateCount: Int,
-		prefs: AppPrefs
+		prefs: AppPrefs,
+		allowsRankedExpansion: Bool = false
 	) async throws -> MapDataSet {
-		let radii: [CLLocationDistance] = [225, 375, 750, 1_200]
+		let radii = lookupRadii(
+			for: kind,
+			minimumCandidateCount: minimumCandidateCount,
+			allowsRankedExpansion: allowsRankedExpansion
+		)
 		var latestData = MapDataSet(intersections: [], roads: [])
 
 		for radius in radii {
@@ -469,6 +475,20 @@ struct OrientSvc {
 		}
 
 		return latestData
+	}
+
+	private func lookupRadii(
+		for kind: ReportKind,
+		minimumCandidateCount: Int,
+		allowsRankedExpansion: Bool
+	) -> [CLLocationDistance] {
+		guard kind == .upcoming, minimumCandidateCount > 1, allowsRankedExpansion else {
+			return [225, 375, 750, 1_200]
+		}
+		if minimumCandidateCount >= 3 {
+			return [225, 375, 750, 1_200, 1_800, 2_400]
+		}
+		return [225, 375, 750, 1_200, 1_800]
 	}
 
 	private func mapData(
