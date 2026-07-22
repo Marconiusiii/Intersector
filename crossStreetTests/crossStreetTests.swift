@@ -1439,6 +1439,31 @@ struct IntersectorTests {
 		#expect(!text.contains("Third Street"))
 	}
 
+	@Test func explicitRankedUpcomingUsesFreshMapData() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapDataClient = RankedFreshMapDataClient()
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(coordinate: origin, headingDegrees: 0)
+			),
+			mapDataClient: mapDataClient,
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.announcementOptions = AnnouncementOptions(
+			includeDistance: false,
+			includeDirection: false,
+			includeNeighborhood: false
+		)
+
+		_ = try await service.report(.upcoming, prefs: prefs)
+		let thirdReport = try await service.report(.upcoming, rank: 3, prefs: prefs)
+
+		#expect(thirdReport.cross == "Oak Street and Third Street")
+		#expect(await mapDataClient.freshMapRequestCount > 0)
+	}
+
 	@Test func rankedUpcomingReusesLastUpcomingSnapshotWhenHeadingStillMatches() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let mapData = MapDataSet(
@@ -2566,6 +2591,57 @@ struct StaticMapDataClient: MapDataFetching {
 		options: MapDetailOptions
 	) async throws -> MapDataSet {
 		data
+	}
+}
+
+actor RankedFreshMapDataClient: MapDataFetching {
+	private(set) var freshMapRequestCount = 0
+
+	func intersections(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> [IntersectionCandidate] {
+		try await mapData(
+			near: coordinate,
+			radiusMeters: radiusMeters,
+			options: options
+		).intersections
+	}
+
+	func mapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> MapDataSet {
+		rankedData(near: coordinate, count: 1)
+	}
+
+	func freshMapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> MapDataSet {
+		freshMapRequestCount += 1
+		return rankedData(near: coordinate, count: 3)
+	}
+
+	private func rankedData(
+		near coordinate: CLLocationCoordinate2D,
+		count: Int
+	) -> MapDataSet {
+		let names = ["First Street", "Second Street", "Third Street"]
+		let candidates = (0..<count).map { index in
+			IntersectionCandidate(
+				id: "fresh-rank-\(index + 1)",
+				names: ["Oak Street", names[index]],
+				coordinate: CLLocationCoordinate2D(
+					latitude: coordinate.latitude + Double(index + 1) * 0.001,
+					longitude: coordinate.longitude
+				)
+			)
+		}
+		return MapDataSet(intersections: candidates, roads: [])
 	}
 }
 

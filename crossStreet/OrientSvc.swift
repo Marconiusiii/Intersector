@@ -52,6 +52,11 @@ protocol MapDataFetching {
 		radiusMeters: CLLocationDistance,
 		options: MapDetailOptions
 	) async throws -> MapDataSet
+	func freshMapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> MapDataSet
 	func immediateMapData(
 		near coordinate: CLLocationCoordinate2D,
 		radiusMeters: CLLocationDistance,
@@ -60,6 +65,18 @@ protocol MapDataFetching {
 }
 
 extension MapDataFetching {
+	func freshMapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions
+	) async throws -> MapDataSet {
+		try await mapData(
+			near: coordinate,
+			radiusMeters: radiusMeters,
+			options: options
+		)
+	}
+
 	func immediateMapData(
 		near coordinate: CLLocationCoordinate2D,
 		radiusMeters: CLLocationDistance,
@@ -138,20 +155,15 @@ struct OrientSvc {
 		prefs: AppPrefs = AppPrefs()
 	) async throws -> OrientReport {
 		let context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming || kind == .scan)
-		if
-			kind == .upcoming,
-			rank > 1,
-			let cachedReport = await upcomingCache.report(rank: rank, prefs: prefs, context: context)
-		{
-			return cachedReport
-		}
+		let requiresFreshRankedLookup = kind == .upcoming && rank > 1
 		let lookupPrefs = await prefsForFirstLookup(kind: kind, rank: rank, prefs: prefs)
 		let mapData = try await mapData(
 			for: kind,
 			from: context,
 			minimumCandidateCount: rank,
 			prefs: lookupPrefs,
-			allowsRankedExpansion: rank > 1
+			allowsRankedExpansion: requiresFreshRankedLookup,
+			bypassesCache: requiresFreshRankedLookup
 		)
 		if kind == .upcoming {
 			let reports = await upcomingReports(
@@ -445,7 +457,8 @@ struct OrientSvc {
 		from context: DeviceContext,
 		minimumCandidateCount: Int,
 		prefs: AppPrefs,
-		allowsRankedExpansion: Bool = false
+		allowsRankedExpansion: Bool = false,
+		bypassesCache: Bool = false
 	) async throws -> MapDataSet {
 		let radii = lookupRadii(
 			for: kind,
@@ -461,7 +474,8 @@ struct OrientSvc {
 				radius: radius,
 				minimumCandidateCount: minimumCandidateCount,
 				prefs: prefs,
-				previousData: latestData
+				previousData: latestData,
+				bypassesCache: bypassesCache
 			)
 
 			if hasEnoughCandidates(
@@ -497,7 +511,8 @@ struct OrientSvc {
 		radius: CLLocationDistance,
 		minimumCandidateCount: Int,
 		prefs: AppPrefs,
-		previousData: MapDataSet
+		previousData: MapDataSet,
+		bypassesCache: Bool
 	) async throws -> MapDataSet {
 		if minimumCandidateCount == 1, kind != .scan {
 			return try await mapDataClient.immediateMapData(
@@ -508,6 +523,13 @@ struct OrientSvc {
 		}
 
 		do {
+			if bypassesCache {
+				return try await mapDataClient.freshMapData(
+					near: context.coordinate,
+					radiusMeters: radius,
+					options: prefs.mapDetails
+				)
+			}
 			return try await mapDataClient.mapData(
 				near: context.coordinate,
 				radiusMeters: radius,
@@ -523,11 +545,19 @@ struct OrientSvc {
 			}
 			var fallbackOptions = prefs.mapDetails
 			fallbackOptions.includeCrossings = false
-			let fallbackData = try await mapDataClient.mapData(
-				near: context.coordinate,
-				radiusMeters: radius,
-				options: fallbackOptions
-			)
+			let fallbackData = if bypassesCache {
+				try await mapDataClient.freshMapData(
+					near: context.coordinate,
+					radiusMeters: radius,
+					options: fallbackOptions
+				)
+			} else {
+				try await mapDataClient.mapData(
+					near: context.coordinate,
+					radiusMeters: radius,
+					options: fallbackOptions
+				)
+			}
 			return previousData.merging(fallbackData)
 		}
 	}

@@ -36,7 +36,15 @@ struct MapDataClient: MapDataFetching {
 			options: options
 		) {
 			try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: options)
-		}
+			}
+	}
+
+	func freshMapData(
+		near coordinate: CLLocationCoordinate2D,
+		radiusMeters: CLLocationDistance,
+		options: MapDetailOptions = MapDetailOptions()
+	) async throws -> MapDataSet {
+		try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: options)
 	}
 
 	func immediateMapData(
