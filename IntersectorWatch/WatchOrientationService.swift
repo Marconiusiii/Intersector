@@ -1916,15 +1916,17 @@ struct WatchIntersectionFinder {
 		return rankedNearest(from: context.coordinate, in: forwardCandidates)
 	}
 
-	func rankedUpcoming(
-		from context: WatchDeviceContext,
-		in mapData: WatchMapDataSet
-	) -> [WatchIntersectionCandidate] {
-		mapData.rankedUpcoming(from: context) ?? rankedUpcoming(
-			from: context,
-			in: mapData.intersections
-		)
-	}
+		func rankedUpcoming(
+			from context: WatchDeviceContext,
+			in mapData: WatchMapDataSet
+		) -> [WatchIntersectionCandidate] {
+			let roadRanked = mapData.rankedUpcoming(from: context) ?? []
+			let headingRanked = rankedUpcoming(
+				from: context,
+				in: mapData.intersections
+			)
+			return mergedUpcomingCandidates(roadRanked, headingRanked)
+		}
 
 	func upcoming(
 		rank: Int,
@@ -1968,10 +1970,28 @@ struct WatchIntersectionFinder {
 		}
 	}
 
-	private func normalizedNames(_ names: [String]) -> Set<String> {
-		Set(names.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
+		private func normalizedNames(_ names: [String]) -> Set<String> {
+			Set(names.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
+		}
+
+		private func mergedUpcomingCandidates(
+			_ preferred: [WatchIntersectionCandidate],
+			_ fallback: [WatchIntersectionCandidate]
+		) -> [WatchIntersectionCandidate] {
+			fallback.reduce(into: preferred) { merged, candidate in
+				let alreadyIncluded = merged.contains { existing in
+					existing.id == candidate.id ||
+						(
+							normalizedNames(existing.names) == normalizedNames(candidate.names) &&
+								WatchGeo.distanceMeters(from: existing.coordinate, to: candidate.coordinate) < 30
+						)
+				}
+				if !alreadyIncluded {
+					merged.append(candidate)
+				}
+			}
+		}
 	}
-}
 
 struct WatchNeighborhoodProvider {
 	private let endpoint = URL(string: "https://overpass-api.de/api/interpreter")!

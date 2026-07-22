@@ -94,10 +94,12 @@ struct IntersectionFinder {
 		from context: DeviceContext,
 		in mapData: MapDataSet
 	) -> [IntersectionCandidate] {
-		mapData.rankedUpcoming(from: context) ?? rankedUpcoming(
+		let roadRanked = mapData.rankedUpcoming(from: context) ?? []
+		let headingRanked = rankedUpcoming(
 			from: context,
 			in: mapData.intersections
 		)
+		return mergedUpcomingCandidates(roadRanked, headingRanked)
 	}
 
 	func upcoming(
@@ -184,6 +186,24 @@ struct IntersectionFinder {
 
 	private func normalizedNames(_ names: [String]) -> Set<String> {
 		Set(names.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
+	}
+
+	private func mergedUpcomingCandidates(
+		_ preferred: [IntersectionCandidate],
+		_ fallback: [IntersectionCandidate]
+	) -> [IntersectionCandidate] {
+		fallback.reduce(into: preferred) { merged, candidate in
+			let alreadyIncluded = merged.contains { existing in
+				existing.id == candidate.id ||
+					(
+						normalizedNames(existing.names) == normalizedNames(candidate.names) &&
+							Geo.distanceMeters(from: existing.coordinate, to: candidate.coordinate) < 30
+					)
+			}
+			if !alreadyIncluded {
+				merged.append(candidate)
+			}
+		}
 	}
 
 	private func nearest(

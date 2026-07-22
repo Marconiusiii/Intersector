@@ -1133,6 +1133,47 @@ struct IntersectorTests {
 		#expect(ranked.map(\.id) == ["ahead-on-road"])
 	}
 
+	@Test func rankedUpcomingFillsPartialRoadResultsWithHeadingCandidates() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapData = MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: "first-on-road",
+					names: ["Oak Street", "First Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0004)
+				),
+				IntersectionCandidate(
+					id: "second-heading",
+					names: ["Second Avenue", "Cross Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "third-heading",
+					names: ["Third Avenue", "Cross Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.003, longitude: -122.0)
+				)
+			],
+			roads: [
+				MapRoad(
+					id: "oak",
+					name: "Oak Street",
+					nodeIDs: [1, 2],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 36.999, longitude: -121.9996),
+						CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0004)
+					]
+				)
+			]
+		)
+
+		let ranked = IntersectionFinder().rankedUpcoming(
+			from: DeviceContext(coordinate: origin, headingDegrees: 0),
+			in: mapData
+		)
+
+		#expect(ranked.map(\.id) == ["first-on-road", "second-heading", "third-heading"])
+	}
+
 	@Test func cachedRankedUpcomingDoesNotSurviveHeadingChange() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let mapData = MapDataSet(
