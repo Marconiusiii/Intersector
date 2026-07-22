@@ -7,14 +7,29 @@
 
 import AppIntents
 import Foundation
+import SwiftUI
 
 private func watchIntersectorResult(
 	_ text: String
-) -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
+) -> some IntentResult & ProvidesDialog & ReturnsValue<String> & ShowsSnippetView {
 	.result(
 		value: text,
-		dialog: IntentDialog(stringLiteral: text)
+		dialog: IntentDialog(stringLiteral: text),
+		view: WatchIntersectorIntentSnippet(text: text)
 	)
+}
+
+private struct WatchIntersectorIntentSnippet: View {
+	var text: String
+
+	var body: some View {
+		Text(text)
+			.font(.headline)
+			.fontWeight(.semibold)
+			.multilineTextAlignment(.leading)
+			.frame(maxWidth: .infinity, alignment: .leading)
+			.accessibilityLabel(text)
+	}
 }
 
 struct WatchNearestIntersectionIntent: AppIntent {

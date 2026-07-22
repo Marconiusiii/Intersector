@@ -8,14 +8,29 @@
 import AppIntents
 import CoreLocation
 import Foundation
+import SwiftUI
 
 private func intersectorResult(
 	_ text: String
-) -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
+) -> some IntentResult & ProvidesDialog & ReturnsValue<String> & ShowsSnippetView {
 	.result(
 		value: text,
-		dialog: IntentDialog(stringLiteral: text)
+		dialog: IntentDialog(stringLiteral: text),
+		view: IntersectorIntentSnippet(text: text)
 	)
+}
+
+private struct IntersectorIntentSnippet: View {
+	var text: String
+
+	var body: some View {
+		Text(text)
+			.font(.title2)
+			.fontWeight(.semibold)
+			.multilineTextAlignment(.leading)
+			.frame(maxWidth: .infinity, alignment: .leading)
+			.accessibilityLabel(text)
+	}
 }
 
 struct NearestIntersectionIntent: AppIntent {
