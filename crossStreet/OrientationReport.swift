@@ -446,10 +446,10 @@ struct MapDataSet: Equatable {
 			}
 	}
 
-	func rankedUpcoming(from context: DeviceContext) -> [IntersectionCandidate]? {
-		guard
-			let direction = context.headingDegrees,
-			let road = nearestRoad(to: context.coordinate),
+		func upcomingRoadSequence(from context: DeviceContext) -> [IntersectionCandidate]? {
+			guard
+				let direction = context.headingDegrees,
+				let road = nearestRoad(to: context.coordinate),
 			road.minimumDistance(to: context.coordinate) <= currentRoadDistanceThreshold(for: context),
 			let directionSign = road.directionSign(for: direction, at: context.coordinate)
 		else {
@@ -481,9 +481,9 @@ struct MapDataSet: Equatable {
 
 		guard !positioned.isEmpty else {
 			return nil
+			}
+			return positioned.map(\.candidate)
 		}
-		return positioned.map(\.candidate)
-	}
 
 	func streetPosition(
 		from context: DeviceContext,

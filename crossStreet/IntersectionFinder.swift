@@ -94,12 +94,19 @@ struct IntersectionFinder {
 		from context: DeviceContext,
 		in mapData: MapDataSet
 	) -> [IntersectionCandidate] {
-		let roadRanked = mapData.rankedUpcoming(from: context) ?? []
-		let headingRanked = rankedUpcoming(
+		upcomingSequence(from: context, in: mapData)
+	}
+
+	func upcomingSequence(
+		from context: DeviceContext,
+		in mapData: MapDataSet
+	) -> [IntersectionCandidate] {
+		let roadSequence = mapData.upcomingRoadSequence(from: context) ?? []
+		let headingSequence = rankedUpcoming(
 			from: context,
 			in: mapData.intersections
 		)
-		return mergedUpcomingCandidates(roadRanked, headingRanked)
+		return mergedUpcomingCandidates(roadSequence, headingSequence)
 	}
 
 	func upcoming(

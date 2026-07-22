@@ -300,12 +300,12 @@ struct OrientSvc {
 		switch kind {
 		case .nearest:
 			ranked = finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
-		case .upcoming:
-			if context.headingDegrees == nil {
-				ranked = finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
-			} else {
-				ranked = finder.rankedUpcoming(from: context, in: mapData)
-			}
+			case .upcoming:
+				if context.headingDegrees == nil {
+					ranked = finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
+				} else {
+					ranked = finder.upcomingSequence(from: context, in: mapData)
+				}
 		case .scan:
 			ranked = finder.scanMatch(from: context, in: mapData.intersections).map { [$0.candidate] } ?? []
 		}
@@ -340,7 +340,7 @@ struct OrientSvc {
 		if context.headingDegrees == nil {
 			ranked = finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
 		} else {
-			ranked = finder.rankedUpcoming(from: context, in: mapData)
+			ranked = finder.upcomingSequence(from: context, in: mapData)
 		}
 		let neighborhoodContext = await neighborhoodContext(for: prefs, from: context)
 		var reports: [OrientReport] = []
@@ -590,7 +590,7 @@ struct OrientSvc {
 		if kind == .scan {
 			return finder.scanMatch(from: context, in: mapData.intersections) != nil
 		}
-		return finder.rankedUpcoming(from: context, in: mapData).count >= minimumCandidateCount
+		return finder.upcomingSequence(from: context, in: mapData).count >= minimumCandidateCount
 	}
 
 	private func neighborhoodContext(

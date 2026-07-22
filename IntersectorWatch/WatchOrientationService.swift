@@ -342,7 +342,7 @@ struct WatchOrientationService {
 			if context.headingDegrees == nil {
 				ranked = finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
 			} else {
-				ranked = finder.rankedUpcoming(from: context, in: mapData)
+				ranked = finder.upcomingSequence(from: context, in: mapData)
 			}
 		}
 		let neighborhoodContext = await neighborhoodContext(for: prefs.areaMode, from: context)
@@ -560,7 +560,7 @@ struct WatchOrientationService {
 		guard context.headingDegrees != nil else {
 			return !mapData.intersections.isEmpty
 		}
-		return finder.rankedUpcoming(from: context, in: mapData).count >= minimumCandidateCount
+		return finder.upcomingSequence(from: context, in: mapData).count >= minimumCandidateCount
 	}
 
 	private func neighborhoodContext(
@@ -949,10 +949,10 @@ struct WatchMapDataSet: Equatable {
 		return WatchMapDataSet(intersections: mergedIntersections, roads: mergedRoads)
 	}
 
-	func rankedUpcoming(from context: WatchDeviceContext) -> [WatchIntersectionCandidate]? {
-		guard
-			let direction = context.headingDegrees,
-			let road = nearestRoad(to: context.coordinate),
+		func upcomingRoadSequence(from context: WatchDeviceContext) -> [WatchIntersectionCandidate]? {
+			guard
+				let direction = context.headingDegrees,
+				let road = nearestRoad(to: context.coordinate),
 			road.minimumDistance(to: context.coordinate) <= currentRoadDistanceThreshold(for: context),
 			let directionSign = road.directionSign(for: direction, at: context.coordinate)
 		else {
@@ -1920,12 +1920,19 @@ struct WatchIntersectionFinder {
 			from context: WatchDeviceContext,
 			in mapData: WatchMapDataSet
 		) -> [WatchIntersectionCandidate] {
-			let roadRanked = mapData.rankedUpcoming(from: context) ?? []
-			let headingRanked = rankedUpcoming(
+			upcomingSequence(from: context, in: mapData)
+		}
+
+		func upcomingSequence(
+			from context: WatchDeviceContext,
+			in mapData: WatchMapDataSet
+		) -> [WatchIntersectionCandidate] {
+			let roadSequence = mapData.upcomingRoadSequence(from: context) ?? []
+			let headingSequence = rankedUpcoming(
 				from: context,
 				in: mapData.intersections
 			)
-			return mergedUpcomingCandidates(roadRanked, headingRanked)
+			return mergedUpcomingCandidates(roadSequence, headingSequence)
 		}
 
 	func upcoming(

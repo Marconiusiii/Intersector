@@ -1174,6 +1174,88 @@ struct IntersectorTests {
 		#expect(ranked.map(\.id) == ["first-on-road", "second-heading", "third-heading"])
 	}
 
+	@Test func upcomingSequenceKeepsRoadOrderBeforeUnrelatedHeadingCandidates() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapData = MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: "first-on-road",
+					names: ["Oak Street", "First Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "second-on-road",
+					names: ["Oak Street", "Second Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "closer-heading-only",
+					names: ["Pine Avenue", "Closer Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.0005, longitude: -122.0)
+				)
+			],
+			roads: [
+				MapRoad(
+					id: "oak",
+					name: "Oak Street",
+					nodeIDs: [1, 2],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 36.999, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 37.003, longitude: -122.0)
+					]
+				)
+			]
+		)
+
+		let sequence = IntersectionFinder().upcomingSequence(
+			from: DeviceContext(coordinate: origin, headingDegrees: 0),
+			in: mapData
+		)
+
+		#expect(sequence.map(\.id) == ["first-on-road", "second-on-road", "closer-heading-only"])
+	}
+
+	@Test func upcomingSequenceCanIncludeForwardCrossingOnRoad() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let mapData = MapDataSet(
+			intersections: [
+				IntersectionCandidate(
+					id: "first-on-road",
+					names: ["Oak Street", "First Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.001, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "crossing-oak-1",
+					names: ["Oak Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.0015, longitude: -122.0)
+				),
+				IntersectionCandidate(
+					id: "third-on-road",
+					names: ["Oak Street", "Third Street"],
+					coordinate: CLLocationCoordinate2D(latitude: 37.002, longitude: -122.0)
+				)
+			],
+			roads: [
+				MapRoad(
+					id: "oak",
+					name: "Oak Street",
+					nodeIDs: [1, 2],
+					coordinates: [
+						CLLocationCoordinate2D(latitude: 36.999, longitude: -122.0),
+						CLLocationCoordinate2D(latitude: 37.003, longitude: -122.0)
+					]
+				)
+			]
+		)
+
+		let sequence = IntersectionFinder().upcomingSequence(
+			from: DeviceContext(coordinate: origin, headingDegrees: 0),
+			in: mapData
+		)
+
+		#expect(sequence.map(\.id) == ["first-on-road", "crossing-oak-1", "third-on-road"])
+	}
+
 	@Test func cachedRankedUpcomingDoesNotSurviveHeadingChange() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let mapData = MapDataSet(
