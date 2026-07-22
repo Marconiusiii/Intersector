@@ -11,6 +11,19 @@ import Testing
 @testable import Intersector
 
 struct IntersectorTests {
+	@Test @MainActor func freshInstallDefaultsNeighborhoodToOff() {
+		let suiteName = "IntersectorTests.freshInstall.\(UUID().uuidString)"
+		let defaults = UserDefaults(suiteName: suiteName)!
+		defer {
+			defaults.removePersistentDomain(forName: suiteName)
+		}
+
+		let prefs = AppPrefs.saved(from: defaults)
+
+		#expect(AppPrefs().areaMode == .off)
+		#expect(prefs.areaMode == .off)
+	}
+
 	@Test func announcementOptionsCanSpeakIntersectionNameOnly() async throws {
 		var prefs = AppPrefs()
 		prefs.areaMode = .toward
@@ -1964,6 +1977,47 @@ struct IntersectorTests {
 		#expect(recoveredOrder == [primary, fallback])
 	}
 
+	@Test func mapDataClientAcceptsAStaggeredFallbackBeforeThePrimaryTimesOut() async throws {
+		let primary = URL(string: "https://slow-primary.example/api/interpreter")!
+		let fallback = URL(string: "https://fast-fallback.example/api/interpreter")!
+		let requestLog = MapRequestLog()
+		var client = MapDataClient()
+		client.endpoint = primary
+		client.fallbackEndpoints = [fallback]
+		client.requestHandler = { request in
+			guard let url = request.url else {
+				throw URLError(.badURL)
+			}
+			await requestLog.record(url)
+			if url == primary {
+				try await Task.sleep(for: .seconds(5))
+				throw URLError(.timedOut)
+			}
+			let response = HTTPURLResponse(
+				url: url,
+				statusCode: 200,
+				httpVersion: nil,
+				headerFields: nil
+			)!
+			return MapHTTPResponse(
+				data: Data("{\"elements\":[]}".utf8),
+				response: response
+			)
+		}
+
+		let clock = ContinuousClock()
+		let start = clock.now
+		let data = try await client.freshMapData(
+			near: CLLocationCoordinate2D(latitude: 39.1234, longitude: -76.5432),
+			radiusMeters: 225
+		)
+		let elapsed = start.duration(to: clock.now)
+
+		#expect(data.intersections.isEmpty)
+		#expect(await requestLog.urls == [primary, fallback])
+		#expect(elapsed < .seconds(3))
+	}
+
 	@Test func intersectionBuilderIgnoresNonStreetPaths() async throws {
 		let response = OverpassResponse(
 			elements: [
@@ -2328,6 +2382,35 @@ struct IntersectorTests {
 		])
 	}
 
+	@Test func initialReportPrewarmLoadsNearestAndWalkingPathVariants() async throws {
+		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
+		let data = crossingFirstData(origin: origin)
+		let mapClient = ImmediateRecordingMapDataClient(fullData: data, immediateData: data)
+		var prefs = AppPrefs()
+		prefs.mapDetails = MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
+		let service = OrientSvc(
+			locationProvider: FakeLocationProvider(
+				context: DeviceContext(
+					coordinate: origin,
+					headingDegrees: 0,
+					horizontalAccuracy: 10
+				)
+			),
+			mapDataClient: mapClient,
+			neighborhoodProvider: FailingNeighborhoodProvider()
+		)
+
+		let isReady = await service.prewarmInitialReportMapData(prefs: prefs)
+
+		#expect(isReady)
+		#expect(await mapClient.immediateOptions == [
+			MapDetailOptions(includeCrossings: true)
+		])
+		#expect(await mapClient.fullOptions == [
+			MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
+		])
+	}
+
 	@Test func firstNearestWithOptionalMapDetailsKeepsCrossingsOnImmediateLookup() async throws {
 		let mapClient = AdaptiveMapDataClient()
 		var prefs = AppPrefs()
@@ -2578,6 +2661,14 @@ actor ImmediateRecordingMapDataClient: MapDataFetching {
 	) async throws -> MapDataSet {
 		immediateOptions.append(options)
 		return immediateData
+	}
+}
+
+actor MapRequestLog {
+	private(set) var urls: [URL] = []
+
+	func record(_ url: URL) {
+		urls.append(url)
 	}
 }
 

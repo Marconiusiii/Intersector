@@ -45,6 +45,8 @@ private enum DisplayLayout: String, CaseIterable, Identifiable {
 
 private let lookupLoadingText = "Intersecting..."
 private let startupLoadingText = "Loading Intersector."
+private let mapPreparationText = "Preparing map data for Nearest and Upcoming."
+private let mapWaitingText = "Waiting for map data. Nearest and Upcoming will become available automatically."
 private let readyText = "Intersector Ready."
 
 @MainActor
@@ -472,7 +474,7 @@ private final class WatchSettingsSync: NSObject, WCSessionDelegate {
 
 struct ContentView: View {
 	@AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
-	@AppStorage("areaMode") private var areaModeRaw = AreaMode.near.rawValue
+	@AppStorage("areaMode") private var areaModeRaw = AreaMode.off.rawValue
 	@AppStorage("measurementUnit") private var measurementUnitRaw = MeasurementUnit.feet.rawValue
 	@AppStorage("directionStyle") private var directionStyleRaw = DirectionStyle.words.rawValue
 	@AppStorage("spokenIntersectionCount") private var spokenIntersectionCountRaw = SpokenIntersectionCount.one.rawValue
@@ -496,6 +498,8 @@ struct ContentView: View {
 	@State private var isLoading = false
 	@State private var isDirectionLoading = false
 	@State private var isStartupLoading = false
+	@State private var isMapPreparationLoading = false
+	@State private var isMapDataReady = false
 	@State private var isLookupProgressVisible = false
 	@State private var isShowingSettings = false
 	@State private var isShowingHelp = false
@@ -510,7 +514,7 @@ struct ContentView: View {
 
 	private var prefs: AppPrefs {
 		AppPrefs(
-			areaMode: AreaMode(rawValue: areaModeRaw) ?? .near,
+			areaMode: AreaMode(rawValue: areaModeRaw) ?? .off,
 			measurementUnit: MeasurementUnit(rawValue: measurementUnitRaw) ?? .feet,
 			directionStyle: DirectionStyle(rawValue: directionStyleRaw) ?? .words,
 			intersectionWording: .direct,
@@ -548,6 +552,10 @@ struct ContentView: View {
 
 	private var displayLayout: DisplayLayout {
 		DisplayLayout(rawValue: displayLayoutRaw) ?? .standard
+	}
+
+	private var mapReadinessSignature: String {
+		"\(includeCrossings)-\(includeWalkingPaths)"
 	}
 
 	private var usesCenteredStatusLayout: Bool {
@@ -638,6 +646,9 @@ struct ContentView: View {
 			}
 			.onChange(of: watchSettingsPayload.signature) { _, _ in
 				watchSettingsSync.sync(watchSettingsPayload)
+			}
+			.onChange(of: mapReadinessSignature) { _, _ in
+				restartInitialPreparation()
 			}
 			.onChange(of: scenePhase) { _, phase in
 				if phase != .active {
@@ -762,7 +773,7 @@ struct ContentView: View {
 
 	@ViewBuilder
 	private var loadingStatusOverlay: some View {
-		let isVisible = isStartupLoading || isLookupProgressVisible
+		let isVisible = isStartupLoading || isMapPreparationLoading || isLookupProgressVisible
 		HStack(spacing: 8) {
 			statusActivityIndicator
 			if isLookupProgressVisible {
@@ -804,6 +815,7 @@ struct ContentView: View {
 			"Nearest",
 			systemImage: "location.fill",
 			accessibilityLabel: "Nearest Intersection",
+			isDisabled: isLoading || isStartupLoading || !isMapDataReady || pointScanner.isScanning || pointScanner.isPreparing,
 			drawsChrome: !showRankedControls
 		) {
 			await updateReport(.nearest)
@@ -825,6 +837,7 @@ struct ContentView: View {
 			"Upcoming",
 			systemImage: "arrow.up.circle.fill",
 			accessibilityLabel: "Upcoming Intersection",
+			isDisabled: isLoading || isStartupLoading || !isMapDataReady || pointScanner.isScanning || pointScanner.isPreparing,
 			drawsChrome: !showRankedControls
 		) {
 			await updateReport(.upcoming)
@@ -846,9 +859,6 @@ struct ContentView: View {
 			isOn: Binding(
 				get: { pointScanner.isScanning || pointScanner.isPreparing },
 				set: { enabled in
-					if enabled {
-						cancelStartupPreparationIfNeeded()
-					}
 					pointScanner.setScanning(enabled, prefs: prefs) { text in
 						statusText = text
 					}
@@ -911,7 +921,7 @@ struct ContentView: View {
 		}
 		.menuStyle(.button)
 		.buttonStyle(.plain)
-		.disabled(isLoading || isStartupLoading || pointScanner.isScanning || pointScanner.isPreparing)
+		.disabled(isLoading || isStartupLoading || !isMapDataReady || pointScanner.isScanning || pointScanner.isPreparing)
 		.accessibilityHidden(true)
 	}
 
@@ -1597,27 +1607,57 @@ struct ContentView: View {
 			} catch {}
 		}
 
-		do {
-			let text = if rank == 1 {
-				try await OrientSvc.shared.spokenText(kind, prefs: prefs)
-			} else {
-				try await OrientSvc.shared.report(kind, rank: rank, prefs: prefs).text(with: prefs, rank: rank)
+		while true {
+			do {
+				let text = if rank == 1 {
+					try await OrientSvc.shared.spokenText(kind, prefs: prefs)
+				} else {
+					try await OrientSvc.shared.report(kind, rank: rank, prefs: prefs).text(with: prefs, rank: rank)
+				}
+				loadingTask.cancel()
+				LoadingThrobber.stop()
+				isLookupProgressVisible = false
+				isMapPreparationLoading = false
+				isMapDataReady = true
+				statusText = text
+				VoiceOverAnnouncer.reportUpdated(text)
+				break
+			} catch {
+				if rank == 1, kind != .scan, isMapLoadingError(error) {
+					await recoverMapDataForPendingReport()
+					continue
+				}
+				loadingTask.cancel()
+				LoadingThrobber.stop()
+				isLookupProgressVisible = false
+				let text = reportFailureText(kind, rank: rank, error: error)
+				statusText = text
+				VoiceOverAnnouncer.reportUpdated(text)
+				break
 			}
-			loadingTask.cancel()
-			LoadingThrobber.stop()
-			isLookupProgressVisible = false
-			statusText = text
-			VoiceOverAnnouncer.reportUpdated(text)
-		} catch {
-			loadingTask.cancel()
-			LoadingThrobber.stop()
-			isLookupProgressVisible = false
-			let text = reportFailureText(kind, rank: rank, error: error)
-			statusText = text
-			VoiceOverAnnouncer.reportUpdated(text)
 		}
 
 		isLoading = false
+	}
+
+	private func isMapLoadingError(_ error: Error) -> Bool {
+		error is MapDataError || error is URLError
+	}
+
+	private func recoverMapDataForPendingReport() async {
+		isMapDataReady = false
+		isMapPreparationLoading = true
+		isLookupProgressVisible = true
+		statusText = mapWaitingText
+		VoiceOverAnnouncer.reportUpdated(mapWaitingText)
+
+		var hasPreparedMapData = await OrientSvc.shared.prewarmInitialReportMapData(prefs: prefs)
+		while !hasPreparedMapData {
+			try? await Task.sleep(for: .seconds(2))
+			hasPreparedMapData = await OrientSvc.shared.prewarmInitialReportMapData(prefs: prefs)
+		}
+		isMapPreparationLoading = false
+		isMapDataReady = true
 	}
 
 	private func reportFailureText(_ kind: ReportKind, rank: Int, error: Error) -> String {
@@ -1672,7 +1712,6 @@ struct ContentView: View {
 		guard !isDirectionLoading else {
 			return
 		}
-		cancelStartupPreparationIfNeeded()
 		isDirectionLoading = true
 
 		do {
@@ -1700,30 +1739,64 @@ struct ContentView: View {
 			VoiceOverAnnouncer.reportUpdated(startupLoadingText)
 			LoadingThrobber.start(hapticsEnabled: prefs.haptics)
 
-			let hasLocation = await OrientSvc.shared.prewarmLocation()
+			var hasLocation = await OrientSvc.shared.prewarmLocation()
+			while !hasLocation, !Task.isCancelled {
+				let text = "Intersector could not get your location yet. Retrying automatically."
+				statusText = text
+				VoiceOverAnnouncer.reportUpdated(text)
+				try? await Task.sleep(for: .seconds(2))
+				guard !Task.isCancelled else {
+					return
+				}
+				hasLocation = await OrientSvc.shared.prewarmLocation()
+			}
 			guard !Task.isCancelled else {
 				return
 			}
-			guard hasLocation else {
-				LoadingThrobber.stop()
-				isStartupLoading = false
-				let text = "Intersector could not get your location yet. Try again in a moment."
-				statusText = text
-				VoiceOverAnnouncer.reportUpdated(text)
+
+			isStartupLoading = false
+			isMapPreparationLoading = true
+			statusText = mapPreparationText
+
+			var hasPreparedMapData = await OrientSvc.shared.prewarmInitialReportMapData(prefs: prefs)
+			var announcedWaiting = false
+			while !hasPreparedMapData, !Task.isCancelled {
+				statusText = mapWaitingText
+				if !announcedWaiting {
+					VoiceOverAnnouncer.reportUpdated(mapWaitingText)
+					announcedWaiting = true
+				}
+				try? await Task.sleep(for: .seconds(2))
+				guard !Task.isCancelled else {
+					return
+				}
+				hasPreparedMapData = await OrientSvc.shared.prewarmInitialReportMapData(prefs: prefs)
+			}
+			guard !Task.isCancelled else {
 				return
 			}
+
 			LoadingThrobber.stop()
-			isStartupLoading = false
+			isMapPreparationLoading = false
+			isMapDataReady = true
 			ReadyEarcon.play(hapticsEnabled: prefs.haptics)
 			statusText = readyText
-			Task {
-				_ = await OrientSvc.shared.prewarmInitialNearestMapData(prefs: prefs)
-			}
 			Task { @MainActor in
 				try? await Task.sleep(for: .milliseconds(1_350))
 				VoiceOverAnnouncer.reportUpdated(readyText)
 			}
 		}
+	}
+
+	private func restartInitialPreparation() {
+		startupTask?.cancel()
+		startupTask = nil
+		LoadingThrobber.stop()
+		isStartupLoading = false
+		isMapPreparationLoading = false
+		isMapDataReady = false
+		hasPreparedInitialLocation = false
+		prepareInitialLocationIfNeeded()
 	}
 
 	private func cancelStartupPreparationIfNeeded() {

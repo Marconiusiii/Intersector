@@ -8,7 +8,7 @@
 import Foundation
 
 struct AppPrefs {
-	var areaMode = AreaMode.near
+	var areaMode = AreaMode.off
 	var measurementUnit = MeasurementUnit.feet
 	var directionStyle = DirectionStyle.words
 	var intersectionWording = IntersectionWording.direct
@@ -19,7 +19,7 @@ struct AppPrefs {
 	var manhattanSnobMode = false
 
 	nonisolated init(
-		areaMode: AreaMode = .near,
+		areaMode: AreaMode = .off,
 		measurementUnit: MeasurementUnit = .feet,
 		directionStyle: DirectionStyle = .words,
 		intersectionWording: IntersectionWording = .direct,
@@ -44,7 +44,7 @@ struct AppPrefs {
 	static func saved(from defaults: UserDefaults = .standard) -> AppPrefs {
 		let announcementOptions = AnnouncementOptions.saved(from: defaults)
 		return AppPrefs(
-			areaMode: AreaMode(rawValue: defaults.string(forKey: "areaMode") ?? "") ?? .near,
+			areaMode: AreaMode(rawValue: defaults.string(forKey: "areaMode") ?? "") ?? .off,
 			measurementUnit: MeasurementUnit(rawValue: defaults.string(forKey: "measurementUnit") ?? "") ?? .feet,
 			directionStyle: DirectionStyle(rawValue: defaults.string(forKey: "directionStyle") ?? "") ?? .words,
 			intersectionWording: .direct,

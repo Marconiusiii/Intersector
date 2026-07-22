@@ -15,8 +15,11 @@ struct MapDataClient: MapDataFetching {
 		URL(string: "https://maps.mail.ru/osm/tools/overpass/api/interpreter")!
 	]
 	var session: URLSession = .shared
+	var requestHandler: (@Sendable (URLRequest) async throws -> MapHTTPResponse)?
 	private static let cache = MapDataCache()
 	private static let endpointHealth = MapEndpointHealth()
+	private let endpointStaggerMilliseconds = 750
+	private let overallRequestTimeoutMilliseconds = 12_000
 
 	func intersections(
 		near coordinate: CLLocationCoordinate2D,
@@ -109,29 +112,64 @@ struct MapDataClient: MapDataFetching {
 			primary: endpoint,
 			fallbacks: fallbackEndpoints
 		)
-		var lastError: Error?
-
-		for endpoint in endpoints {
-			do {
-				let data = try await fetchMapData(
-					from: endpoint,
-					options: options,
-					query: query
-				)
-				await Self.endpointHealth.markSuccess(endpoint)
-				return data
-			} catch {
-				lastError = error
-				if isTemporary(error) {
-					await Self.endpointHealth.markTemporaryFailure(endpoint)
-				}
-				guard isTemporary(error), endpoint != endpoints.last else {
-					throw error
+		let outcome = await withTaskGroup(of: MapEndpointAttempt.self) { group in
+			for (index, endpoint) in endpoints.enumerated() {
+				group.addTask {
+					do {
+						if index > 0 {
+							try await Task.sleep(for: .milliseconds(index * endpointStaggerMilliseconds))
+						}
+						try Task.checkCancellation()
+						let data = try await fetchMapData(
+							from: endpoint,
+							options: options,
+							query: query
+						)
+						return MapEndpointAttempt(endpoint: endpoint, result: .success(data))
+					} catch {
+						return MapEndpointAttempt(endpoint: endpoint, result: .failure(error))
+					}
 				}
 			}
+			group.addTask {
+				do {
+					try await Task.sleep(for: .milliseconds(overallRequestTimeoutMilliseconds))
+					return MapEndpointAttempt(endpoint: nil, result: .failure(URLError(.timedOut)))
+				} catch {
+					return MapEndpointAttempt(endpoint: nil, result: .failure(error))
+				}
+			}
+
+			var lastError: Error = MapDataError.invalidResponse
+			var remainingEndpoints = endpoints.count
+			while let attempt = await group.next() {
+				switch attempt.result {
+				case .success(let data):
+					if let endpoint = attempt.endpoint {
+						await Self.endpointHealth.markSuccess(endpoint)
+					}
+					group.cancelAll()
+					return Result<MapDataSet, Error>.success(data)
+				case .failure(let error):
+					if attempt.endpoint == nil {
+						group.cancelAll()
+						return Result<MapDataSet, Error>.failure(error)
+					}
+					remainingEndpoints -= 1
+					lastError = error
+					if let endpoint = attempt.endpoint, isTemporary(error) {
+						await Self.endpointHealth.markTemporaryFailure(endpoint)
+					}
+					if remainingEndpoints == 0 {
+						group.cancelAll()
+						return Result<MapDataSet, Error>.failure(lastError)
+					}
+				}
+			}
+			return Result<MapDataSet, Error>.failure(lastError)
 		}
 
-		throw lastError ?? MapDataError.invalidResponse
+		return try outcome.get()
 	}
 
 	private func fetchMapData(
@@ -146,7 +184,15 @@ struct MapDataClient: MapDataFetching {
 		request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 		request.httpBody = query.data(using: .utf8)
 
-		let (data, urlResponse) = try await session.data(for: request)
+		let httpResult: MapHTTPResponse
+		if let requestHandler {
+			httpResult = try await requestHandler(request)
+		} else {
+			let (data, urlResponse) = try await session.data(for: request)
+			httpResult = MapHTTPResponse(data: data, response: urlResponse)
+		}
+		let data = httpResult.data
+		let urlResponse = httpResult.response
 		guard let httpResponse = urlResponse as? HTTPURLResponse else {
 			throw MapDataError.invalidResponse
 		}
@@ -269,6 +315,16 @@ struct MapDataClient: MapDataFetching {
 		let encoded = body.addingPercentEncoding(withAllowedCharacters: allowed) ?? body
 		return "data=\(encoded)"
 	}
+}
+
+struct MapHTTPResponse: @unchecked Sendable {
+	var data: Data
+	var response: URLResponse
+}
+
+private struct MapEndpointAttempt: @unchecked Sendable {
+	var endpoint: URL?
+	var result: Result<MapDataSet, Error>
 }
 
 actor MapEndpointHealth {

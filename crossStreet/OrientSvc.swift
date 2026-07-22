@@ -169,6 +169,33 @@ struct OrientSvc {
 		}
 	}
 
+	func prewarmInitialReportMapData(prefs: AppPrefs = AppPrefs()) async -> Bool {
+		do {
+			let context = try await locationProvider.currentContext(requiresFreshHeading: false)
+			let nearestPrefs = await prefsForFirstLookup(kind: .nearest, rank: 1, prefs: prefs)
+			_ = try await mapData(
+				for: .nearest,
+				from: context,
+				minimumCandidateCount: 1,
+				prefs: nearestPrefs
+			)
+
+			let upcomingPrefs = await prefsForFirstLookup(kind: .upcoming, rank: 1, prefs: prefs)
+			let upcomingData = try await initialUpcomingMapData(from: context, prefs: upcomingPrefs)
+			if upcomingData.intersections.isEmpty {
+				_ = try await mapData(
+					for: .upcoming,
+					from: context,
+					minimumCandidateCount: 1,
+					prefs: upcomingPrefs
+				)
+			}
+			return true
+		} catch {
+			return false
+		}
+	}
+
 	func report(
 		_ kind: ReportKind,
 		rank: Int = 1,
