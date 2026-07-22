@@ -285,7 +285,8 @@ struct WatchOrientationService {
 					from: context,
 					mapData: expandedMapData,
 					prefs: prefs,
-					maxCount: resultCount
+					maxCount: resultCount,
+					fillMissingRanks: kind == .upcoming && resultCount > 1
 				)
 				if expandedReports.count > reports.count {
 					reports = expandedReports
@@ -308,7 +309,8 @@ struct WatchOrientationService {
 					for: kind,
 					from: context,
 					minimumCandidateCount: minimumCandidateCount,
-					prefs: prefs
+					prefs: prefs,
+					allowsRankedExpansion: kind == .upcoming && minimumCandidateCount > 1
 				)
 			}
 			group.addTask {
@@ -332,7 +334,8 @@ struct WatchOrientationService {
 		from context: WatchDeviceContext,
 		mapData: WatchMapDataSet,
 		prefs: WatchAppPrefs,
-		maxCount: Int
+		maxCount: Int,
+		fillMissingRanks: Bool = false
 	) async -> [WatchOrientationReport] {
 		let ranked: [WatchIntersectionCandidate]
 		switch kind {
@@ -342,7 +345,11 @@ struct WatchOrientationService {
 			if context.headingDegrees == nil {
 				ranked = finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
 			} else {
-				ranked = finder.upcomingSequence(from: context, in: mapData)
+				ranked = finder.upcomingSequence(
+					from: context,
+					in: mapData,
+					fillMissingRanks: fillMissingRanks
+				)
 			}
 		}
 		let neighborhoodContext = await neighborhoodContext(for: prefs.areaMode, from: context)
@@ -380,7 +387,12 @@ struct WatchOrientationService {
 		let match = if kind == .nearest {
 			finder.nearest(rank: rank, from: context.coordinate, in: mapData.intersections)
 		} else {
-			finder.upcoming(rank: rank, from: context, in: mapData)
+			finder.upcoming(
+				rank: rank,
+				from: context,
+				in: mapData,
+				fillMissingRanks: rank > 1
+			)
 		}
 		guard let match else {
 			throw WatchReportError.noIntersections
@@ -463,19 +475,27 @@ struct WatchOrientationService {
 		)
 		var latestData = WatchMapDataSet(intersections: [], roads: [])
 		for radius in radii {
-			latestData = try await mapData(
-				for: kind,
-				from: context,
-				radius: radius,
-				minimumCandidateCount: minimumCandidateCount,
-				prefs: prefs,
-				previousData: latestData
-			)
+			do {
+				latestData = try await mapData(
+					for: kind,
+					from: context,
+					radius: radius,
+					minimumCandidateCount: minimumCandidateCount,
+					prefs: prefs,
+					previousData: latestData
+				)
+			} catch {
+				guard !latestData.intersections.isEmpty else {
+					throw error
+				}
+				continue
+			}
 			if hasEnoughCandidates(
 				for: kind,
 				from: context,
 				minimumCandidateCount: minimumCandidateCount,
-				mapData: latestData
+				mapData: latestData,
+				prefs: prefs
 			) {
 				return latestData
 			}
@@ -552,15 +572,35 @@ struct WatchOrientationService {
 		for kind: WatchReportKind,
 		from context: WatchDeviceContext,
 		minimumCandidateCount: Int,
-		mapData: WatchMapDataSet
+		mapData: WatchMapDataSet,
+		prefs: WatchAppPrefs
 	) -> Bool {
 		if kind == .nearest {
 			return finder.rankedNearest(from: context.coordinate, in: mapData.intersections).count >= minimumCandidateCount
 		}
 		guard context.headingDegrees != nil else {
-			return !mapData.intersections.isEmpty
+			return false
 		}
-		return finder.upcomingSequence(from: context, in: mapData).count >= minimumCandidateCount
+		let ranked = finder.upcomingSequence(from: context, in: mapData)
+		let neighborhoodContext = WatchNeighborhoodContext(area: nil, toward: nil)
+		var reports: [WatchOrientationReport] = []
+		for match in ranked {
+			let report = makeReport(
+				.upcoming,
+				match: match,
+				context: context,
+				mapData: mapData,
+				prefs: prefs,
+				neighborhoodContext: neighborhoodContext
+			)
+			if !reports.containsSpokenIntersection(matching: report) {
+				reports.append(report)
+			}
+			if reports.count >= minimumCandidateCount {
+				return true
+			}
+		}
+		return false
 	}
 
 	private func neighborhoodContext(
@@ -1287,7 +1327,11 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 			do {
 				_ = try await currentHeading(timeout: 1.2, allowCached: false)
 			} catch {
-				clearHeading()
+				let hasRecentHeading = latestHeading != nil &&
+					latestHeadingDate.map { Date().timeIntervalSince($0) <= 2 } == true
+				if !hasRecentHeading {
+					clearHeading()
+				}
 			}
 		}
 
@@ -1853,6 +1897,7 @@ struct WatchIntersectionBuilder {
 
 struct WatchIntersectionFinder {
 	static let upcomingConeDegrees: CLLocationDirection = 20
+	static let rankedUpcomingFallbackConeDegrees: CLLocationDirection = 45
 
 	func bestMatch(
 		for kind: WatchReportKind,
@@ -1904,14 +1949,15 @@ struct WatchIntersectionFinder {
 
 	func rankedUpcoming(
 		from context: WatchDeviceContext,
-		in candidates: [WatchIntersectionCandidate]
+		in candidates: [WatchIntersectionCandidate],
+		coneDegrees: CLLocationDirection = Self.upcomingConeDegrees
 	) -> [WatchIntersectionCandidate] {
 		guard let heading = context.headingDegrees else {
 			return []
 		}
 		let forwardCandidates = candidates.filter { candidate in
 			let bearing = WatchGeo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
-			return angleDelta(from: heading, to: bearing) <= Self.upcomingConeDegrees
+			return angleDelta(from: heading, to: bearing) <= coneDegrees
 		}
 		return rankedNearest(from: context.coordinate, in: forwardCandidates)
 	}
@@ -1925,14 +1971,24 @@ struct WatchIntersectionFinder {
 
 		func upcomingSequence(
 			from context: WatchDeviceContext,
-			in mapData: WatchMapDataSet
+			in mapData: WatchMapDataSet,
+			fillMissingRanks: Bool = false
 		) -> [WatchIntersectionCandidate] {
 			let roadSequence = mapData.upcomingRoadSequence(from: context) ?? []
-			let headingSequence = rankedUpcoming(
+			let strictHeadingSequence = rankedUpcoming(
 				from: context,
 				in: mapData.intersections
 			)
-			return mergedUpcomingCandidates(roadSequence, headingSequence)
+			let strictSequence = mergedUpcomingCandidates(roadSequence, strictHeadingSequence)
+			guard fillMissingRanks else {
+				return strictSequence
+			}
+			let widerHeadingSequence = rankedUpcoming(
+				from: context,
+				in: mapData.intersections,
+				coneDegrees: Self.rankedUpcomingFallbackConeDegrees
+			)
+			return mergedUpcomingCandidates(strictSequence, widerHeadingSequence)
 		}
 
 	func upcoming(
@@ -1950,9 +2006,14 @@ struct WatchIntersectionFinder {
 	func upcoming(
 		rank: Int,
 		from context: WatchDeviceContext,
-		in mapData: WatchMapDataSet
+		in mapData: WatchMapDataSet,
+		fillMissingRanks: Bool = false
 	) -> WatchIntersectionCandidate? {
-		let ranked = rankedUpcoming(from: context, in: mapData)
+		let ranked = upcomingSequence(
+			from: context,
+			in: mapData,
+			fillMissingRanks: fillMissingRanks
+		)
 		guard rank > 0, ranked.indices.contains(rank - 1) else {
 			return nil
 		}

@@ -10,6 +10,7 @@ import Foundation
 
 struct IntersectionFinder {
 	static let upcomingConeDegrees: CLLocationDirection = 20
+	static let rankedUpcomingFallbackConeDegrees: CLLocationDirection = 45
 	static let scanMaxDistanceMeters: CLLocationDistance = 600 / 3.28084
 
 	func bestMatch(
@@ -78,14 +79,15 @@ struct IntersectionFinder {
 
 	func rankedUpcoming(
 		from context: DeviceContext,
-		in candidates: [IntersectionCandidate]
+		in candidates: [IntersectionCandidate],
+		coneDegrees: CLLocationDirection = Self.upcomingConeDegrees
 	) -> [IntersectionCandidate] {
 		guard let heading = context.headingDegrees else {
 			return []
 		}
 		let forwardCandidates = candidates.filter { candidate in
 			let bearing = Geo.bearingDegrees(from: context.coordinate, to: candidate.coordinate)
-			return angleDelta(from: heading, to: bearing) <= Self.upcomingConeDegrees
+			return angleDelta(from: heading, to: bearing) <= coneDegrees
 		}
 		return rankedNearest(from: context.coordinate, in: forwardCandidates)
 	}
@@ -99,14 +101,24 @@ struct IntersectionFinder {
 
 	func upcomingSequence(
 		from context: DeviceContext,
-		in mapData: MapDataSet
+		in mapData: MapDataSet,
+		fillMissingRanks: Bool = false
 	) -> [IntersectionCandidate] {
 		let roadSequence = mapData.upcomingRoadSequence(from: context) ?? []
-		let headingSequence = rankedUpcoming(
+		let strictHeadingSequence = rankedUpcoming(
 			from: context,
 			in: mapData.intersections
 		)
-		return mergedUpcomingCandidates(roadSequence, headingSequence)
+		let strictSequence = mergedUpcomingCandidates(roadSequence, strictHeadingSequence)
+		guard fillMissingRanks else {
+			return strictSequence
+		}
+		let widerHeadingSequence = rankedUpcoming(
+			from: context,
+			in: mapData.intersections,
+			coneDegrees: Self.rankedUpcomingFallbackConeDegrees
+		)
+		return mergedUpcomingCandidates(strictSequence, widerHeadingSequence)
 	}
 
 	func upcoming(

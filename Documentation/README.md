@@ -207,7 +207,7 @@ The shared service code is mostly the same, but the matching rule changes in `In
 
 For nearest, the app picks the closest candidate.
 
-For upcoming, the app tries to use heading data. It looks for intersections within 45 degrees of the direction the device is facing. If it cannot find one in that forward window, it falls back to the nearest candidate.
+For upcoming, the app tries to use heading data. The first result looks for intersections within 20 degrees of the direction the device is facing. If it cannot find one in that strict forward window, the single-result path falls back to the nearest candidate. If a fresh heading request times out, the location provider can retain a heading that is no more than two seconds old instead of immediately discarding useful direction data.
 
 The useful pattern here is that `ReportKind` changes behavior without duplicating the whole lookup flow.
 
@@ -539,9 +539,9 @@ It finds the nearest road by measuring from the user's coordinate to the full li
 
 For Street Context wording, the same distance calculation is limited to the roads that form the selected intersection. A nearby unrelated road therefore cannot force the report back to Direct wording.
 
-For Spoken Intersections values 2 and 3, Nearest Intersection ranks mapped candidates by distance. Upcoming Intersection first filters candidates to a 90-degree forward-facing cone centered on the phone heading, then ranks those candidates from closest to farthest. A closer intersection behind the phone is therefore excluded from an Upcoming result. If a heading is unavailable, Upcoming falls back to one nearest result instead of guessing a forward direction.
+For Spoken Intersections values 2 and 3, Nearest Intersection ranks mapped candidates by distance. Upcoming Intersection first follows intersections along the detected current road, then fills from a strict 20-degree forward cone. If a full expanded lookup still has too few distinct spoken intersections, only the missing ranked positions can be filled from a 45-degree cone. Existing strict results stay first, and intersections behind the phone remain excluded. If a heading is unavailable, Upcoming falls back to one nearest result instead of guessing a multi-result forward sequence.
 
-Ranked one-shot requests, such as 2nd Nearest, 3rd Nearest, 2nd Upcoming, and 3rd Upcoming, are different from the Spoken Intersections setting. A ranked one-shot request speaks only the requested intersection. For example, 2nd Upcoming speaks the second upcoming result by itself, not the first and second results together. The spoken lead includes the rank, such as `2nd Upcoming:` or `3rd Nearest:`.
+Ranked one-shot requests, such as 2nd Nearest, 3rd Nearest, 2nd Upcoming, and 3rd Upcoming, are different from the Spoken Intersections setting. A ranked one-shot request speaks only the requested intersection. Explicit ranked Upcoming requests expand through 225, 375, 750, 1,200, 1,800, and, for the third rank, 2,400 meters. Expansion continues until enough distinct spoken intersections exist rather than stopping at the raw map-candidate count. If a later expanded request fails, the service retains the best earlier successful data for the fill-only fallback. The spoken lead includes the rank, such as `2nd Upcoming:` or `3rd Nearest:`.
 
 ## MapDataCache
 
@@ -594,9 +594,11 @@ For upcoming:
 
 1. Get the bearing from the device to each candidate.
 2. Compare that bearing to the device heading.
-3. Keep candidates within a 60-degree forward window.
+3. Keep candidates within a strict 20-degree forward window.
 4. Pick the nearest of those.
 5. Fall back to nearest if no forward candidate exists.
+
+Ranked Upcoming requests first preserve current-road and strict-cone ordering. After strict radius expansion is exhausted, they may append candidates from a 45-degree fill cone without reordering or replacing the stricter results.
 
 For scan:
 
@@ -892,7 +894,7 @@ let text = try await OrientSvc.shared.spokenText(.nearest, prefs: prefs)
 
 That is the important architecture choice. Siri does not have a separate intersection engine. It reuses the same app logic.
 
-Dedicated 2nd Nearest, 3rd Nearest, 2nd Upcoming, and 3rd Upcoming intents request one exact rank directly. The service sorts nearest candidates by straight-line distance. For upcoming ranks, it filters to intersections ahead of the phone and then sorts those forward-facing candidates by distance. These ranked shortcut actions speak only the requested intersection, not the intersections leading up to it, and their spoken prefixes include the requested rank.
+Dedicated 2nd Nearest, 3rd Nearest, 2nd Upcoming, and 3rd Upcoming intents request one exact rank directly. The service sorts nearest candidates by straight-line distance. Upcoming ranks preserve the detected current-road sequence first, then strict forward candidates, and finally use the wider fill cone only when strict expansion cannot provide enough distinct results. These ranked shortcut actions speak only the requested intersection, not the intersections leading up to it, and their spoken prefixes include the requested rank.
 
 `IntersectorShortcuts` defines default shortcut phrases. Those phrases include `.applicationName`, which lets the system insert the app name.
 

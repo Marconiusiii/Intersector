@@ -142,7 +142,8 @@ struct OrientSvc {
 				for: .nearest,
 				from: context,
 				minimumCandidateCount: 1,
-				mapData: mapData
+				mapData: mapData,
+				prefs: prewarmPrefs
 			)
 		} catch {
 			return false
@@ -170,7 +171,8 @@ struct OrientSvc {
 				from: context,
 				mapData: mapData,
 				prefs: prefs,
-				maxCount: rank == 1 ? 1 : 3
+				maxCount: rank == 1 ? 1 : 3,
+				fillMissingRanks: rank > 1
 			)
 			await upcomingCache.store(reports: reports, prefs: prefs, context: context)
 			guard reports.indices.contains(rank - 1) else {
@@ -228,7 +230,8 @@ struct OrientSvc {
 					from: context,
 					mapData: expandedMapData,
 					prefs: prefs,
-					maxCount: resultCount
+					maxCount: resultCount,
+					fillMissingRanks: kind == .upcoming && resultCount > 1
 				)
 				if expandedReports.count > reports.count {
 					reports = expandedReports
@@ -271,7 +274,8 @@ struct OrientSvc {
 					for: kind,
 					from: context,
 					minimumCandidateCount: minimumCandidateCount,
-					prefs: prefs
+					prefs: prefs,
+					allowsRankedExpansion: kind == .upcoming && minimumCandidateCount > 1
 				)
 			}
 			group.addTask {
@@ -294,7 +298,8 @@ struct OrientSvc {
 		from context: DeviceContext,
 		mapData: MapDataSet,
 		prefs: AppPrefs,
-		maxCount: Int
+		maxCount: Int,
+		fillMissingRanks: Bool = false
 	) async -> [OrientReport] {
 		let ranked: [IntersectionCandidate]
 		switch kind {
@@ -304,7 +309,11 @@ struct OrientSvc {
 				if context.headingDegrees == nil {
 					ranked = finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
 				} else {
-					ranked = finder.upcomingSequence(from: context, in: mapData)
+					ranked = finder.upcomingSequence(
+						from: context,
+						in: mapData,
+						fillMissingRanks: fillMissingRanks
+					)
 				}
 		case .scan:
 			ranked = finder.scanMatch(from: context, in: mapData.intersections).map { [$0.candidate] } ?? []
@@ -334,13 +343,18 @@ struct OrientSvc {
 		from context: DeviceContext,
 		mapData: MapDataSet,
 		prefs: AppPrefs,
-		maxCount: Int
+		maxCount: Int,
+		fillMissingRanks: Bool
 	) async -> [OrientReport] {
 		let ranked: [IntersectionCandidate]
 		if context.headingDegrees == nil {
 			ranked = finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
 		} else {
-			ranked = finder.upcomingSequence(from: context, in: mapData)
+			ranked = finder.upcomingSequence(
+				from: context,
+				in: mapData,
+				fillMissingRanks: fillMissingRanks
+			)
 		}
 		let neighborhoodContext = await neighborhoodContext(for: prefs, from: context)
 		var reports: [OrientReport] = []
@@ -468,21 +482,29 @@ struct OrientSvc {
 		var latestData = MapDataSet(intersections: [], roads: [])
 
 		for radius in radii {
-			latestData = try await mapData(
-				for: kind,
-				from: context,
-				radius: radius,
-				minimumCandidateCount: minimumCandidateCount,
-				prefs: prefs,
-				previousData: latestData,
-				bypassesCache: bypassesCache
-			)
+			do {
+				latestData = try await mapData(
+					for: kind,
+					from: context,
+					radius: radius,
+					minimumCandidateCount: minimumCandidateCount,
+					prefs: prefs,
+					previousData: latestData,
+					bypassesCache: bypassesCache
+				)
+			} catch {
+				guard !latestData.intersections.isEmpty else {
+					throw error
+				}
+				continue
+			}
 
 			if hasEnoughCandidates(
 				for: kind,
 				from: context,
 				minimumCandidateCount: minimumCandidateCount,
-				mapData: latestData
+				mapData: latestData,
+				prefs: prefs
 			) {
 				return latestData
 			}
@@ -576,7 +598,8 @@ struct OrientSvc {
 		for kind: ReportKind,
 		from context: DeviceContext,
 		minimumCandidateCount: Int,
-		mapData: MapDataSet
+		mapData: MapDataSet,
+		prefs: AppPrefs
 	) -> Bool {
 		if kind == .nearest {
 			return finder.rankedNearest(
@@ -584,13 +607,33 @@ struct OrientSvc {
 				in: mapData.intersections
 			).count >= minimumCandidateCount
 		}
-		guard context.headingDegrees != nil else {
-			return !mapData.intersections.isEmpty
-		}
 		if kind == .scan {
 			return finder.scanMatch(from: context, in: mapData.intersections) != nil
 		}
-		return finder.upcomingSequence(from: context, in: mapData).count >= minimumCandidateCount
+		let ranked = if context.headingDegrees == nil {
+			finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
+		} else {
+			finder.upcomingSequence(from: context, in: mapData)
+		}
+		let neighborhoodContext = NeighborhoodContext(area: nil, toward: nil)
+		var reports: [OrientReport] = []
+		for match in ranked {
+			let report = makeReport(
+				.upcoming,
+				match: match,
+				context: context,
+				mapData: mapData,
+				prefs: prefs,
+				neighborhoodContext: neighborhoodContext
+			)
+			if !reports.containsSpokenIntersection(matching: report) {
+				reports.append(report)
+			}
+			if reports.count >= minimumCandidateCount {
+				return true
+			}
+		}
+		return false
 	}
 
 	private func neighborhoodContext(

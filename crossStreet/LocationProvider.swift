@@ -63,7 +63,11 @@ final class LocationProvider: NSObject, LocationProviding {
 			do {
 				_ = try await currentHeading(timeout: 1.2, allowCached: false)
 			} catch {
-				clearHeading()
+				let hasRecentHeading = latestHeading != nil &&
+					latestHeadingDate.map { Date().timeIntervalSince($0) <= 2 } == true
+				if !hasRecentHeading {
+					clearHeading()
+				}
 			}
 		}
 
