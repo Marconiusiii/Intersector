@@ -21,7 +21,21 @@ struct IntersectorTests {
 		let prefs = AppPrefs.saved(from: defaults)
 
 		#expect(AppPrefs().areaMode == .off)
-		#expect(prefs.areaMode == .off)
+		#expect(prefs.areaMode == .near)
+		#expect(!prefs.announcementOptions.includeNeighborhood)
+		#expect(AreaMode.selectableCases == [.near, .toward])
+	}
+
+	@Test @MainActor func legacyNeighborhoodOffMigratesToDisabledNearbyMode() throws {
+		let suiteName = "IntersectorTests.legacyNeighborhood.\(UUID().uuidString)"
+		let defaults = try #require(UserDefaults(suiteName: suiteName))
+		defer { defaults.removePersistentDomain(forName: suiteName) }
+		defaults.set(AreaMode.off.rawValue, forKey: "areaMode")
+
+		let prefs = AppPrefs.saved(from: defaults)
+
+		#expect(prefs.areaMode == .near)
+		#expect(!prefs.announcementOptions.includeNeighborhood)
 	}
 
 	@Test func announcementOptionsCanSpeakIntersectionNameOnly() async throws {

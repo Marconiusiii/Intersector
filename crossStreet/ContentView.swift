@@ -476,13 +476,13 @@ private final class WatchSettingsSync: NSObject, WCSessionDelegate {
 
 struct ContentView: View {
 	@AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
-	@AppStorage("areaMode") private var areaModeRaw = AreaMode.off.rawValue
+	@AppStorage("areaMode") private var areaModeRaw = AreaMode.near.rawValue
 	@AppStorage("measurementUnit") private var measurementUnitRaw = MeasurementUnit.feet.rawValue
 	@AppStorage("directionStyle") private var directionStyleRaw = DirectionStyle.words.rawValue
 	@AppStorage("spokenIntersectionCount") private var spokenIntersectionCountRaw = SpokenIntersectionCount.one.rawValue
 	@AppStorage("includeAnnouncementDistance") private var includeAnnouncementDistance = true
 	@AppStorage("includeAnnouncementDirection") private var includeAnnouncementDirection = true
-	@AppStorage("includeAnnouncementNeighborhood") private var includeAnnouncementNeighborhood = true
+	@AppStorage("includeAnnouncementNeighborhood") private var includeAnnouncementNeighborhood = false
 	@AppStorage("includeIntersectionDetails") private var includeIntersectionDetails = false
 	@AppStorage("includeCrossings") private var includeCrossings = false
 	@AppStorage("includeWalkingPaths") private var includeWalkingPaths = false
@@ -516,7 +516,7 @@ struct ContentView: View {
 
 	private var prefs: AppPrefs {
 		AppPrefs(
-			areaMode: AreaMode(rawValue: areaModeRaw) ?? .off,
+			areaMode: selectedAreaMode,
 			measurementUnit: MeasurementUnit(rawValue: measurementUnitRaw) ?? .feet,
 			directionStyle: DirectionStyle(rawValue: directionStyleRaw) ?? .words,
 			intersectionWording: .direct,
@@ -538,7 +538,7 @@ struct ContentView: View {
 
 	private var watchSettingsPayload: WatchSettingsPayload {
 		WatchSettingsPayload(
-			areaMode: areaModeRaw,
+			areaMode: selectedAreaMode.rawValue,
 			measurementUnit: measurementUnitRaw,
 			directionStyle: directionStyleRaw,
 			spokenIntersectionCount: spokenIntersectionCountRaw,
@@ -554,6 +554,11 @@ struct ContentView: View {
 
 	private var displayLayout: DisplayLayout {
 		DisplayLayout(rawValue: displayLayoutRaw) ?? .standard
+	}
+
+	private var selectedAreaMode: AreaMode {
+		let mode = AreaMode(rawValue: areaModeRaw) ?? .near
+		return mode == .off ? .near : mode
 	}
 
 	private var mapReadinessSignature: String {
@@ -641,6 +646,9 @@ struct ContentView: View {
 				settingsView
 			}
 			.onAppear {
+				if areaModeRaw == AreaMode.off.rawValue {
+					areaModeRaw = AreaMode.near.rawValue
+				}
 				if !startRequestedPointScanIfNeeded() {
 					prepareInitialLocationIfNeeded()
 				}
@@ -929,7 +937,7 @@ struct ContentView: View {
 
 	private var areaModeBinding: Binding<AreaMode> {
 		Binding {
-			prefs.areaMode
+			selectedAreaMode
 		} set: { areaMode in
 			areaModeRaw = areaMode.rawValue
 			settingsFocusTarget = .neighborhood
@@ -976,6 +984,9 @@ struct ContentView: View {
 		Binding {
 			includeAnnouncementNeighborhood
 		} set: { isEnabled in
+			if isEnabled, areaModeRaw == AreaMode.off.rawValue {
+				areaModeRaw = AreaMode.near.rawValue
+			}
 			includeAnnouncementNeighborhood = isEnabled
 			settingsFocusTarget = .announcementNeighborhood
 		}
@@ -1242,11 +1253,11 @@ struct ContentView: View {
 			if includeAnnouncementNeighborhood {
 				settingsControlRow {
 					Picker("Neighborhood Context", selection: areaModeBinding) {
-						ForEach(AreaMode.allCases) { mode in
+						ForEach(AreaMode.selectableCases) { mode in
 							Text(mode.label).tag(mode)
 						}
 					}
-					.pickerStyle(.menu)
+					.pickerStyle(.segmented)
 					.accessibilityFocused($settingsFocusTarget, equals: .neighborhood)
 				}
 			}
