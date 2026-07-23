@@ -132,7 +132,7 @@ This avoids a common SwiftUI problem: if you force large text into a fixed-heigh
 `ContentView` uses SwiftUI state properties to drive what the user sees:
 
 ```swift
-@AppStorage("areaMode") private var areaModeRaw = AreaMode.near.rawValue
+@AppStorage("areaMode") private var areaModeRaw = AreaMode.off.rawValue
 @AppStorage("measurementUnit") private var measurementUnitRaw = MeasurementUnit.feet.rawValue
 @AppStorage("directionStyle") private var directionStyleRaw = DirectionStyle.words.rawValue
 @AppStorage("intersectionWording") private var intersectionWordingRaw = IntersectionWording.direct.rawValue
@@ -786,7 +786,7 @@ The settings use native SwiftUI controls:
 
 ```swift
 struct AppPrefs {
-	var areaMode = AreaMode.near
+	var areaMode = AreaMode.off
 	var measurementUnit = MeasurementUnit.feet
 	var directionStyle = DirectionStyle.words
 	var intersectionWording = IntersectionWording.direct
@@ -808,7 +808,7 @@ Walking Paths remains off by default. When enabled, first Upcoming as well as ra
 
 Announcement content uses three toggles: Distance, Direction, and Neighborhood. The intersection name is always included. Turning all three toggles off gives compact intersection-name-only output. When several results share the same street, compact output names that street in the first intersection and then lists the remaining cross streets, such as `Amsterdam Avenue and West 93rd Street, West 94th Street`. When the results do not share a street, each intersection remains complete, such as `Foothill Boulevard and Frazier Avenue, Stanley Avenue and Talbot Avenue`.
 
-The Announcements section progressively reveals dependent controls. When Distance is on, Measurement Unit appears so the user can choose feet or meters. When Direction is on, Direction Style appears so the user can choose word directions, such as `ahead and right`, or clock-face directions, such as `at 2 o'clock`. Clock-face directions treat the direction the phone is pointing as 12 o'clock. When Direction Style is Words, Manhattan Snob Mode appears. Manhattan Snob Mode changes cardinal word directions into New York-style wording. North and northeast become `Uptown`, east and southeast become `East Side`, south and southwest become `Downtown`, and west and northwest become `West Side`. My Direction can say copy like `Facing Uptown.` Nearest and Upcoming reports append copy like `towards Uptown` when the app is using word directions. Clock-face directions stay clock-face directions. When Neighborhood is on, Neighborhood Context appears so the user can choose whether neighborhood wording is nearby-only or heading-aware. A sample string below the toggles updates as these settings change.
+The Announcements section progressively reveals dependent controls. When Distance is on, Measurement Unit appears so the user can choose feet or meters. When Direction is on, Direction Style appears as a segmented control with Relative, Cardinal, and Clock Face choices. Relative describes the intersection from the phone heading, such as `ahead and right`. Cardinal uses the geographic bearing from the user to the intersection, such as `northwest`. Clock Face uses wording such as `at 2 o'clock` and treats the direction the phone is pointing as 12 o'clock. The saved raw value `words` continues to select Relative so existing preferences remain compatible. Manhattan Snob Mode changes Cardinal and My Direction wording into New York-style wording. North and northeast become `Uptown`, east and southeast become `East Side`, south and southwest become `Downtown`, and west and northwest become `West Side`. A Cardinal intersection report can therefore say `about 120 feet toward Uptown`, while Relative and Clock Face reports remain unchanged. When Neighborhood is on, Neighborhood Context appears so the user can choose whether neighborhood wording is nearby-only or heading-aware. A sample string below the toggles updates as these settings change.
 
 Spoken Intersections is a menu picker with values 1, 2, and 3. The selected number controls how many results the app requests. Nearest orders multiple results by straight-line distance. Upcoming uses the phone heading to choose a travel direction and orders intersections along the connected path of the current road. VoiceOver receives the complete labels `One intersection`, `Two intersections`, and `Three intersections`. The explanatory text for values 2 and 3 states exactly how many results Nearest and Upcoming will speak.
 

@@ -187,6 +187,7 @@ enum WatchMeasurementUnit: String, CaseIterable, Identifiable {
 
 enum WatchDirectionStyle: String, CaseIterable, Identifiable {
 	case words
+	case cardinal
 	case clockFace
 
 	var id: String { rawValue }
@@ -194,7 +195,9 @@ enum WatchDirectionStyle: String, CaseIterable, Identifiable {
 	var label: String {
 		switch self {
 		case .words:
-			"Words"
+			"Relative"
+		case .cardinal:
+			"Cardinal"
 		case .clockFace:
 			"Clock Face"
 		}
@@ -914,6 +917,14 @@ struct WatchOrientationReport: Equatable {
 		switch prefs.directionStyle {
 		case .words:
 			return relDir
+		case .cardinal:
+			guard let head else {
+				return nil
+			}
+			if prefs.manhattanSnobMode {
+				return "toward \(WatchGeo.manhattanDirection(for: head))"
+			}
+			return head
 		case .clockFace:
 			return relDegrees.map { Self.clockFaceDirection(from: $0) }
 		}

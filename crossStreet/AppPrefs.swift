@@ -191,6 +191,7 @@ enum MeasurementUnit: String, CaseIterable, Identifiable {
 
 enum DirectionStyle: String, CaseIterable, Identifiable {
 	case words
+	case cardinal
 	case clockFace
 
 	var id: String { rawValue }
@@ -198,7 +199,9 @@ enum DirectionStyle: String, CaseIterable, Identifiable {
 	var label: String {
 		switch self {
 		case .words:
-			"Words"
+			"Relative"
+		case .cardinal:
+			"Cardinal"
 		case .clockFace:
 			"Clock Face"
 		}

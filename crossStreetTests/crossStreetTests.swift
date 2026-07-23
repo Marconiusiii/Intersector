@@ -181,6 +181,58 @@ struct IntersectorTests {
 		#expect(Geo.localizedDirection(180, prefs: prefs) == "Downtown")
 	}
 
+	@Test func cardinalDirectionStyleUsesGeographicBearing() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.directionStyle = .cardinal
+		let report = OrientReport(
+			kind: .upcoming,
+			cross: "Riverside Drive and West 100th Street",
+			dist: "300 feet",
+			relDir: "ahead and left",
+			relDegrees: 315,
+			street: "Riverside Drive",
+			head: "northwest",
+			area: nil,
+			toward: nil,
+			conf: .high
+		)
+
+		#expect(
+			report.text(with: prefs) ==
+				"Upcoming: Riverside Drive and West 100th Street, about 300 feet northwest."
+		)
+	}
+
+	@Test func cardinalDirectionStyleUsesManhattanWordingWhenEnabled() async throws {
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.directionStyle = .cardinal
+		prefs.manhattanSnobMode = true
+		let report = OrientReport(
+			kind: .nearest,
+			cross: "Amsterdam Avenue and West 94th Street",
+			dist: "120 feet",
+			relDir: "ahead",
+			relDegrees: 0,
+			street: "Amsterdam Avenue",
+			head: "north",
+			area: nil,
+			toward: nil,
+			conf: .high
+		)
+
+		#expect(
+			report.text(with: prefs) ==
+				"Nearest: Amsterdam Avenue and West 94th Street, about 120 feet toward Uptown."
+		)
+	}
+
+	@Test func savedWordsDirectionStyleRemainsRelative() {
+		#expect(DirectionStyle(rawValue: "words") == .words)
+		#expect(DirectionStyle.words.label == "Relative")
+	}
+
 	@Test func manhattanSnobModeDoesNotOverrideClockFaceReports() async throws {
 		var prefs = AppPrefs()
 		prefs.areaMode = .off
