@@ -1421,10 +1421,7 @@ struct ContentView: View {
 						body: "The chevron menus on Nearest and Upcoming expose 2nd and 3rd result actions. Nearest ranks by distance from you. Upcoming follows the direction your phone is facing and looks forward along your current street. You can hide the visible chevrons in Settings while keeping ranked actions available through VoiceOver, Siri, and Shortcuts."
 					)
 
-					helpSection(
-						title: "Announcement Settings",
-						body: "Use the Announcements settings to choose what Intersector includes when it speaks. Distance adds how far away the result is. Direction adds wording like ahead, left, right, or clock-face direction. Neighborhood adds nearby area context when map data can support it. Intersection Details can add useful details such as signalized crossings or pedestrian islands when that information is mapped."
-					)
+					announcementSettingsHelpSection
 
 					helpSection(
 						title: "Map Detail",
@@ -1477,6 +1474,33 @@ struct ContentView: View {
 				.lineLimit(nil)
 				.fixedSize(horizontal: false, vertical: true)
 		}
+	}
+
+	private var announcementSettingsHelpSection: some View {
+		VStack(alignment: .leading, spacing: 12) {
+			Text("Announcement Settings")
+				.font(.headline)
+				.foregroundStyle(Color.crossText)
+				.lineLimit(nil)
+				.fixedSize(horizontal: false, vertical: true)
+				.accessibilityAddTraits(.isHeader)
+
+			Text("Use the Announcements settings to choose what Intersector includes in spoken and visible results.")
+
+			Text("Distance says approximately how far away the intersection is. You can choose feet or meters.")
+
+			Text("Direction says where the intersection is in relation to the way your phone is pointing. Relative uses words such as ahead, left, and right. Cardinal uses directions such as north or southwest. Clock Face uses positions such as 10 o’clock.")
+
+			Text("Neighborhood adds a neighborhood or local area name when one is available. Nearby only announces the area closest to your current location. Nearby and toward can also announce a different area in the direction your phone is pointing.")
+
+			Text("Intersection Details adds useful mapped information such as traffic signals and pedestrian islands. If a detail has not been added to the map, Intersector cannot announce it.")
+
+			Text("Spoken Intersections chooses whether Nearest and Upcoming speak one, two, or three results. Nearest reports the closest intersections. Upcoming reports the next intersections along the road ahead.")
+		}
+		.font(.body)
+		.foregroundStyle(Color.crossText)
+		.lineLimit(nil)
+		.fixedSize(horizontal: false, vertical: true)
 	}
 
 	private func settingsHeader(_ title: String) -> some View {
