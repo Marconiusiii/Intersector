@@ -6,8 +6,10 @@
 //
 
 import AVFoundation
+import Darwin
 import MessageUI
 import SwiftUI
+import UIKit
 import WatchConnectivity
 
 private enum SettingsFocusTarget: Hashable {
@@ -1120,7 +1122,7 @@ struct ContentView: View {
 				MailComposerView(
 					recipient: "marco@marconius.com",
 					subject: "Intersector Feedback",
-					body: nil,
+					body: feedbackEmailBody,
 					onFinish: { _ in }
 				)
 			}
@@ -1832,9 +1834,42 @@ struct ContentView: View {
 		return "Copyright \(year) by Marco Salsiccia\nVersion \(version) (\(build))"
 	}
 
+	private var feedbackEmailBody: String {
+		let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+		let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
+		let device = UIDevice.current
+		return """
+
+
+		---
+		Intersector version: \(version) (\(build))
+		Device: \(device.model) (\(deviceHardwareIdentifier))
+		OS: \(device.systemName) \(device.systemVersion)
+		"""
+	}
+
+	private var deviceHardwareIdentifier: String {
+		if let simulatorIdentifier = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] {
+			return simulatorIdentifier
+		}
+		var systemInfo = utsname()
+		uname(&systemInfo)
+		return withUnsafePointer(to: &systemInfo.machine) { pointer in
+			pointer.withMemoryRebound(to: CChar.self, capacity: 1) {
+				String(cString: $0)
+			}
+		}
+	}
+
 	private func openMailFallback() {
-		let subject = "Intersector Feedback".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-		guard let mailURL = URL(string: "mailto:marco@marconius.com?subject=\(subject)") else {
+		var components = URLComponents()
+		components.scheme = "mailto"
+		components.path = "marco@marconius.com"
+		components.queryItems = [
+			URLQueryItem(name: "subject", value: "Intersector Feedback"),
+			URLQueryItem(name: "body", value: feedbackEmailBody)
+		]
+		guard let mailURL = components.url else {
 			return
 		}
 		openURL(mailURL)
