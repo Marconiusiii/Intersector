@@ -609,7 +609,14 @@ struct OrientSvc {
 					radiusMeters: minimumCandidateCount >= 3 ? 1_200 : 750,
 					options: prefs.mapDetails
 				)
-				return initialData.merging(focusedData)
+				return await mapDataFollowingSelectedContinuation(
+					from: context,
+					initialRoadName: roadName,
+					minimumCandidateCount: minimumCandidateCount,
+					prefs: prefs,
+					options: prefs.mapDetails,
+					mapData: initialData.merging(focusedData)
+				)
 			} catch {
 				guard prefs.mapDetails.includeCrossings else {
 					return initialData
@@ -623,7 +630,14 @@ struct OrientSvc {
 						radiusMeters: minimumCandidateCount >= 3 ? 1_200 : 750,
 						options: fallbackOptions
 					)
-					return initialData.merging(focusedData)
+					return await mapDataFollowingSelectedContinuation(
+						from: context,
+						initialRoadName: roadName,
+						minimumCandidateCount: minimumCandidateCount,
+						prefs: prefs,
+						options: fallbackOptions,
+						mapData: initialData.merging(focusedData)
+					)
 				} catch {
 					return initialData
 				}
@@ -663,6 +677,42 @@ struct OrientSvc {
 		}
 
 		return latestData
+	}
+
+	private func mapDataFollowingSelectedContinuation(
+		from context: DeviceContext,
+		initialRoadName: String,
+		minimumCandidateCount: Int,
+		prefs: AppPrefs,
+		options: MapDetailOptions,
+		mapData: MapDataSet
+	) async -> MapDataSet {
+		guard !hasEnoughCandidates(
+			for: .upcoming,
+			from: context,
+			minimumCandidateCount: minimumCandidateCount,
+			mapData: mapData,
+			prefs: prefs
+		) else {
+			return mapData
+		}
+		guard
+			let continuationRoadName = mapData.upcomingRoadNames(from: context)
+				.first(where: { $0 != initialRoadName })
+		else {
+			return mapData
+		}
+		do {
+			let continuationData = try await mapDataClient.roadMapData(
+				near: context.coordinate,
+				roadName: continuationRoadName,
+				radiusMeters: minimumCandidateCount >= 3 ? 1_200 : 750,
+				options: options
+			)
+			return mapData.merging(continuationData)
+		} catch {
+			return mapData
+		}
 	}
 
 	private func lookupRadii() -> [CLLocationDistance] {

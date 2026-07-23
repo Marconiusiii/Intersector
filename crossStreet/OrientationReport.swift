@@ -417,6 +417,12 @@ struct MapRoad: Equatable, Identifiable {
 private struct RoadGraphEdge {
 	var nodeID: Int64
 	var distance: CLLocationDistance
+	var roadName: String
+}
+
+private struct RoadRoute {
+	var distances: [Int64: CLLocationDistance]
+	var roadNames: [String]
 }
 
 private struct RoadStartSegment {
@@ -482,7 +488,7 @@ struct MapDataSet: Equatable {
 		}
 
 		let matchingRoads = roads.filter { $0.name == road.name }
-		let graph = roadGraph(from: matchingRoads)
+		let graph = roadGraph(from: roads)
 		guard
 			let start = nearestRoadSegment(to: context.coordinate, in: matchingRoads),
 			start.distance <= currentRoadDistanceThreshold(for: context)
@@ -507,12 +513,14 @@ struct MapDataSet: Equatable {
 			from: forwardNodeID,
 			initialDistance: distanceToForwardNode,
 			blockedFirstNode: backwardNodeID,
+			initialRoadName: road.name,
 			adjacency: graph.adjacency,
 			coordinates: graph.coordinates
 		)
+		let routeRoadNames = Set(routeDistances.roadNames)
 
 		let positioned = intersections
-			.filter { $0.roadNames.contains(road.name) }
+			.filter { !routeRoadNames.isDisjoint(with: $0.roadNames) }
 			.compactMap { candidate -> (candidate: IntersectionCandidate, progress: CLLocationDistance)? in
 				guard
 					let progress = routeProgress(
@@ -521,7 +529,7 @@ struct MapDataSet: Equatable {
 						alignment: alignment,
 						coordinates: graph.coordinates,
 						adjacency: graph.adjacency,
-						distances: routeDistances
+						distances: routeDistances.distances
 					),
 					progress > 3
 				else {
@@ -538,6 +546,41 @@ struct MapDataSet: Equatable {
 			}
 
 		return positioned.isEmpty ? nil : positioned.map(\.candidate)
+	}
+
+	func upcomingRoadNames(from context: DeviceContext) -> [String] {
+		guard
+			let heading = context.headingDegrees,
+			let road = currentRoad(from: context)
+		else {
+			return []
+		}
+		let matchingRoads = roads.filter { $0.name == road.name }
+		let graph = roadGraph(from: roads)
+		guard
+			let start = nearestRoadSegment(to: context.coordinate, in: matchingRoads),
+			start.distance <= currentRoadDistanceThreshold(for: context)
+		else {
+			return []
+		}
+		let radians = heading * Double.pi / 180
+		let alignment = sin(radians) * start.tangentX + cos(radians) * start.tangentY
+		guard abs(alignment) >= 0.35 else {
+			return []
+		}
+		let forwardNodeID = alignment >= 0 ? start.endNodeID : start.startNodeID
+		let backwardNodeID = alignment >= 0 ? start.startNodeID : start.endNodeID
+		let initialDistance = alignment >= 0
+			? start.length * (1 - start.projection)
+			: start.length * start.projection
+		return roadDistances(
+			from: forwardNodeID,
+			initialDistance: initialDistance,
+			blockedFirstNode: backwardNodeID,
+			initialRoadName: road.name,
+			adjacency: graph.adjacency,
+			coordinates: graph.coordinates
+		).roadNames
 	}
 
 	func streetPosition(
@@ -673,12 +716,12 @@ struct MapDataSet: Equatable {
 				guard distance > 0 else {
 					continue
 				}
-				adjacency[startNodeID, default: []].append(
-					RoadGraphEdge(nodeID: endNodeID, distance: distance)
-				)
-				adjacency[endNodeID, default: []].append(
-					RoadGraphEdge(nodeID: startNodeID, distance: distance)
-				)
+					adjacency[startNodeID, default: []].append(
+						RoadGraphEdge(nodeID: endNodeID, distance: distance, roadName: road.name)
+					)
+					adjacency[endNodeID, default: []].append(
+						RoadGraphEdge(nodeID: startNodeID, distance: distance, roadName: road.name)
+					)
 			}
 		}
 		return (adjacency, coordinates)
@@ -742,48 +785,71 @@ struct MapDataSet: Equatable {
 		from startNodeID: Int64,
 		initialDistance: CLLocationDistance,
 		blockedFirstNode: Int64,
+		initialRoadName: String,
 		adjacency: [Int64: [RoadGraphEdge]],
 		coordinates: [Int64: CLLocationCoordinate2D]
-	) -> [Int64: CLLocationDistance] {
+	) -> RoadRoute {
 		var distances = [startNodeID: initialDistance]
 		var visited: Set<Int64> = [blockedFirstNode, startNodeID]
 		var previousNodeID = blockedFirstNode
 		var currentNodeID = startNodeID
 		var currentDistance = initialDistance
+		var currentRoadName = initialRoadName
+		var roadNames = [initialRoadName]
 
 		while
 			let previousCoordinate = coordinates[previousNodeID],
 			let currentCoordinate = coordinates[currentNodeID]
 		{
-			let nextEdge = adjacency[currentNodeID, default: []]
+			let candidates = adjacency[currentNodeID, default: []]
 				.filter { !visited.contains($0.nodeID) && coordinates[$0.nodeID] != nil }
-				.max { lhs, rhs in
-					let lhsAlignment = continuationAlignment(
-						previous: previousCoordinate,
-						current: currentCoordinate,
-						next: coordinates[lhs.nodeID]!
+				.map { edge in
+					(
+						edge: edge,
+						alignment: continuationAlignment(
+							previous: previousCoordinate,
+							current: currentCoordinate,
+							next: coordinates[edge.nodeID]!
+						)
 					)
-					let rhsAlignment = continuationAlignment(
-						previous: previousCoordinate,
-						current: currentCoordinate,
-						next: coordinates[rhs.nodeID]!
-					)
-					if abs(lhsAlignment - rhsAlignment) > 0.001 {
-						return lhsAlignment < rhsAlignment
-					}
-					return lhs.nodeID > rhs.nodeID
 				}
-			guard let nextEdge else {
+			let sameRoadCandidates = candidates.filter { $0.edge.roadName == currentRoadName }
+			let rankedCandidates = (sameRoadCandidates.isEmpty ? candidates : sameRoadCandidates)
+				.sorted { lhs, rhs in
+					if abs(lhs.alignment - rhs.alignment) > 0.001 {
+						return lhs.alignment > rhs.alignment
+					}
+					return lhs.edge.nodeID < rhs.edge.nodeID
+				}
+			guard let selected = rankedCandidates.first else {
 				break
 			}
+			if sameRoadCandidates.isEmpty {
+				guard selected.alignment >= 0.7 else {
+					break
+				}
+				if
+					let alternative = rankedCandidates.dropFirst().first,
+					selected.alignment - alternative.alignment < 0.15
+				{
+					break
+				}
+			}
+			let nextEdge = selected.edge
 
 			currentDistance += nextEdge.distance
 			distances[nextEdge.nodeID] = currentDistance
 			previousNodeID = currentNodeID
 			currentNodeID = nextEdge.nodeID
 			visited.insert(currentNodeID)
+			if nextEdge.roadName != currentRoadName {
+				currentRoadName = nextEdge.roadName
+				if !roadNames.contains(currentRoadName) {
+					roadNames.append(currentRoadName)
+				}
+			}
 		}
-		return distances
+		return RoadRoute(distances: distances, roadNames: roadNames)
 	}
 
 	private func continuationAlignment(

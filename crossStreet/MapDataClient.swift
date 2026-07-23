@@ -259,15 +259,22 @@ struct MapDataClient: MapDataFetching {
 		}
 		let highwayPattern = highwayTypes.joined(separator: "|")
 		let crossingRadius = Int(min(radiusMeters, 225).rounded())
-		let crossingQueries = options.includeCrossings ? """
+		let crossingSetup = options.includeCrossings ? """
+		(
 		  node(around:\(crossingRadius),\(coordinate.latitude),\(coordinate.longitude))["highway"="crossing"];
 		  node(around:\(crossingRadius),\(coordinate.latitude),\(coordinate.longitude))["crossing"];
+		)->.crossingNodes;
+		way(bn.crossingNodes)["highway"="service"]->.crossingServiceWays;
 		""" : ""
+		let crossingResults = options.includeCrossings
+			? ".crossingNodes;.crossingServiceWays;"
+			: ""
 		let body = """
 		[out:json][timeout:10];
+		\(crossingSetup)
 		(
 		  way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"~"^(\(highwayPattern))$"]["name"];
-		\(crossingQueries)
+		  \(crossingResults)
 		);
 		(._;>;);
 		out body;
@@ -669,6 +676,7 @@ struct IntersectionBuilder {
 				return (element.id, CLLocationCoordinate2D(latitude: lat, longitude: lon))
 			}
 		)
+		let serviceRoadNodeIDs = serviceRoadNodeIDs(in: response)
 
 		var namesByNode: [Int64: Set<String>] = [:]
 		var roads = [MapRoad]()
@@ -711,6 +719,7 @@ struct IntersectionBuilder {
 				guard
 					element.type == "node",
 					isCrossing(element.tags),
+					!serviceRoadNodeIDs.contains(element.id),
 					!isRoadJunctionCrossing(element.id, namesByNode: namesByNode),
 					let coordinate = nodes[element.id],
 					let road = crossingRoad(
@@ -723,10 +732,12 @@ struct IntersectionBuilder {
 					return nil
 				}
 
-				let duplicatesStreetIntersection = streetIntersections.contains {
-					Geo.distanceMeters(from: $0.coordinate, to: coordinate) < 30
-				}
-				guard !duplicatesStreetIntersection else {
+				guard isConfidentMidBlockCrossing(
+					nodeID: element.id,
+					at: coordinate,
+					on: road,
+					between: streetIntersections
+				) else {
 					return nil
 				}
 				let anchor = nearestIntersection(
@@ -761,20 +772,24 @@ struct IntersectionBuilder {
 
 		var intersections = coreData.intersections
 		let streetIntersections = intersections.filter { !$0.id.hasPrefix("crossing-") }
+		let serviceRoadNodeIDs = serviceRoadNodeIDs(in: crossingResponse)
 		let crossingCandidates = crossingResponse.elements.compactMap { element -> IntersectionCandidate? in
 			guard
 				element.type == "node",
 				isCrossing(element.tags),
+				!serviceRoadNodeIDs.contains(element.id),
 				let coordinate = element.coordinate,
 				let road = coreData.roads.first(where: { $0.contains(coordinate) })
 			else {
 				return nil
 			}
 
-			let duplicatesStreetIntersection = streetIntersections.contains {
-				Geo.distanceMeters(from: $0.coordinate, to: coordinate) < 30
-			}
-			guard !duplicatesStreetIntersection else {
+			guard isConfidentMidBlockCrossing(
+				nodeID: element.id,
+				at: coordinate,
+				on: road,
+				between: streetIntersections
+			) else {
 				return nil
 			}
 			let anchor = nearestIntersection(
@@ -814,7 +829,9 @@ struct IntersectionBuilder {
 			let roadNames = namesByNode[nodeID]?.sorted(),
 			roadNames.count == 1,
 			let roadName = roadNames.first,
-			let road = roads.first(where: { $0.name == roadName })
+			let road = roads.first(where: {
+				$0.name == roadName && $0.nodeIDs.contains(nodeID)
+			})
 		{
 			return road
 		}
@@ -831,6 +848,36 @@ struct IntersectionBuilder {
 			return "Crossing on \(roadName)"
 		}
 		return "Crossing on \(roadName) near \(anchor.contextLabel(on: roadName, minimal: true))"
+	}
+
+	private func isConfidentMidBlockCrossing(
+		nodeID: Int64,
+		at coordinate: CLLocationCoordinate2D,
+		on road: MapRoad,
+		between intersections: [IntersectionCandidate]
+	) -> Bool {
+		let minimumJunctionSeparation: CLLocationDistance = 35
+		let positions = intersections
+			.filter { $0.roadNames.contains(road.name) }
+			.compactMap {
+				road.signedDistanceAlongRoad(from: coordinate, to: $0.coordinate)
+			}
+		guard !positions.contains(where: { abs($0) < minimumJunctionSeparation }) else {
+			return false
+		}
+		if road.nodeIDs.contains(nodeID) {
+			return true
+		}
+		return positions.contains(where: { $0 <= -minimumJunctionSeparation }) &&
+			positions.contains(where: { $0 >= minimumJunctionSeparation })
+	}
+
+	private func serviceRoadNodeIDs(in response: OverpassResponse) -> Set<Int64> {
+		Set(
+			response.elements
+				.filter { $0.type == "way" && $0.tags?["highway"] == "service" }
+				.flatMap { $0.nodes ?? [] }
+		)
 	}
 
 	private func nearestIntersection(

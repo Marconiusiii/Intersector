@@ -558,7 +558,14 @@ struct WatchOrientationService {
 					radiusMeters: minimumCandidateCount >= 3 ? 1_200 : 750,
 					options: prefs.mapDetails
 				)
-				return initialData.merging(focusedData)
+				return await mapDataFollowingSelectedContinuation(
+					from: context,
+					initialRoadName: roadName,
+					minimumCandidateCount: minimumCandidateCount,
+					prefs: prefs,
+					options: prefs.mapDetails,
+					mapData: initialData.merging(focusedData)
+				)
 			} catch {
 				guard prefs.mapDetails.includeCrossings else {
 					return initialData
@@ -572,7 +579,14 @@ struct WatchOrientationService {
 						radiusMeters: minimumCandidateCount >= 3 ? 1_200 : 750,
 						options: fallbackOptions
 					)
-					return initialData.merging(focusedData)
+					return await mapDataFollowingSelectedContinuation(
+						from: context,
+						initialRoadName: roadName,
+						minimumCandidateCount: minimumCandidateCount,
+						prefs: prefs,
+						options: fallbackOptions,
+						mapData: initialData.merging(focusedData)
+					)
 				} catch {
 					return initialData
 				}
@@ -608,6 +622,42 @@ struct WatchOrientationService {
 			}
 		}
 		return latestData
+	}
+
+	private func mapDataFollowingSelectedContinuation(
+		from context: WatchDeviceContext,
+		initialRoadName: String,
+		minimumCandidateCount: Int,
+		prefs: WatchAppPrefs,
+		options: WatchMapDetailOptions,
+		mapData: WatchMapDataSet
+	) async -> WatchMapDataSet {
+		guard !hasEnoughCandidates(
+			for: .upcoming,
+			from: context,
+			minimumCandidateCount: minimumCandidateCount,
+			mapData: mapData,
+			prefs: prefs
+		) else {
+			return mapData
+		}
+		guard
+			let continuationRoadName = mapData.upcomingRoadNames(from: context)
+				.first(where: { $0 != initialRoadName })
+		else {
+			return mapData
+		}
+		do {
+			let continuationData = try await mapClient.roadMapData(
+				near: context.coordinate,
+				roadName: continuationRoadName,
+				radiusMeters: minimumCandidateCount >= 3 ? 1_200 : 750,
+				options: options
+			)
+			return mapData.merging(continuationData)
+		} catch {
+			return mapData
+		}
 	}
 
 	private func lookupRadii() -> [CLLocationDistance] {
@@ -1088,6 +1138,12 @@ struct WatchMapRoad: Identifiable, Equatable {
 private struct WatchRoadGraphEdge {
 	var nodeID: Int64
 	var distance: CLLocationDistance
+	var roadName: String
+}
+
+private struct WatchRoadRoute {
+	var distances: [Int64: CLLocationDistance]
+	var roadNames: [String]
 }
 
 private struct WatchRoadStartSegment {
@@ -1129,7 +1185,7 @@ struct WatchMapDataSet: Equatable {
 		}
 
 		let matchingRoads = roads.filter { $0.name == road.name }
-		let graph = roadGraph(from: matchingRoads)
+		let graph = roadGraph(from: roads)
 		guard
 			let start = nearestRoadSegment(to: context.coordinate, in: matchingRoads),
 			start.distance <= currentRoadDistanceThreshold(for: context)
@@ -1151,12 +1207,14 @@ struct WatchMapDataSet: Equatable {
 			from: forwardNodeID,
 			initialDistance: distanceToForwardNode,
 			blockedFirstNode: backwardNodeID,
+			initialRoadName: road.name,
 			adjacency: graph.adjacency,
 			coordinates: graph.coordinates
 		)
+		let routeRoadNames = Set(routeDistances.roadNames)
 
 		let positioned = intersections
-			.filter { $0.roadNames.contains(road.name) }
+			.filter { !routeRoadNames.isDisjoint(with: $0.roadNames) }
 			.compactMap { candidate -> (candidate: WatchIntersectionCandidate, progress: CLLocationDistance)? in
 				guard
 					let progress = routeProgress(
@@ -1165,7 +1223,7 @@ struct WatchMapDataSet: Equatable {
 						alignment: alignment,
 						coordinates: graph.coordinates,
 						adjacency: graph.adjacency,
-						distances: routeDistances
+						distances: routeDistances.distances
 					),
 					progress > 3
 				else {
@@ -1181,6 +1239,41 @@ struct WatchMapDataSet: Equatable {
 					< WatchGeo.distanceMeters(from: context.coordinate, to: rhs.candidate.coordinate)
 			}
 		return positioned.isEmpty ? nil : positioned.map(\.candidate)
+	}
+
+	func upcomingRoadNames(from context: WatchDeviceContext) -> [String] {
+		guard
+			let heading = context.headingDegrees,
+			let road = currentRoad(from: context)
+		else {
+			return []
+		}
+		let matchingRoads = roads.filter { $0.name == road.name }
+		let graph = roadGraph(from: roads)
+		guard
+			let start = nearestRoadSegment(to: context.coordinate, in: matchingRoads),
+			start.distance <= currentRoadDistanceThreshold(for: context)
+		else {
+			return []
+		}
+		let radians = heading * Double.pi / 180
+		let alignment = sin(radians) * start.tangentX + cos(radians) * start.tangentY
+		guard abs(alignment) >= 0.35 else {
+			return []
+		}
+		let forwardNodeID = alignment >= 0 ? start.endNodeID : start.startNodeID
+		let backwardNodeID = alignment >= 0 ? start.startNodeID : start.endNodeID
+		let initialDistance = alignment >= 0
+			? start.length * (1 - start.projection)
+			: start.length * start.projection
+		return roadDistances(
+			from: forwardNodeID,
+			initialDistance: initialDistance,
+			blockedFirstNode: backwardNodeID,
+			initialRoadName: road.name,
+			adjacency: graph.adjacency,
+			coordinates: graph.coordinates
+		).roadNames
 	}
 
 	func nearestRoadName(
@@ -1248,12 +1341,12 @@ struct WatchMapDataSet: Equatable {
 				guard distance > 0 else {
 					continue
 				}
-				adjacency[startNodeID, default: []].append(
-					WatchRoadGraphEdge(nodeID: endNodeID, distance: distance)
-				)
-				adjacency[endNodeID, default: []].append(
-					WatchRoadGraphEdge(nodeID: startNodeID, distance: distance)
-				)
+					adjacency[startNodeID, default: []].append(
+						WatchRoadGraphEdge(nodeID: endNodeID, distance: distance, roadName: road.name)
+					)
+					adjacency[endNodeID, default: []].append(
+						WatchRoadGraphEdge(nodeID: startNodeID, distance: distance, roadName: road.name)
+					)
 			}
 		}
 		return (adjacency, coordinates)
@@ -1317,47 +1410,70 @@ struct WatchMapDataSet: Equatable {
 		from startNodeID: Int64,
 		initialDistance: CLLocationDistance,
 		blockedFirstNode: Int64,
+		initialRoadName: String,
 		adjacency: [Int64: [WatchRoadGraphEdge]],
 		coordinates: [Int64: CLLocationCoordinate2D]
-	) -> [Int64: CLLocationDistance] {
+	) -> WatchRoadRoute {
 		var distances = [startNodeID: initialDistance]
 		var visited: Set<Int64> = [blockedFirstNode, startNodeID]
 		var previousNodeID = blockedFirstNode
 		var currentNodeID = startNodeID
 		var currentDistance = initialDistance
+		var currentRoadName = initialRoadName
+		var roadNames = [initialRoadName]
 
 		while
 			let previousCoordinate = coordinates[previousNodeID],
 			let currentCoordinate = coordinates[currentNodeID]
 		{
-			let nextEdge = adjacency[currentNodeID, default: []]
+			let candidates = adjacency[currentNodeID, default: []]
 				.filter { !visited.contains($0.nodeID) && coordinates[$0.nodeID] != nil }
-				.max { lhs, rhs in
-					let lhsAlignment = continuationAlignment(
-						previous: previousCoordinate,
-						current: currentCoordinate,
-						next: coordinates[lhs.nodeID]!
+				.map { edge in
+					(
+						edge: edge,
+						alignment: continuationAlignment(
+							previous: previousCoordinate,
+							current: currentCoordinate,
+							next: coordinates[edge.nodeID]!
+						)
 					)
-					let rhsAlignment = continuationAlignment(
-						previous: previousCoordinate,
-						current: currentCoordinate,
-						next: coordinates[rhs.nodeID]!
-					)
-					if abs(lhsAlignment - rhsAlignment) > 0.001 {
-						return lhsAlignment < rhsAlignment
-					}
-					return lhs.nodeID > rhs.nodeID
 				}
-			guard let nextEdge else {
+			let sameRoadCandidates = candidates.filter { $0.edge.roadName == currentRoadName }
+			let rankedCandidates = (sameRoadCandidates.isEmpty ? candidates : sameRoadCandidates)
+				.sorted { lhs, rhs in
+					if abs(lhs.alignment - rhs.alignment) > 0.001 {
+						return lhs.alignment > rhs.alignment
+					}
+					return lhs.edge.nodeID < rhs.edge.nodeID
+				}
+			guard let selected = rankedCandidates.first else {
 				break
 			}
+			if sameRoadCandidates.isEmpty {
+				guard selected.alignment >= 0.7 else {
+					break
+				}
+				if
+					let alternative = rankedCandidates.dropFirst().first,
+					selected.alignment - alternative.alignment < 0.15
+				{
+					break
+				}
+			}
+			let nextEdge = selected.edge
 			currentDistance += nextEdge.distance
 			distances[nextEdge.nodeID] = currentDistance
 			previousNodeID = currentNodeID
 			currentNodeID = nextEdge.nodeID
 			visited.insert(currentNodeID)
+			if nextEdge.roadName != currentRoadName {
+				currentRoadName = nextEdge.roadName
+				if !roadNames.contains(currentRoadName) {
+					roadNames.append(currentRoadName)
+				}
+			}
 		}
-		return distances
+		return WatchRoadRoute(distances: distances, roadNames: roadNames)
 	}
 
 	private func continuationAlignment(
@@ -2021,15 +2137,22 @@ struct WatchMapDataClient {
 		}
 		let highwayPattern = highwayTypes.joined(separator: "|")
 		let crossingRadius = Int(min(radiusMeters, 225).rounded())
-		let crossingQueries = options.includeCrossings ? """
+		let crossingSetup = options.includeCrossings ? """
+		(
 		  node(around:\(crossingRadius),\(coordinate.latitude),\(coordinate.longitude))["highway"="crossing"];
 		  node(around:\(crossingRadius),\(coordinate.latitude),\(coordinate.longitude))["crossing"];
+		)->.crossingNodes;
+		way(bn.crossingNodes)["highway"="service"]->.crossingServiceWays;
 		""" : ""
+		let crossingResults = options.includeCrossings
+			? ".crossingNodes;.crossingServiceWays;"
+			: ""
 		let body = """
 		[out:json][timeout:10];
+		\(crossingSetup)
 		(
 		  way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"~"^(\(highwayPattern))$"]["name"];
-		\(crossingQueries)
+		  \(crossingResults)
 		);
 		(._;>;);
 		out body;
@@ -2153,6 +2276,7 @@ struct WatchIntersectionBuilder {
 				return (element.id, CLLocationCoordinate2D(latitude: lat, longitude: lon))
 			}
 		)
+		let serviceRoadNodeIDs = serviceRoadNodeIDs(in: response)
 		var namesByNode: [Int64: Set<String>] = [:]
 		var roads = [WatchMapRoad]()
 		for way in response.elements where way.type == "way" {
@@ -2192,6 +2316,7 @@ struct WatchIntersectionBuilder {
 				guard
 					element.type == "node",
 					isCrossing(element.tags),
+					!serviceRoadNodeIDs.contains(element.id),
 					!isRoadJunctionCrossing(element.id, namesByNode: namesByNode),
 					let coordinate = nodes[element.id],
 					let road = crossingRoad(
@@ -2203,10 +2328,12 @@ struct WatchIntersectionBuilder {
 				else {
 					return nil
 				}
-				let duplicatesStreetIntersection = streetIntersections.contains {
-					WatchGeo.distanceMeters(from: $0.coordinate, to: coordinate) < 30
-				}
-				guard !duplicatesStreetIntersection else {
+				guard isConfidentMidBlockCrossing(
+					nodeID: element.id,
+					at: coordinate,
+					on: road,
+					between: streetIntersections
+				) else {
 					return nil
 				}
 				let anchor = nearestIntersection(
@@ -2240,19 +2367,23 @@ struct WatchIntersectionBuilder {
 
 		var intersections = coreData.intersections
 		let streetIntersections = intersections.filter { !$0.id.hasPrefix("crossing-") }
+		let serviceRoadNodeIDs = serviceRoadNodeIDs(in: crossingResponse)
 		let crossingCandidates = crossingResponse.elements.compactMap { element -> WatchIntersectionCandidate? in
 			guard
 				element.type == "node",
 				isCrossing(element.tags),
+				!serviceRoadNodeIDs.contains(element.id),
 				let coordinate = element.coordinate,
 				let road = coreData.roads.first(where: { $0.contains(coordinate) })
 			else {
 				return nil
 			}
-			let duplicatesStreetIntersection = streetIntersections.contains {
-				WatchGeo.distanceMeters(from: $0.coordinate, to: coordinate) < 30
-			}
-			guard !duplicatesStreetIntersection else {
+			guard isConfidentMidBlockCrossing(
+				nodeID: element.id,
+				at: coordinate,
+				on: road,
+				between: streetIntersections
+			) else {
 				return nil
 			}
 			let anchor = nearestIntersection(
@@ -2292,7 +2423,9 @@ struct WatchIntersectionBuilder {
 			let roadNames = namesByNode[nodeID]?.sorted(),
 			roadNames.count == 1,
 			let roadName = roadNames.first,
-			let road = roads.first(where: { $0.name == roadName })
+			let road = roads.first(where: {
+				$0.name == roadName && $0.nodeIDs.contains(nodeID)
+			})
 		{
 			return road
 		}
@@ -2309,6 +2442,36 @@ struct WatchIntersectionBuilder {
 			return "Crossing on \(roadName)"
 		}
 		return "Crossing on \(roadName) near \(anchor.contextLabel(on: roadName))"
+	}
+
+	private func isConfidentMidBlockCrossing(
+		nodeID: Int64,
+		at coordinate: CLLocationCoordinate2D,
+		on road: WatchMapRoad,
+		between intersections: [WatchIntersectionCandidate]
+	) -> Bool {
+		let minimumJunctionSeparation: CLLocationDistance = 35
+		let positions = intersections
+			.filter { $0.roadNames.contains(road.name) }
+			.compactMap {
+				road.signedDistanceAlongRoad(from: coordinate, to: $0.coordinate)
+			}
+		guard !positions.contains(where: { abs($0) < minimumJunctionSeparation }) else {
+			return false
+		}
+		if road.nodeIDs.contains(nodeID) {
+			return true
+		}
+		return positions.contains(where: { $0 <= -minimumJunctionSeparation }) &&
+			positions.contains(where: { $0 >= minimumJunctionSeparation })
+	}
+
+	private func serviceRoadNodeIDs(in response: WatchOverpassResponse) -> Set<Int64> {
+		Set(
+			response.elements
+				.filter { $0.type == "way" && $0.tags?["highway"] == "service" }
+				.flatMap { $0.nodes ?? [] }
+		)
 	}
 
 	private func nearestIntersection(
