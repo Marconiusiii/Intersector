@@ -2497,6 +2497,37 @@ struct IntersectorTests {
 		#expect(data.intersections.map(\.title) == ["Oak Street and Pine Street"])
 	}
 
+	@Test func intersectionBuilderSuppressesCornerCrossingsAtStreetNameChange() async throws {
+		let response = OverpassResponse(
+			elements: [
+				OverpassElement(type: "node", id: 1, lat: 40.7397255, lon: -73.9910755, nodes: nil, tags: ["highway": "crossing"]),
+				OverpassElement(type: "node", id: 2, lat: 40.7396206, lon: -73.9908325, nodes: nil, tags: ["highway": "crossing"]),
+				OverpassElement(type: "node", id: 3, lat: 40.7397444, lon: -73.9909115, nodes: nil, tags: ["highway": "crossing"]),
+				OverpassElement(type: "node", id: 4, lat: 40.7396263, lon: -73.9909977, nodes: nil, tags: ["highway": "crossing"]),
+				OverpassElement(type: "node", id: 5, lat: 40.7396764, lon: -73.9909614, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 6, lat: 40.7398, lon: -73.9913, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 7, lat: 40.7395, lon: -73.9905, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 8, lat: 40.7400, lon: -73.9908, nodes: nil, tags: nil),
+				OverpassElement(type: "node", id: 9, lat: 40.7393, lon: -73.9911, nodes: nil, tags: nil),
+				OverpassElement(type: "way", id: 10, lat: nil, lon: nil, nodes: [6, 1, 5], tags: ["highway": "residential", "name": "West 20th Street"]),
+				OverpassElement(type: "way", id: 11, lat: nil, lon: nil, nodes: [5, 2, 7], tags: ["highway": "residential", "name": "East 20th Street"]),
+				OverpassElement(type: "way", id: 12, lat: nil, lon: nil, nodes: [8, 3, 5, 4, 9], tags: ["highway": "secondary", "name": "5th Avenue"])
+			]
+		)
+
+		let data = IntersectionBuilder().mapData(
+			from: response,
+			options: MapDetailOptions(includeCrossings: true)
+		)
+
+		#expect(data.intersections.map(\.title) == ["5th Avenue and East 20th Street"])
+		#expect(data.intersections.first?.roadNames == [
+			"5th Avenue",
+			"East 20th Street",
+			"West 20th Street"
+		])
+	}
+
 	@Test func areaModeOffSkipsNeighborhoodLookup() async throws {
 		let neighborhoodProvider = FakeNeighborhoodProvider(candidates: [
 			NeighborhoodCandidate(

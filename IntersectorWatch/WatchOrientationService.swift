@@ -2454,6 +2454,11 @@ struct WatchIntersectionBuilder {
 		between intersections: [WatchIntersectionCandidate]
 	) -> Bool {
 		let minimumJunctionSeparation: CLLocationDistance = 35
+		guard !intersections.contains(where: {
+			WatchGeo.distanceMeters(from: coordinate, to: $0.coordinate) < minimumJunctionSeparation
+		}) else {
+			return false
+		}
 		let positions = intersections
 			.filter { $0.roadNames.contains(road.name) }
 			.compactMap {
