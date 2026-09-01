@@ -183,7 +183,7 @@ struct LiveModeTests {
 		#expect(drivingApproach)
 	}
 
-	@Test func stationaryMonitorIgnoresGpsDriftAndResetsAfterRealMovement() {
+	@Test func stationaryMonitorUsesElapsedTimeIgnoresGpsDriftAndResetsAfterRealMovement() {
 		let origin = CLLocationCoordinate2D(latitude: 37, longitude: -122)
 		let start = Date(timeIntervalSince1970: 10_000)
 		var monitor = LiveMovementMonitor()
@@ -201,6 +201,7 @@ struct LiveModeTests {
 			at: start.addingTimeInterval(240)
 		)
 
+		#expect(!monitor.hasTimedOut(after: 5, at: start.addingTimeInterval(299)))
 		#expect(monitor.hasTimedOut(after: 5, at: start.addingTimeInterval(301)))
 
 		monitor.record(

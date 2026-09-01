@@ -29,7 +29,7 @@ You can also create your own shortcut phrases using Intersector actions in the S
 
 Turn on Live from the main screen to have Intersector announce upcoming intersections automatically as you travel. Choose Walking when you are on foot. Choose Driving when you are in a car or bus so intersections are announced sooner.
 
-Live Mode uses the voice, speech rate, and volume selected in Settings. An ascending flourish confirms that it is on, and a descending flourish confirms that it is off. Intersector can stop Live Mode after you remain in the same area for the number of minutes selected in Settings. Live Mode also stops when Intersector leaves the foreground.
+Live Mode uses the voice, speech rate, and volume selected in Settings. An ascending flourish confirms that it is on, and a descending flourish confirms that it is off. Live Mode continues when you use another app or lock the phone, so announcements can continue while you walk, ride, or drive. Intersector stops Live Mode after you stop moving for the number of minutes selected in Settings. You can also stop it from Intersector, Siri, or Shortcuts.
 
 Start Live Mode and Stop Live Mode are available as Siri and Shortcuts actions. Starting through a shortcut uses the saved Walking or Driving setting.
 

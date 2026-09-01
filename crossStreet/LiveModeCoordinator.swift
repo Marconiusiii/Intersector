@@ -96,11 +96,7 @@ final class LiveModeCoordinator: ObservableObject {
 			while !Task.isCancelled {
 				try? await Task.sleep(for: .seconds(15))
 				guard let self, self.isActive else { return }
-				if self.movementMonitor.hasTimedOut(after: self.stationaryMinutes) {
-					let minutes = Int(self.stationaryMinutes.rounded())
-					self.stop(
-						message: "Live Mode stopped because you haven't moved for \(minutes) minutes."
-					)
+				if self.stopIfStationary() {
 					return
 				}
 			}
@@ -130,6 +126,9 @@ final class LiveModeCoordinator: ObservableObject {
 
 	private func process(_ context: DeviceContext) async {
 		movementMonitor.record(context)
+		if stopIfStationary() {
+			return
+		}
 		do {
 			let mapData = try await mapData(for: context)
 			guard let match = matcher.match(context, in: mapData, mode: activeMode) else {
@@ -155,6 +154,16 @@ final class LiveModeCoordinator: ObservableObject {
 				statusText = "Live Mode is waiting for map data."
 			}
 		}
+	}
+
+	@discardableResult
+	private func stopIfStationary() -> Bool {
+		guard movementMonitor.hasTimedOut(after: stationaryMinutes) else {
+			return false
+		}
+		let minutes = Int(stationaryMinutes.rounded())
+		stop(message: "Live Mode stopped because you haven't moved for \(minutes) minutes.")
+		return true
 	}
 
 	private func mapData(for context: DeviceContext) async throws -> MapDataSet {

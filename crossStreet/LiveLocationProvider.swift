@@ -11,6 +11,7 @@ final class LiveLocationProvider: NSObject {
 	private let manager = CLLocationManager()
 	private var authorizationContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
 	private var updateContinuation: AsyncThrowingStream<DeviceContext, Error>.Continuation?
+	private var backgroundActivitySession: CLBackgroundActivitySession?
 
 	override init() {
 		super.init()
@@ -32,12 +33,16 @@ final class LiveLocationProvider: NSObject {
 					self?.stop()
 				}
 			}
+			backgroundActivitySession = CLBackgroundActivitySession()
 			manager.startUpdatingLocation()
 		}
 	}
 
 	func stop() {
 		manager.stopUpdatingLocation()
+		manager.allowsBackgroundLocationUpdates = false
+		backgroundActivitySession?.invalidate()
+		backgroundActivitySession = nil
 		updateContinuation = nil
 	}
 
@@ -52,7 +57,9 @@ final class LiveLocationProvider: NSObject {
 	}
 
 	private func configure(for mode: LiveTravelMode) {
-		manager.pausesLocationUpdatesAutomatically = true
+		manager.allowsBackgroundLocationUpdates = true
+		manager.showsBackgroundLocationIndicator = true
+		manager.pausesLocationUpdatesAutomatically = false
 		switch mode {
 		case .walking:
 			manager.activityType = .fitness

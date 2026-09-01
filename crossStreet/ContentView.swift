@@ -927,9 +927,6 @@ struct ContentView: View {
 				} else {
 					pointScanner.stopScanning()
 					finishScanPreparationPresentation()
-					if liveMode.isActive {
-						liveMode.stop(message: "Live Mode stopped when Intersector left the foreground.")
-					}
 				}
 			}
 		}
@@ -1572,7 +1569,7 @@ struct ContentView: View {
 					)
 				}
 			}
-			settingsHelperText("Stops Live Mode after you remain in the same area for the selected time.")
+			settingsHelperText("Stops Live Mode after you stop moving for the selected time, including while Intersector is in the background or the phone is locked.")
 			settingsHeader("System Speech")
 			settingsControlRow {
 				LiveVoicePicker(voiceIdentifier: $liveVoiceIdentifier)
@@ -1904,7 +1901,7 @@ struct ContentView: View {
 
 					helpSection(
 						title: "Live Mode",
-						body: "Turn on Live to hear upcoming intersections automatically as you travel. Choose Walking when you are on foot. Choose Driving when you are in a car or bus so intersections are announced sooner. Live Mode uses the voice, speech rate, and volume selected in Settings. An ascending flourish confirms that Live Mode is on, and a descending flourish confirms that it is off. Live Mode stops after you remain in the same area for the selected time or when Intersector leaves the foreground."
+						body: "Turn on Live to hear upcoming intersections automatically as you travel. Choose Walking when you are on foot. Choose Driving when you are in a car or bus so intersections are announced sooner. Live Mode continues when you use another app or lock the phone. Live Mode uses the voice, speech rate, and volume selected in Settings. An ascending flourish confirms that Live Mode is on, and a descending flourish confirms that it is off. Live Mode stops after you stop moving for the time selected in Settings. You can also turn it off from Intersector, Siri, or Shortcuts."
 					)
 
 					helpSection(

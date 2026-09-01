@@ -58,9 +58,22 @@
 		A1B2C3D42FE0000000000002 /* Intersector Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Intersector Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		7C0010032FE9000000000001 /* Exceptions for "crossStreet" folder in "Intersector" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 82E8319D2FD62E4300071B9D /* Intersector */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		82E831A02FD62E4300071B9D /* crossStreet */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				7C0010032FE9000000000001 /* Exceptions for "crossStreet" folder in "Intersector" target */,
+			);
 			path = crossStreet;
 			sourceTree = "<group>";
 		};
@@ -495,6 +508,7 @@
 				DEVELOPMENT_TEAM = 4FL3XZDQ9P;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = crossStreet/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Intersector;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.navigation";
@@ -532,6 +546,7 @@
 				DEVELOPMENT_TEAM = 4FL3XZDQ9P;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = crossStreet/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Intersector;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.navigation";
