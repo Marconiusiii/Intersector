@@ -18,8 +18,6 @@ struct MapDataClient: MapDataFetching {
 	var requestHandler: (@Sendable (URLRequest) async throws -> MapHTTPResponse)?
 	private static let cache = MapDataCache()
 	private static let endpointHealth = MapEndpointHealth()
-	private let endpointStaggerMilliseconds = 750
-	private let overallRequestTimeoutMilliseconds = 12_000
 
 	func intersections(
 		near coordinate: CLLocationCoordinate2D,
@@ -112,64 +110,26 @@ struct MapDataClient: MapDataFetching {
 			primary: endpoint,
 			fallbacks: fallbackEndpoints
 		)
-		let outcome = await withTaskGroup(of: MapEndpointAttempt.self) { group in
-			for (index, endpoint) in endpoints.enumerated() {
-				group.addTask {
-					do {
-						if index > 0 {
-							try await Task.sleep(for: .milliseconds(index * endpointStaggerMilliseconds))
-						}
-						try Task.checkCancellation()
-						let data = try await fetchMapData(
-							from: endpoint,
-							options: options,
-							query: query
-						)
-						return MapEndpointAttempt(endpoint: endpoint, result: .success(data))
-					} catch {
-						return MapEndpointAttempt(endpoint: endpoint, result: .failure(error))
-					}
+		var lastError: Error = MapDataError.invalidResponse
+		for endpoint in endpoints {
+			do {
+				try Task.checkCancellation()
+				let data = try await fetchMapData(
+					from: endpoint,
+					options: options,
+					query: query
+				)
+				await Self.endpointHealth.markSuccess(endpoint)
+				return data
+			} catch {
+				lastError = error
+				guard isTemporary(error) else {
+					throw error
 				}
+				await Self.endpointHealth.markTemporaryFailure(endpoint)
 			}
-			group.addTask {
-				do {
-					try await Task.sleep(for: .milliseconds(overallRequestTimeoutMilliseconds))
-					return MapEndpointAttempt(endpoint: nil, result: .failure(URLError(.timedOut)))
-				} catch {
-					return MapEndpointAttempt(endpoint: nil, result: .failure(error))
-				}
-			}
-
-			var lastError: Error = MapDataError.invalidResponse
-			var remainingEndpoints = endpoints.count
-			while let attempt = await group.next() {
-				switch attempt.result {
-				case .success(let data):
-					if let endpoint = attempt.endpoint {
-						await Self.endpointHealth.markSuccess(endpoint)
-					}
-					group.cancelAll()
-					return Result<MapDataSet, Error>.success(data)
-				case .failure(let error):
-					if attempt.endpoint == nil {
-						group.cancelAll()
-						return Result<MapDataSet, Error>.failure(error)
-					}
-					remainingEndpoints -= 1
-					lastError = error
-					if let endpoint = attempt.endpoint, isTemporary(error) {
-						await Self.endpointHealth.markTemporaryFailure(endpoint)
-					}
-					if remainingEndpoints == 0 {
-						group.cancelAll()
-						return Result<MapDataSet, Error>.failure(lastError)
-					}
-				}
-			}
-			return Result<MapDataSet, Error>.failure(lastError)
 		}
-
-		return try outcome.get()
+		throw lastError
 	}
 
 	private func fetchMapData(
@@ -341,11 +301,6 @@ struct MapDataClient: MapDataFetching {
 struct MapHTTPResponse: @unchecked Sendable {
 	var data: Data
 	var response: URLResponse
-}
-
-private struct MapEndpointAttempt: @unchecked Sendable {
-	var endpoint: URL?
-	var result: Result<MapDataSet, Error>
 }
 
 actor MapEndpointHealth {

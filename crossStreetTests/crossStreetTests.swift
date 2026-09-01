@@ -1001,7 +1001,7 @@ struct IntersectorTests {
 
 		let text = try await service.spokenText(.upcoming, prefs: prefs)
 
-		#expect(text == "Oak Street and First Street, Second Street.")
+		#expect(text == "Upcoming: Oak Street and First Street, Second Street.")
 		#expect(!text.contains("Behind Street"))
 	}
 
@@ -1079,7 +1079,7 @@ struct IntersectorTests {
 		let text = try await service.spokenText(.upcoming, prefs: prefs)
 		let thirdReport = try await service.report(.upcoming, rank: 3, prefs: prefs)
 
-		#expect(text == "Oak Street and First Street, Second Street, Third Street.")
+		#expect(text == "Upcoming: Oak Street and First Street, Second Street, Third Street.")
 		#expect(!text.contains("Diagonal Street"))
 		#expect(thirdReport.cross == "Oak Street and Third Street")
 	}
@@ -1413,7 +1413,7 @@ struct IntersectorTests {
 
 		let text = try await service.spokenText(.upcoming, prefs: prefs)
 
-		#expect(text == "Foothill Boulevard and Stanley Avenue and Talbot Avenue, Next Street.")
+		#expect(text == "Upcoming: Foothill Boulevard and Stanley Avenue and Talbot Avenue, Next Street.")
 	}
 
 	@Test func scanReportUsesSplitCrossStreetAnnouncementWithinImmediateRange() async throws {
@@ -1492,7 +1492,7 @@ struct IntersectorTests {
 
 		let text = try await service.spokenText(.scan, prefs: prefs)
 
-		#expect(text == "Foothill Boulevard and Stanley Avenue and Talbot Avenue.")
+		#expect(text == "Pointed: Foothill Boulevard and Stanley Avenue and Talbot Avenue.")
 		#expect(!text.contains("Far Street"))
 	}
 
@@ -2138,7 +2138,7 @@ struct IntersectorTests {
 		#expect(recoveredOrder == [primary, fallback])
 	}
 
-	@Test func mapDataClientAcceptsAStaggeredFallbackBeforeThePrimaryTimesOut() async throws {
+	@Test func mapDataClientUsesFallbackOnlyAfterPrimaryFailure() async throws {
 		let primary = URL(string: "https://slow-primary.example/api/interpreter")!
 		let fallback = URL(string: "https://fast-fallback.example/api/interpreter")!
 		let requestLog = MapRequestLog()
@@ -2151,7 +2151,7 @@ struct IntersectorTests {
 			}
 			await requestLog.record(url)
 			if url == primary {
-				try await Task.sleep(for: .seconds(5))
+				try await Task.sleep(for: .milliseconds(100))
 				throw URLError(.timedOut)
 			}
 			let response = HTTPURLResponse(
@@ -2166,17 +2166,13 @@ struct IntersectorTests {
 			)
 		}
 
-		let clock = ContinuousClock()
-		let start = clock.now
 		let data = try await client.freshMapData(
 			near: CLLocationCoordinate2D(latitude: 39.1234, longitude: -76.5432),
 			radiusMeters: 225
 		)
-		let elapsed = start.duration(to: clock.now)
 
 		#expect(data.intersections.isEmpty)
 		#expect(await requestLog.urls == [primary, fallback])
-		#expect(elapsed < .seconds(3))
 	}
 
 	@Test func intersectionBuilderIgnoresNonStreetPaths() async throws {

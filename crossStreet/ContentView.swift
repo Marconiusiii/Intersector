@@ -142,6 +142,49 @@ private struct PersistentScanButtonStyle: ButtonStyle {
 	}
 }
 
+private struct LiveVoicePicker: View {
+	@Binding var voiceIdentifier: String
+	@AccessibilityFocusState private var isFocused: Bool
+
+	private var voices: [LiveSpeechVoice] {
+		LiveSpeechVoice.available
+	}
+
+	var body: some View {
+		Picker("Voice", selection: selection) {
+			ForEach(voices) { voice in
+				Text(voice.label).tag(voice.id)
+			}
+		}
+		.pickerStyle(.menu)
+		.accessibilityFocused($isFocused)
+		.onAppear {
+			if !voices.contains(where: { $0.id == voiceIdentifier }) {
+				voiceIdentifier = ""
+			}
+		}
+	}
+
+	private var selection: Binding<String> {
+		Binding {
+			voiceIdentifier
+		} set: { newValue in
+			voiceIdentifier = newValue
+			restoreFocus()
+		}
+	}
+
+	private func restoreFocus() {
+		isFocused = false
+		DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+			isFocused = true
+		}
+		DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+			isFocused = true
+		}
+	}
+}
+
 private let lookupLoadingText = "Still finding the intersection."
 private let extendedLookupLoadingText = "Still working. Map data is taking longer than usual."
 private let startupLoadingText = "Loading Intersector."
@@ -588,6 +631,11 @@ struct ContentView: View {
 	@AppStorage("manhattanSnobMode") private var manhattanSnobMode = false
 	@AppStorage("showRankedControls") private var showRankedControls = true
 	@AppStorage("displayLayout") private var displayLayoutRaw = DisplayLayout.standard.rawValue
+	@AppStorage("liveTravelMode") private var liveTravelModeRaw = LiveTravelMode.walking.rawValue
+	@AppStorage("liveStationaryMinutes") private var liveStationaryMinutes = 5.0
+	@AppStorage("liveVoiceIdentifier") private var liveVoiceIdentifier = ""
+	@AppStorage("liveSpeechRate") private var liveSpeechRate = 0.5
+	@AppStorage("liveSpeechVolume") private var liveSpeechVolume = 1.0
 	@Environment(\.dynamicTypeSize) private var dynamicTypeSize
 	@Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 	@Environment(\.openURL) private var openURL
@@ -616,6 +664,7 @@ struct ContentView: View {
 	@State private var onboardingLocationProvider = LocationProvider()
 	@State private var directionLocationProvider = LocationProvider()
 	@StateObject private var pointScanner = PointScanController()
+	@StateObject private var liveMode = LiveModeCoordinator()
 	@State private var scanPreparationStatusOperationID: Int?
 	@State private var watchSettingsSync = WatchSettingsSync()
 	private let mainActionBorderWidth: CGFloat = 3
@@ -661,6 +710,18 @@ struct ContentView: View {
 
 	private var displayLayout: DisplayLayout {
 		DisplayLayout(rawValue: displayLayoutRaw) ?? .standard
+	}
+
+	private var selectedLiveTravelMode: LiveTravelMode {
+		LiveTravelMode(rawValue: liveTravelModeRaw) ?? .walking
+	}
+
+	private var liveSpeechSettings: LiveSpeechSettings {
+		LiveSpeechSettings(
+			voiceIdentifier: liveVoiceIdentifier,
+			rate: Float(liveSpeechRate),
+			volume: Float(liveSpeechVolume)
+		)
 	}
 
 	private var selectedAreaMode: AreaMode {
@@ -767,10 +828,16 @@ struct ContentView: View {
 			.onChange(of: mapReadinessSignature) { _, _ in
 				restartInitialPreparation()
 			}
+			.onChange(of: liveMode.statusText) { _, text in
+				presentStatusText(text)
+			}
 			.onChange(of: scenePhase) { _, phase in
 				if phase != .active {
 					pointScanner.stopScanning()
 					finishScanPreparationPresentation()
+					if liveMode.isActive {
+						liveMode.stop(message: "Live Mode stopped when Intersector left the foreground.")
+					}
 				}
 			}
 		}
@@ -782,19 +849,47 @@ struct ContentView: View {
 				appTitle
 					.fixedSize(horizontal: true, vertical: false)
 				Spacer(minLength: 0)
-				settingsButton
-					.fixedSize(horizontal: true, vertical: false)
+				headerControls
 			}
 			VStack(alignment: .leading, spacing: 0) {
 				appTitle
 					.frame(maxWidth: .infinity, alignment: .leading)
-				settingsButton
+				headerControls
 					.frame(maxWidth: .infinity, alignment: .trailing)
 			}
 		}
 		.frame(maxWidth: .infinity, alignment: .leading)
 		.background(Color.crossBg)
 		.tint(Color.crossAccent)
+	}
+
+	private var headerControls: some View {
+		ViewThatFits(in: .horizontal) {
+			HStack(spacing: 0) {
+				liveToggle
+				settingsButton
+			}
+			VStack(alignment: .trailing, spacing: 0) {
+				liveToggle
+				settingsButton
+			}
+		}
+		.fixedSize(horizontal: true, vertical: false)
+	}
+
+	private var liveToggle: some View {
+		Toggle("Live", isOn: liveModeBinding)
+			.toggleStyle(.button)
+			.tint(Color.crossScanActive)
+			.font(.body)
+			.fontWeight(.semibold)
+			.multilineTextAlignment(.center)
+			.lineLimit(nil)
+			.fixedSize(horizontal: false, vertical: true)
+			.padding(.horizontal, 12)
+			.padding(.vertical, 6)
+			.frame(minWidth: 72, minHeight: 56, alignment: .center)
+			.contentShape(Rectangle())
 	}
 
 	private var appTitle: some View {
@@ -1140,6 +1235,22 @@ struct ContentView: View {
 		}
 	}
 
+	private var liveTravelModeBinding: Binding<LiveTravelMode> {
+		Binding {
+			selectedLiveTravelMode
+		} set: { mode in
+			liveTravelModeRaw = mode.rawValue
+		}
+	}
+
+	private var liveModeBinding: Binding<Bool> {
+		Binding {
+			liveMode.isActive
+		} set: { shouldStart in
+			setLiveMode(shouldStart)
+		}
+	}
+
 	private var measurementUnitBinding: Binding<MeasurementUnit> {
 		Binding {
 			prefs.measurementUnit
@@ -1330,6 +1441,7 @@ struct ContentView: View {
 		VStack(alignment: .leading, spacing: 0) {
 			settingsIntroSection
 			settingsDisplaySection
+			settingsLiveModeSection
 			settingsAnnouncementSection
 			settingsRegionalWordingSection
 			settingsMapDetailSection
@@ -1337,6 +1449,84 @@ struct ContentView: View {
 			settingsAboutSection
 		}
 		.frame(maxHeight: .infinity)
+	}
+
+	private var settingsLiveModeSection: some View {
+		Group {
+			settingsHeader("Live Mode")
+			settingsControlRow {
+				VStack(alignment: .leading, spacing: 8) {
+					Text("Travel Mode")
+						.foregroundStyle(Color.crossText)
+					Picker("Travel Mode", selection: liveTravelModeBinding) {
+						ForEach(LiveTravelMode.allCases) { mode in
+							Text(mode.label).tag(mode)
+						}
+					}
+					.pickerStyle(.segmented)
+				}
+			}
+			settingsHelperText("Walking uses pedestrian paths when they are enabled. Driving follows roads and announces intersections earlier.")
+			settingsControlRow {
+				VStack(alignment: .leading, spacing: 8) {
+					Text("Stop When Stationary: \(Int(liveStationaryMinutes.rounded())) minutes")
+						.foregroundStyle(Color.crossText)
+						.accessibilityHidden(true)
+					Slider(
+						value: $liveStationaryMinutes,
+						in: 5...30,
+						step: 1,
+						minimumValueLabel: Text("5 min"),
+						maximumValueLabel: Text("30 min"),
+						label: { Text("Stop When Stationary, \(Int(liveStationaryMinutes.rounded())) minutes") }
+					)
+				}
+			}
+			settingsHelperText("Stops Live Mode after you remain in the same area for the selected time.")
+			settingsHeader("System Speech")
+			settingsControlRow {
+				LiveVoicePicker(voiceIdentifier: $liveVoiceIdentifier)
+			}
+			settingsControlRow {
+				VStack(alignment: .leading, spacing: 8) {
+					Text("Speech Rate")
+						.foregroundStyle(Color.crossText)
+						.accessibilityHidden(true)
+					Slider(
+						value: $liveSpeechRate,
+						in: 0.35...0.65,
+						minimumValueLabel: Text("Slower"),
+						maximumValueLabel: Text("Faster"),
+						label: { Text("Speech Rate") }
+					)
+				}
+			}
+			settingsControlRow {
+				VStack(alignment: .leading, spacing: 8) {
+					Text("Speech Volume")
+						.foregroundStyle(Color.crossText)
+						.accessibilityHidden(true)
+					Slider(
+						value: $liveSpeechVolume,
+						in: 0...1,
+						minimumValueLabel: Text("Quiet"),
+						maximumValueLabel: Text("Loud"),
+						label: { Text("Speech Volume") }
+					)
+				}
+			}
+			settingsControlRow {
+				Button {
+					SystemSpeechController.shared.speak(
+						"Welcome to Intersector!",
+						settings: liveSpeechSettings
+					)
+				} label: {
+					settingsButtonLabel("Test Speech")
+				}
+				.buttonStyle(.plain)
+			}
+		}
 	}
 
 	private var settingsIntroSection: some View {
@@ -1911,10 +2101,32 @@ struct ContentView: View {
 			return
 		}
 
+		if liveMode.isActive {
+			liveMode.stop()
+		}
 		scanPreparationStatusOperationID = operationID
 		pointScanner.setScanning(true, prefs: prefs) { text in
 			handleScanModeStatus(text)
 		}
+	}
+
+	private func setLiveMode(_ shouldStart: Bool) {
+		if !shouldStart {
+			liveMode.stop()
+			return
+		}
+
+		if pointScanner.isScanning || pointScanner.isPreparing {
+			scanPreparationStatusOperationID = nil
+			pointScanner.setScanning(false, prefs: prefs) { _ in }
+			finishScanPreparationPresentation()
+		}
+		liveMode.start(
+			mode: selectedLiveTravelMode,
+			prefs: prefs,
+			speechSettings: liveSpeechSettings,
+			stationaryMinutes: liveStationaryMinutes
+		)
 	}
 
 	@discardableResult

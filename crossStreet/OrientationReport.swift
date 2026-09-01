@@ -474,10 +474,13 @@ struct MapDataSet: Equatable {
 			}
 	}
 
-	func upcomingRoadSequence(from context: DeviceContext) -> [IntersectionCandidate]? {
+	func upcomingRoadSequence(
+		from context: DeviceContext,
+		preferredRoadName: String? = nil
+	) -> [IntersectionCandidate]? {
 		guard
 			let heading = context.headingDegrees,
-			let road = currentRoad(from: context)
+			let road = currentRoad(from: context, preferredRoadName: preferredRoadName)
 		else {
 			return nil
 		}
@@ -628,12 +631,15 @@ struct MapDataSet: Equatable {
 		}
 	}
 
-	private func currentRoad(from context: DeviceContext) -> MapRoad? {
+	private func currentRoad(
+		from context: DeviceContext,
+		preferredRoadName: String? = nil
+	) -> MapRoad? {
 		guard let heading = context.headingDegrees else {
 			return nil
 		}
 		let threshold = currentRoadDistanceThreshold(for: context)
-		return roads
+		let matches = roads
 			.compactMap { road -> (road: MapRoad, score: Double)? in
 				let distance = road.minimumDistance(to: context.coordinate)
 				guard
@@ -646,8 +652,15 @@ struct MapDataSet: Equatable {
 				let alignmentPenalty = (1 - abs(directionSign)) * 40
 				return (road, distance + alignmentPenalty)
 			}
-			.min { $0.score < $1.score }?
-			.road
+		if
+			let preferredRoadName,
+			let preferred = matches
+				.filter({ $0.road.name == preferredRoadName })
+				.min(by: { $0.score < $1.score })
+		{
+			return preferred.road
+		}
+		return matches.min { $0.score < $1.score }?.road
 	}
 
 	private func currentRoadDistanceThreshold(for context: DeviceContext) -> CLLocationDistance {
