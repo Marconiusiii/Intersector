@@ -26,6 +26,13 @@ struct LiveModeTests {
 		#expect(LiveModeEarcon.frequencies(isActive: false) == [988, 660, 494])
 	}
 
+	@Test func liveModeShortcutCommandsHaveDeterministicStatesAndResults() {
+		#expect(LiveModeShortcutCommand(rawValue: "start") == .start)
+		#expect(LiveModeShortcutCommand(rawValue: "stop") == .stop)
+		#expect(LiveModeShortcutCommand.start.resultDialog == "Opening Intersector to start Live Mode.")
+		#expect(LiveModeShortcutCommand.stop.resultDialog == "Opening Intersector to stop Live Mode.")
+	}
+
 	@Test func liveUpcomingUsesTheExistingUpcomingFormatter() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37, longitude: -122)
 		let mapData = northboundMapData(origin: origin)

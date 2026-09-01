@@ -166,7 +166,7 @@ private struct LiveVoicePicker: View {
 
 private let lookupLoadingText = "Still finding the intersection."
 private let extendedLookupLoadingText = "Still working. Map data is taking longer than usual."
-private let startupLoadingText = "Loading Intersector."
+private let startupLoadingText = "Loading Intersector..."
 private let mapPreparationText = "Preparing map data for Nearest and Upcoming."
 private let mapWaitingText = "Waiting for map data. Nearest and Upcoming will become available automatically."
 private let readyText = "Intersector Ready."
@@ -712,13 +712,14 @@ struct ContentView: View {
 	@AppStorage("liveVoiceIdentifier") private var liveVoiceIdentifier = ""
 	@AppStorage("liveSpeechRatePercent") private var liveSpeechRatePercent = 50
 	@AppStorage("liveSpeechVolume") private var liveSpeechVolume = 1.0
+	@AppStorage(LaunchKeys.liveModeCommand) private var liveModeShortcutCommandRaw = ""
 	@Environment(\.dynamicTypeSize) private var dynamicTypeSize
 	@Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 	@Environment(\.openURL) private var openURL
 	@Environment(\.scenePhase) private var scenePhase
 	@ScaledMetric(relativeTo: .body) private var statusMinHeight: CGFloat = 112
 	@ScaledMetric(relativeTo: .title2) private var actionMinHeight: CGFloat = 76
-	@State private var statusText = "Choose an action."
+	@State private var statusText = startupLoadingText
 	@State private var statusPresentationID = 0
 	@State private var isStatusEmphasized = false
 	@State private var hasMetMinimumStatusEmphasisDuration = true
@@ -737,6 +738,7 @@ struct ContentView: View {
 	@State private var isShowingMailComposer = false
 	@State private var hasPreparedInitialLocation = false
 	@State private var startupTask: Task<Void, Never>?
+	@State private var hasPendingLiveModeStart = false
 	@State private var onboardingLocationProvider = LocationProvider()
 	@State private var directionLocationProvider = LocationProvider()
 	@StateObject private var pointScanner = PointScanController()
@@ -900,6 +902,7 @@ struct ContentView: View {
 				if areaModeRaw == AreaMode.off.rawValue {
 					areaModeRaw = AreaMode.near.rawValue
 				}
+				handleRequestedLiveModeCommandIfNeeded()
 				if !startRequestedPointScanIfNeeded() {
 					prepareInitialLocationIfNeeded()
 				}
@@ -914,8 +917,14 @@ struct ContentView: View {
 			.onChange(of: liveMode.statusText) { _, text in
 				presentStatusText(text)
 			}
+			.onChange(of: liveModeShortcutCommandRaw) { _, _ in
+				handleRequestedLiveModeCommandIfNeeded()
+			}
 			.onChange(of: scenePhase) { _, phase in
-				if phase != .active {
+				if phase == .active {
+					handleRequestedLiveModeCommandIfNeeded()
+					startPendingLiveModeIfReady()
+				} else {
 					pointScanner.stopScanning()
 					finishScanPreparationPresentation()
 					if liveMode.isActive {
@@ -1894,6 +1903,11 @@ struct ContentView: View {
 					)
 
 					helpSection(
+						title: "Live Mode",
+						body: "Turn on Live to hear upcoming intersections automatically as you travel. Choose Walking when you are on foot. Choose Driving when you are in a car or bus so intersections are announced sooner. Live Mode uses the voice, speech rate, and volume selected in Settings. An ascending flourish confirms that Live Mode is on, and a descending flourish confirms that it is off. Live Mode stops after you remain in the same area for the selected time or when Intersector leaves the foreground."
+					)
+
+					helpSection(
 						title: "2nd and 3rd Results",
 						body: "The chevron menus on Nearest and Upcoming expose 2nd and 3rd result actions. Nearest ranks by distance from you. Upcoming follows the direction your phone is facing and looks forward along your current street. You can hide the visible chevrons in Settings while keeping ranked actions available through VoiceOver, Siri, and Shortcuts."
 					)
@@ -1907,7 +1921,7 @@ struct ContentView: View {
 
 					helpSection(
 						title: "Siri and Shortcuts",
-						body: "Intersector includes shortcut actions for Nearest Intersection, Upcoming Intersection, My Direction, and Scan Mode. In the Shortcuts app, you can create your own phrase, such as Which way am I facing, and Siri can run that shortcut without needing you to say with Intersector."
+						body: "Intersector includes shortcut actions for Nearest Intersection, Upcoming Intersection, My Direction, Scan Mode, Start Live Mode, and Stop Live Mode. Starting Live Mode uses your saved Walking or Driving and speech settings. In the Shortcuts app, you can create your own phrases for Intersector actions."
 					)
 
 					helpSection(
@@ -2207,6 +2221,40 @@ struct ContentView: View {
 		)
 	}
 
+	private func handleRequestedLiveModeCommandIfNeeded() {
+		guard let command = LiveModeShortcutCommand(rawValue: liveModeShortcutCommandRaw) else {
+			return
+		}
+		liveModeShortcutCommandRaw = ""
+
+		switch command {
+		case .start:
+			hasPendingLiveModeStart = true
+			if pointScanner.isScanning || pointScanner.isPreparing {
+				scanPreparationStatusOperationID = nil
+				pointScanner.setScanning(false, prefs: prefs) { _ in }
+				finishScanPreparationPresentation()
+			}
+			if !isMapDataReady {
+				prepareInitialLocationIfNeeded()
+			}
+			startPendingLiveModeIfReady()
+		case .stop:
+			hasPendingLiveModeStart = false
+			if liveMode.isActive {
+				setLiveMode(false)
+			}
+		}
+	}
+
+	private func startPendingLiveModeIfReady() {
+		guard hasPendingLiveModeStart, isMapDataReady, scenePhase == .active else {
+			return
+		}
+		hasPendingLiveModeStart = false
+		setLiveMode(true)
+	}
+
 	@discardableResult
 	private func finishScanPreparationPresentation() -> Bool {
 		guard let operationID = scanPreparationStatusOperationID else {
@@ -2413,6 +2461,10 @@ struct ContentView: View {
 			LoadingThrobber.stop()
 			isMapPreparationLoading = false
 			isMapDataReady = true
+			if hasPendingLiveModeStart {
+				startPendingLiveModeIfReady()
+				return
+			}
 			ReadyEarcon.play(hapticsEnabled: prefs.haptics)
 			presentStatusText(readyText)
 			Task { @MainActor in

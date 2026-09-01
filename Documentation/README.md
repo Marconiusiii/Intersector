@@ -49,6 +49,15 @@ These are the most important files:
 - `PointScanController.swift`
   Runs Scan Mode, including warmup state, heading updates, cooldowns, haptics, and announcements.
 
+- `LiveMode.swift`
+  Defines Live Mode travel behavior, announcement timing, movement monitoring, system speech, and installed voice choices.
+
+- `LiveModeCoordinator.swift`
+  Coordinates Live Mode location updates, map reuse, intersection announcements, speech, and automatic shutdown.
+
+- `LiveLocationProvider.swift`
+  Configures Core Location for Walking or Driving and supplies continuous movement updates to Live Mode.
+
 - `CrossStreetIntents.swift`
   Defines Siri and Shortcuts actions using App Intents.
 
@@ -108,7 +117,7 @@ The value comes from:
 
 The main screen has these parts:
 
-1. Header
+1. Header with the Live toggle and Settings button
 2. Current Info area
 3. Nearest button
 4. Upcoming button
@@ -144,11 +153,12 @@ This avoids a common SwiftUI problem: if you force large text into a fixed-heigh
 @AppStorage("includeAnnouncementNeighborhood") private var includeAnnouncementNeighborhood = false
 @AppStorage("includeCrossings") private var includeCrossings = false
 @AppStorage("includeWalkingPaths") private var includeWalkingPaths = false
-@State private var statusText = "Choose an action."
+@State private var statusText = "Loading Intersector..."
 @State private var isLoading = false
 @State private var isDirectionLoading = false
 @State private var isShowingSettings = false
 @StateObject private var pointScanner = PointScanController()
+@StateObject private var liveMode = LiveModeCoordinator()
 ```
 
 Important patterns:
@@ -214,6 +224,22 @@ For nearest, the app picks the closest candidate.
 For upcoming, the app first identifies the named road nearest the user's location. It uses the phone heading only to choose which direction to travel along that road, then follows the connected road geometry through bends and separately mapped segments. Upcoming does not select intersections from a compass cone and does not fall back to a nearby intersection on another street. If the road or travel direction cannot be established confidently, the request returns no Upcoming result instead of guessing. If a fresh heading request times out, the location provider can retain a heading that is no more than two seconds old instead of immediately discarding useful direction data.
 
 The useful pattern here is that `ReportKind` changes behavior without duplicating the whole lookup flow.
+
+## How Live Mode Works
+
+The Live toggle starts `LiveModeCoordinator` with the saved travel mode, announcement preferences, speech settings, and stationary timeout. Live Mode and Scan Mode are mutually exclusive, so starting either one stops the other.
+
+Walking and Driving use the same Upcoming report formatter as the main Upcoming action. This keeps the information spoken during Live Mode consistent with what the user would hear by repeatedly choosing Upcoming. Walking announces an intersection when it is within 90 meters. Driving announces it within 350 meters so the user has more time at a higher speed. Driving also ignores roads mapped only for pedestrians.
+
+`LiveLocationProvider` adjusts Core Location for the selected travel mode. `LiveRoadMatcher` uses recent location samples, movement course, road alignment, and continuity with the previously matched road to avoid jumping between nearby parallel streets.
+
+Live Mode requests a 1,200-meter map area. It reuses that data while the user remains covered by it and will not refresh from Overpass more often than once every three minutes. If a refresh fails, it continues using cached data when possible.
+
+`LiveAnnouncementGate` prevents the same intersection from being repeated for ten minutes. `LiveMovementMonitor` stops the session after the user remains in the same area for the number of minutes selected in Settings. `ContentView` also stops Live Mode when Intersector leaves the foreground.
+
+`SystemSpeechController` speaks each result using the selected installed voice, speech-rate percentage, and volume. A short ascending flourish precedes the activation message, and a descending flourish precedes manual or automatic shutdown speech.
+
+The Start Live Mode and Stop Live Mode App Intents write an explicit command into `UserDefaults` and open Intersector. `ContentView` observes that command both when it appears and while it is already open. A start request waits for initial map preparation to finish, which prevents it from launching a competing initial data request. Starting uses the saved Walking or Driving setting, while stopping also cancels a start that is still waiting.
 
 ## The Report Service
 

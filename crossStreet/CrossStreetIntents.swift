@@ -346,6 +346,21 @@ struct MyDirectionIntent: AppIntent {
 
 enum LaunchKeys {
 	static let startPointScan = "startPointScanOnLaunch"
+	static let liveModeCommand = "liveModeShortcutCommand"
+}
+
+enum LiveModeShortcutCommand: String {
+	case start
+	case stop
+
+	var resultDialog: String {
+		switch self {
+		case .start:
+			"Opening Intersector to start Live Mode."
+		case .stop:
+			"Opening Intersector to stop Live Mode."
+		}
+	}
 }
 
 struct StartPointScanIntent: AppIntent {
@@ -354,8 +369,37 @@ struct StartPointScanIntent: AppIntent {
 	static var openAppWhenRun = true
 
 	func perform() async throws -> some IntentResult & ProvidesDialog {
+		UserDefaults.standard.removeObject(forKey: await LaunchKeys.liveModeCommand)
 		UserDefaults.standard.set(true, forKey: await LaunchKeys.startPointScan)
 		return .result(dialog: "Opening Intersector in Scan Mode.")
+	}
+}
+
+struct StartLiveModeIntent: AppIntent {
+	static var title: LocalizedStringResource = "Start Live Mode"
+	static var description = IntentDescription("Opens Intersector and starts Live Mode using the saved travel and speech settings.")
+	static var openAppWhenRun = true
+
+	@MainActor
+	func perform() async throws -> some IntentResult & ProvidesDialog {
+		let command = LiveModeShortcutCommand.start
+		UserDefaults.standard.set(false, forKey: LaunchKeys.startPointScan)
+		UserDefaults.standard.set(command.rawValue, forKey: LaunchKeys.liveModeCommand)
+		return .result(dialog: IntentDialog(stringLiteral: command.resultDialog))
+	}
+}
+
+struct StopLiveModeIntent: AppIntent {
+	static var title: LocalizedStringResource = "Stop Live Mode"
+	static var description = IntentDescription("Opens Intersector and stops Live Mode.")
+	static var openAppWhenRun = true
+
+	@MainActor
+	func perform() async throws -> some IntentResult & ProvidesDialog {
+		let command = LiveModeShortcutCommand.stop
+		UserDefaults.standard.set(false, forKey: LaunchKeys.startPointScan)
+		UserDefaults.standard.set(command.rawValue, forKey: LaunchKeys.liveModeCommand)
+		return .result(dialog: IntentDialog(stringLiteral: command.resultDialog))
 	}
 }
 
@@ -467,6 +511,24 @@ struct IntersectorShortcuts: AppShortcutsProvider {
 			],
 			shortTitle: "Scan Mode",
 			systemImageName: "dot.radiowaves.left.and.right"
+		)
+		AppShortcut(
+			intent: StartLiveModeIntent(),
+			phrases: [
+				"Start Live Mode in \(.applicationName)",
+				"Turn on Live Mode in \(.applicationName)"
+			],
+			shortTitle: "Start Live",
+			systemImageName: "figure.walk.motion"
+		)
+		AppShortcut(
+			intent: StopLiveModeIntent(),
+			phrases: [
+				"Stop Live Mode in \(.applicationName)",
+				"Turn off Live Mode in \(.applicationName)"
+			],
+			shortTitle: "Stop Live",
+			systemImageName: "stop.circle.fill"
 		)
 	}
 }

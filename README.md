@@ -7,6 +7,7 @@ Intersector is an accessibility-first iOS app for quickly identifying nearby int
 - Find the nearest mapped intersection from your current location.
 - Find an upcoming intersection based on your current heading.
 - Use Scan Mode to point the phone toward nearby intersections on the street you are on.
+- Use Live Mode to hear upcoming intersections automatically while walking or riding in a car or bus.
 - Start common actions through Siri Shortcuts without opening the app first.
 - Hear updated information through VoiceOver announcements.
 - Use optional haptic scan feedback while orienting the phone.
@@ -19,14 +20,26 @@ Intersector provides App Shortcuts for:
 - `Nearest intersection in Intersector`
 - `Upcoming intersection in Intersector`
 - `Start Scan Mode in Intersector`
+- `Start Live Mode in Intersector`
+- `Stop Live Mode in Intersector`
 
 You can also create your own shortcut phrases using Intersector actions in the Shortcuts app.
+
+## Live Mode
+
+Turn on Live from the main screen to have Intersector announce upcoming intersections automatically as you travel. Choose Walking when you are on foot. Choose Driving when you are in a car or bus so intersections are announced sooner.
+
+Live Mode uses the voice, speech rate, and volume selected in Settings. An ascending flourish confirms that it is on, and a descending flourish confirms that it is off. Intersector can stop Live Mode after you remain in the same area for the number of minutes selected in Settings. Live Mode also stops when Intersector leaves the foreground.
+
+Start Live Mode and Stop Live Mode are available as Siri and Shortcuts actions. Starting through a shortcut uses the saved Walking or Driving setting.
 
 ## Accessibility
 
 Intersector is built around VoiceOver-first use. The main screen uses large full-width action areas, native SwiftUI controls where possible, Dynamic Type-friendly text, and spoken announcements when intersection information updates.
 
 Scan Mode is a live orientation feature: when enabled, it monitors heading changes, announces matching intersections, and provides haptic feedback as the phone points closer to an intersection.
+
+Live Mode follows your direction of travel and announces upcoming intersections without requiring you to point the phone toward them.
 
 ## Map Data
 
