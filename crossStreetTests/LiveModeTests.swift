@@ -1,3 +1,4 @@
+import AVFoundation
 import CoreLocation
 import Foundation
 import Testing
@@ -5,6 +6,19 @@ import Testing
 
 @MainActor
 struct LiveModeTests {
+	@Test func speechRatePercentageMapsAcrossTheSystemSpeechRange() {
+		#expect(SystemSpeechController.speechRate(forPercent: 0) == AVSpeechUtteranceMinimumSpeechRate)
+		#expect(SystemSpeechController.speechRate(forPercent: 100) == AVSpeechUtteranceMaximumSpeechRate)
+		#expect(SystemSpeechController.speechRate(forPercent: -10) == AVSpeechUtteranceMinimumSpeechRate)
+		#expect(SystemSpeechController.speechRate(forPercent: 110) == AVSpeechUtteranceMaximumSpeechRate)
+	}
+
+	@Test func systemVoicesMatchTheDeviceLanguageCode() {
+		#expect(LiveSpeechVoice.matchesDeviceLanguage(voiceLanguage: "en-US", deviceLanguageCode: "en"))
+		#expect(LiveSpeechVoice.matchesDeviceLanguage(voiceLanguage: "en-GB", deviceLanguageCode: "en-US"))
+		#expect(!LiveSpeechVoice.matchesDeviceLanguage(voiceLanguage: "es-MX", deviceLanguageCode: "en-US"))
+	}
+
 	@Test func liveUpcomingUsesTheExistingUpcomingFormatter() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37, longitude: -122)
 		let mapData = northboundMapData(origin: origin)

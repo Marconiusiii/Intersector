@@ -28,7 +28,7 @@ final class LiveModeCoordinator: ObservableObject {
 	private var lastMapFetchAt: Date?
 	private var activeMode = LiveTravelMode.walking
 	private var activePrefs = AppPrefs()
-	private var activeSpeechSettings = LiveSpeechSettings(voiceIdentifier: "", rate: 0.5, volume: 1)
+	private var activeSpeechSettings = LiveSpeechSettings(voiceIdentifier: "", ratePercent: 50, volume: 1)
 	private var stationaryMinutes = 5.0
 	private let minimumMapRefreshInterval: TimeInterval = 3 * 60
 

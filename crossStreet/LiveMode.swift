@@ -38,7 +38,7 @@ enum LiveTravelMode: String, CaseIterable, Identifiable, Sendable {
 
 struct LiveSpeechSettings: Equatable, Sendable {
 	var voiceIdentifier: String
-	var rate: Float
+	var ratePercent: Int
 	var volume: Float
 }
 
@@ -216,7 +216,7 @@ final class SystemSpeechController {
 		if !settings.voiceIdentifier.isEmpty {
 			utterance.voice = AVSpeechSynthesisVoice(identifier: settings.voiceIdentifier)
 		}
-		utterance.rate = min(AVSpeechUtteranceMaximumSpeechRate, max(AVSpeechUtteranceMinimumSpeechRate, settings.rate))
+		utterance.rate = Self.speechRate(forPercent: settings.ratePercent)
 		utterance.volume = min(1, max(0, settings.volume))
 		synthesizer.speak(utterance)
 	}
@@ -232,6 +232,13 @@ final class SystemSpeechController {
 			try session.setActive(true)
 		} catch {}
 	}
+
+	static func speechRate(forPercent percent: Int) -> Float {
+		let clamped = min(max(percent, 0), 100)
+		let progress = Float(clamped) / 100
+		return AVSpeechUtteranceMinimumSpeechRate
+			+ ((AVSpeechUtteranceMaximumSpeechRate - AVSpeechUtteranceMinimumSpeechRate) * progress)
+	}
 }
 
 struct LiveSpeechVoice: Identifiable, Equatable {
@@ -240,16 +247,49 @@ struct LiveSpeechVoice: Identifiable, Equatable {
 
 	static var available: [LiveSpeechVoice] {
 		let systemDefault = LiveSpeechVoice(id: "", label: "System Default")
+		guard let deviceLanguageCode = Locale.current.language.languageCode?.identifier else {
+			return [systemDefault]
+		}
 		let installed = AVSpeechSynthesisVoice.speechVoices()
+			.filter { matchesDeviceLanguage(voiceLanguage: $0.language, deviceLanguageCode: deviceLanguageCode) }
 			.sorted {
-				if $0.language == $1.language {
-					return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+				let firstRank = sortRank(for: $0)
+				let secondRank = sortRank(for: $1)
+				if firstRank != secondRank {
+					return firstRank < secondRank
 				}
-				return $0.language.localizedCaseInsensitiveCompare($1.language) == .orderedAscending
+				return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
 			}
 			.map { voice in
 				LiveSpeechVoice(id: voice.identifier, label: "\(voice.name), \(voice.language)")
 			}
 		return [systemDefault] + installed
+	}
+
+	static func matchesDeviceLanguage(voiceLanguage: String, deviceLanguageCode: String) -> Bool {
+		guard
+			let voiceCode = Locale(identifier: voiceLanguage).language.languageCode?.identifier,
+			let deviceCode = Locale(identifier: deviceLanguageCode).language.languageCode?.identifier
+		else {
+			return false
+		}
+		return voiceCode.caseInsensitiveCompare(deviceCode) == .orderedSame
+	}
+
+	private static func sortRank(for voice: AVSpeechSynthesisVoice) -> Int {
+		let qualityRank: Int
+		switch voice.quality {
+		case .premium:
+			qualityRank = 0
+		case .enhanced:
+			qualityRank = 1
+		default:
+			qualityRank = 2
+		}
+
+		if #available(iOS 17.0, *), voice.voiceTraits.contains(.isNoveltyVoice) {
+			return qualityRank + 10
+		}
+		return qualityRank
 	}
 }

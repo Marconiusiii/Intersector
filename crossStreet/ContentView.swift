@@ -144,43 +144,22 @@ private struct PersistentScanButtonStyle: ButtonStyle {
 
 private struct LiveVoicePicker: View {
 	@Binding var voiceIdentifier: String
-	@AccessibilityFocusState private var isFocused: Bool
 
 	private var voices: [LiveSpeechVoice] {
 		LiveSpeechVoice.available
 	}
 
 	var body: some View {
-		Picker("Voice", selection: selection) {
+		Picker("Voice", selection: $voiceIdentifier) {
 			ForEach(voices) { voice in
 				Text(voice.label).tag(voice.id)
 			}
 		}
 		.pickerStyle(.menu)
-		.accessibilityFocused($isFocused)
 		.onAppear {
 			if !voices.contains(where: { $0.id == voiceIdentifier }) {
 				voiceIdentifier = ""
 			}
-		}
-	}
-
-	private var selection: Binding<String> {
-		Binding {
-			voiceIdentifier
-		} set: { newValue in
-			voiceIdentifier = newValue
-			restoreFocus()
-		}
-	}
-
-	private func restoreFocus() {
-		isFocused = false
-		DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-			isFocused = true
-		}
-		DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
-			isFocused = true
 		}
 	}
 }
@@ -634,7 +613,7 @@ struct ContentView: View {
 	@AppStorage("liveTravelMode") private var liveTravelModeRaw = LiveTravelMode.walking.rawValue
 	@AppStorage("liveStationaryMinutes") private var liveStationaryMinutes = 5.0
 	@AppStorage("liveVoiceIdentifier") private var liveVoiceIdentifier = ""
-	@AppStorage("liveSpeechRate") private var liveSpeechRate = 0.5
+	@AppStorage("liveSpeechRatePercent") private var liveSpeechRatePercent = 50
 	@AppStorage("liveSpeechVolume") private var liveSpeechVolume = 1.0
 	@Environment(\.dynamicTypeSize) private var dynamicTypeSize
 	@Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
@@ -719,8 +698,15 @@ struct ContentView: View {
 	private var liveSpeechSettings: LiveSpeechSettings {
 		LiveSpeechSettings(
 			voiceIdentifier: liveVoiceIdentifier,
-			rate: Float(liveSpeechRate),
+			ratePercent: liveSpeechRatePercent,
 			volume: Float(liveSpeechVolume)
+		)
+	}
+
+	private var liveSpeechRateBinding: Binding<Double> {
+		Binding(
+			get: { Double(liveSpeechRatePercent) },
+			set: { liveSpeechRatePercent = Int($0.rounded()) }
 		)
 	}
 
@@ -1441,11 +1427,11 @@ struct ContentView: View {
 		VStack(alignment: .leading, spacing: 0) {
 			settingsIntroSection
 			settingsDisplaySection
-			settingsLiveModeSection
 			settingsAnnouncementSection
 			settingsRegionalWordingSection
 			settingsMapDetailSection
 			settingsInteractionSection
+			settingsLiveModeSection
 			settingsAboutSection
 		}
 		.frame(maxHeight: .infinity)
@@ -1476,8 +1462,6 @@ struct ContentView: View {
 						value: $liveStationaryMinutes,
 						in: 5...30,
 						step: 1,
-						minimumValueLabel: Text("5 min"),
-						maximumValueLabel: Text("30 min"),
 						label: { Text("Stop When Stationary, \(Int(liveStationaryMinutes.rounded())) minutes") }
 					)
 				}
@@ -1489,14 +1473,13 @@ struct ContentView: View {
 			}
 			settingsControlRow {
 				VStack(alignment: .leading, spacing: 8) {
-					Text("Speech Rate")
+					Text("Speech Rate: \(liveSpeechRatePercent) percent")
 						.foregroundStyle(Color.crossText)
 						.accessibilityHidden(true)
 					Slider(
-						value: $liveSpeechRate,
-						in: 0.35...0.65,
-						minimumValueLabel: Text("Slower"),
-						maximumValueLabel: Text("Faster"),
+						value: liveSpeechRateBinding,
+						in: 0...100,
+						step: 5,
 						label: { Text("Speech Rate") }
 					)
 				}
@@ -1509,8 +1492,6 @@ struct ContentView: View {
 					Slider(
 						value: $liveSpeechVolume,
 						in: 0...1,
-						minimumValueLabel: Text("Quiet"),
-						maximumValueLabel: Text("Loud"),
 						label: { Text("Speech Volume") }
 					)
 				}
