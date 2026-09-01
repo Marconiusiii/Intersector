@@ -484,6 +484,103 @@ private enum ReadyEarcon {
 	}
 }
 
+@MainActor
+enum LiveModeEarcon {
+	static let speechDelay: TimeInterval = 0.78
+
+	private static var player: AVAudioPlayer?
+	private static var hapticTask: Task<Void, Never>?
+	private static let noteStarts: [TimeInterval] = [0.06, 0.24, 0.42]
+
+	static func play(isActive: Bool, hapticsEnabled: Bool) {
+		do {
+			IntersectorAudioSession.prepareForFeedback()
+			player = try AVAudioPlayer(data: cueData(isActive: isActive))
+			player?.volume = 0.42
+			player?.prepareToPlay()
+			player?.play()
+		} catch {}
+		playHapticsIfNeeded(isActive: isActive, hapticsEnabled: hapticsEnabled)
+	}
+
+	static func frequencies(isActive: Bool) -> [Double] {
+		isActive ? [494, 660, 988] : [988, 660, 494]
+	}
+
+	private static func cueData(isActive: Bool) -> Data {
+		let sampleRate = 22_050
+		let duration = speechDelay
+		let frameCount = Int(Double(sampleRate) * duration)
+		let dataSize = frameCount * MemoryLayout<Int16>.size
+		var data = Data()
+		data.append(contentsOf: "RIFF".utf8)
+		data.append(UInt32(36 + dataSize).littleEndianData)
+		data.append(contentsOf: "WAVEfmt ".utf8)
+		data.append(UInt32(16).littleEndianData)
+		data.append(UInt16(1).littleEndianData)
+		data.append(UInt16(1).littleEndianData)
+		data.append(UInt32(sampleRate).littleEndianData)
+		data.append(UInt32(sampleRate * MemoryLayout<Int16>.size).littleEndianData)
+		data.append(UInt16(MemoryLayout<Int16>.size).littleEndianData)
+		data.append(UInt16(16).littleEndianData)
+		data.append(contentsOf: "data".utf8)
+		data.append(UInt32(dataSize).littleEndianData)
+
+		let cueFrequencies = frequencies(isActive: isActive)
+		for index in 0..<frameCount {
+			let time = Double(index) / Double(sampleRate)
+			let value = zip(noteStarts, cueFrequencies).reduce(0.0) { partialResult, note in
+				partialResult + noteValue(time: time, start: note.0, frequency: note.1)
+			}
+			let sample = Int16(max(-1, min(1, value)) * 2_900)
+			data.append(sample.littleEndianData)
+		}
+		return data
+	}
+
+	private static func noteValue(time: Double, start: Double, frequency: Double) -> Double {
+		let attack = 0.025
+		let sustain = 0.06
+		let decay = 0.22
+		let duration = attack + sustain + decay
+		guard time >= start, time <= start + duration else {
+			return 0
+		}
+		let localTime = time - start
+		let envelope: Double
+		if localTime <= attack {
+			envelope = localTime / attack
+		} else if localTime <= attack + sustain {
+			envelope = 1
+		} else {
+			let decayProgress = (localTime - attack - sustain) / decay
+			envelope = max(0, 1 - decayProgress)
+		}
+		return sin(2 * Double.pi * frequency * localTime) * envelope * 0.62
+	}
+
+	private static func playHapticsIfNeeded(isActive: Bool, hapticsEnabled: Bool) {
+		hapticTask?.cancel()
+		guard hapticsEnabled else {
+			hapticTask = nil
+			return
+		}
+		hapticTask = Task { @MainActor in
+			let intensities = isActive ? [0.25, 0.55, 0.9] : [0.9, 0.55, 0.25]
+			let clock = ContinuousClock()
+			let startTime = clock.now
+			for (noteStart, intensity) in zip(noteStarts, intensities) {
+				let targetTime = startTime + .milliseconds(Int(noteStart * 1_000))
+				if clock.now < targetTime {
+					try? await Task.sleep(until: targetTime, clock: clock)
+				}
+				guard !Task.isCancelled else { return }
+				HapticFeedback().pulse(intensity: intensity)
+			}
+		}
+	}
+}
+
 private extension Array where Element == Double {
 	func addingEcho(
 		sampleRate: Int,
@@ -1452,7 +1549,7 @@ struct ContentView: View {
 					.pickerStyle(.segmented)
 				}
 			}
-			settingsHelperText("Walking uses pedestrian paths when they are enabled. Driving follows roads and announces intersections earlier.")
+			settingsHelperText("Choose Walking when you are on foot. Choose Driving when you are in a car or bus so intersections are announced sooner.")
 			settingsControlRow {
 				VStack(alignment: .leading, spacing: 8) {
 					Text("Stop When Stationary: \(Int(liveStationaryMinutes.rounded())) minutes")

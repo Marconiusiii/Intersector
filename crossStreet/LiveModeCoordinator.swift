@@ -73,7 +73,10 @@ final class LiveModeCoordinator: ObservableObject {
 		cachedMapCenter = nil
 		lastMapFetchAt = nil
 		isActive = true
-		statusText = "Live Mode active. \(mode.label)."
+		let message = Self.activationMessage(for: mode)
+		statusText = message
+		LiveModeEarcon.play(isActive: true, hapticsEnabled: prefs.haptics)
+		speechController.speak(message, settings: speechSettings, delay: LiveModeEarcon.speechDelay)
 
 		locationTask = Task { [weak self] in
 			guard let self else { return }
@@ -85,7 +88,7 @@ final class LiveModeCoordinator: ObservableObject {
 				}
 			} catch is CancellationError {
 			} catch {
-				stop(message: "Live Mode stopped because location is unavailable.", speaksMessage: true)
+				stop(message: "Live Mode stopped because location is unavailable.")
 			}
 		}
 
@@ -96,8 +99,7 @@ final class LiveModeCoordinator: ObservableObject {
 				if self.movementMonitor.hasTimedOut(after: self.stationaryMinutes) {
 					let minutes = Int(self.stationaryMinutes.rounded())
 					self.stop(
-						message: "Live Mode stopped because you haven't moved for \(minutes) minutes.",
-						speaksMessage: true
+						message: "Live Mode stopped because you haven't moved for \(minutes) minutes."
 					)
 					return
 				}
@@ -105,7 +107,7 @@ final class LiveModeCoordinator: ObservableObject {
 		}
 	}
 
-	func stop(message: String = "Live Mode off.", speaksMessage: Bool = false) {
+	func stop(message: String = "Live Mode off.") {
 		guard isActive else {
 			statusText = message
 			return
@@ -118,9 +120,12 @@ final class LiveModeCoordinator: ObservableObject {
 		locationProvider.stop()
 		speechController.stop()
 		statusText = message
-		if speaksMessage {
-			speechController.speak(message, settings: activeSpeechSettings)
-		}
+		LiveModeEarcon.play(isActive: false, hapticsEnabled: activePrefs.haptics)
+		speechController.speak(message, settings: activeSpeechSettings, delay: LiveModeEarcon.speechDelay)
+	}
+
+	static func activationMessage(for mode: LiveTravelMode) -> String {
+		"Live Mode on. \(mode.label)."
 	}
 
 	private func process(_ context: DeviceContext) async {

@@ -206,7 +206,7 @@ final class SystemSpeechController {
 
 	private let synthesizer = AVSpeechSynthesizer()
 
-	func speak(_ text: String, settings: LiveSpeechSettings) {
+	func speak(_ text: String, settings: LiveSpeechSettings, delay: TimeInterval = 0) {
 		guard !text.isEmpty else {
 			return
 		}
@@ -218,6 +218,7 @@ final class SystemSpeechController {
 		}
 		utterance.rate = Self.speechRate(forPercent: settings.ratePercent)
 		utterance.volume = min(1, max(0, settings.volume))
+		utterance.preUtteranceDelay = max(0, delay)
 		synthesizer.speak(utterance)
 	}
 

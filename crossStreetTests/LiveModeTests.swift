@@ -19,6 +19,13 @@ struct LiveModeTests {
 		#expect(!LiveSpeechVoice.matchesDeviceLanguage(voiceLanguage: "es-MX", deviceLanguageCode: "en-US"))
 	}
 
+	@Test func liveModeLifecycleFeedbackUsesClearStateMessagesAndDistinctToneDirections() {
+		#expect(LiveModeCoordinator.activationMessage(for: .walking) == "Live Mode on. Walking.")
+		#expect(LiveModeCoordinator.activationMessage(for: .driving) == "Live Mode on. Driving.")
+		#expect(LiveModeEarcon.frequencies(isActive: true) == [494, 660, 988])
+		#expect(LiveModeEarcon.frequencies(isActive: false) == [988, 660, 494])
+	}
+
 	@Test func liveUpcomingUsesTheExistingUpcomingFormatter() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37, longitude: -122)
 		let mapData = northboundMapData(origin: origin)
