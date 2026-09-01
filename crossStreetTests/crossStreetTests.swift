@@ -2175,6 +2175,79 @@ struct IntersectorTests {
 		#expect(await requestLog.urls == [primary, fallback])
 	}
 
+	@Test func mapDataClientDoesNotRotateEndpointsAfterRateLimitResponse() async throws {
+		let primary = URL(string: "https://limited-primary.example/api/interpreter")!
+		let fallback = URL(string: "https://fallback.example/api/interpreter")!
+		let requestLog = MapRequestLog()
+		var client = MapDataClient()
+		client.endpoint = primary
+		client.fallbackEndpoints = [fallback]
+		client.requestHandler = { request in
+			guard let url = request.url else {
+				throw URLError(.badURL)
+			}
+			await requestLog.record(url)
+			let response = HTTPURLResponse(
+				url: url,
+				statusCode: 429,
+				httpVersion: nil,
+				headerFields: nil
+			)!
+			return MapHTTPResponse(data: Data(), response: response)
+		}
+
+		do {
+			_ = try await client.freshMapData(
+				near: CLLocationCoordinate2D(latitude: 39.1234, longitude: -76.5432),
+				radiusMeters: 225
+			)
+			Issue.record("Expected the rate-limited request to fail.")
+		} catch MapDataError.serverError(let statusCode) {
+			#expect(statusCode == 429)
+		} catch {
+			Issue.record("Expected error 429, received \(error).")
+		}
+
+		#expect(await requestLog.urls == [primary])
+	}
+
+	@Test func mapDataClientRequestsQuadtileOutputOrdering() async throws {
+		let endpoint = URL(string: "https://query.example/api/interpreter")!
+		let requestBodies = MapRequestBodyLog()
+		var client = MapDataClient()
+		client.endpoint = endpoint
+		client.fallbackEndpoints = []
+		client.requestHandler = { request in
+			await requestBodies.record(request.httpBody)
+			let response = HTTPURLResponse(
+				url: endpoint,
+				statusCode: 200,
+				httpVersion: nil,
+				headerFields: nil
+			)!
+			return MapHTTPResponse(
+				data: Data("{\"elements\":[]}".utf8),
+				response: response
+			)
+		}
+
+		_ = try await client.freshMapData(
+			near: CLLocationCoordinate2D(latitude: 39.1234, longitude: -76.5432),
+			radiusMeters: 225
+		)
+		_ = try await client.roadMapData(
+			near: CLLocationCoordinate2D(latitude: 39.1234, longitude: -76.5432),
+			roadName: "Oak Street",
+			radiusMeters: 1_200
+		)
+
+		let decodedBodies = await requestBodies.bodies.compactMap {
+			String(data: $0, encoding: .utf8)?.removingPercentEncoding
+		}
+		#expect(decodedBodies.count == 2)
+		#expect(decodedBodies.allSatisfy { $0.contains("out body qt;") })
+	}
+
 	@Test func intersectionBuilderIgnoresNonStreetPaths() async throws {
 		let response = OverpassResponse(
 			elements: [
@@ -2877,6 +2950,16 @@ actor FetchCounter {
 			],
 			roads: []
 		)
+	}
+}
+
+actor MapRequestBodyLog {
+	private(set) var bodies: [Data] = []
+
+	func record(_ body: Data?) {
+		if let body {
+			bodies.append(body)
+		}
 	}
 }
 

@@ -25,17 +25,23 @@ final class LiveLocationProvider: NSObject {
 		}
 
 		configure(for: mode)
-		return AsyncThrowingStream { continuation in
-			updateContinuation?.finish()
-			updateContinuation = continuation
+		return Self.newestUpdateStream { continuation in
+			self.updateContinuation?.finish()
+			self.updateContinuation = continuation
 			continuation.onTermination = { [weak self] _ in
 				Task { @MainActor [weak self] in
 					self?.stop()
 				}
 			}
-			backgroundActivitySession = CLBackgroundActivitySession()
-			manager.startUpdatingLocation()
+			self.backgroundActivitySession = CLBackgroundActivitySession()
+			self.manager.startUpdatingLocation()
 		}
+	}
+
+	static func newestUpdateStream(
+		_ build: @escaping (AsyncThrowingStream<DeviceContext, Error>.Continuation) -> Void
+	) -> AsyncThrowingStream<DeviceContext, Error> {
+		AsyncThrowingStream(bufferingPolicy: .bufferingNewest(1), build)
 	}
 
 	func stop() {

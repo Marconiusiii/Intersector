@@ -9,10 +9,10 @@ import CoreLocation
 import Foundation
 
 struct MapDataClient: MapDataFetching {
-	var endpoint = URL(string: "https://overpass-api.de/api/interpreter")!
+	var endpoint = URL(string: "https://overpass.private.coffee/api/interpreter")!
 	var fallbackEndpoints = [
-		URL(string: "https://overpass.private.coffee/api/interpreter")!,
-		URL(string: "https://maps.mail.ru/osm/tools/overpass/api/interpreter")!
+		URL(string: "https://maps.mail.ru/osm/tools/overpass/api/interpreter")!,
+		URL(string: "https://overpass-api.de/api/interpreter")!
 	]
 	var session: URLSession = .shared
 	var requestHandler: (@Sendable (URLRequest) async throws -> MapHTTPResponse)?
@@ -123,6 +123,10 @@ struct MapDataClient: MapDataFetching {
 				return data
 			} catch {
 				lastError = error
+				if case MapDataError.serverError(429) = error {
+					await Self.endpointHealth.markTemporaryFailure(endpoint)
+					throw error
+				}
 				guard isTemporary(error) else {
 					throw error
 				}
@@ -172,7 +176,7 @@ struct MapDataClient: MapDataFetching {
 		if let mapError = error as? MapDataError {
 			switch mapError {
 			case .serverError(let statusCode):
-				return [429, 500, 502, 503, 504].contains(statusCode)
+				return [500, 502, 503, 504].contains(statusCode)
 			case .invalidResponse, .invalidMapData:
 				return false
 			}
@@ -237,7 +241,7 @@ struct MapDataClient: MapDataFetching {
 		\(crossingQueries)
 		);
 		(._;>;);
-		out body;
+		out body qt;
 		"""
 		return encodedBody(body)
 	}
@@ -281,7 +285,7 @@ struct MapDataClient: MapDataFetching {
 		\(crossingQueries)
 		);
 		(._;>;);
-		out body;
+		out body qt;
 		"""
 		return encodedBody(body)
 	}

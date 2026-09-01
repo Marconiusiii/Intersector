@@ -13,6 +13,49 @@ struct LiveModeTests {
 		#expect(SystemSpeechController.speechRate(forPercent: 110) == AVSpeechUtteranceMaximumSpeechRate)
 	}
 
+	@Test func newestLocationBufferDiscardsSupersededUpdates() async throws {
+		var continuation: AsyncThrowingStream<DeviceContext, Error>.Continuation?
+		let stream = LiveLocationProvider.newestUpdateStream { continuation = $0 }
+		continuation?.yield(
+			DeviceContext(
+				coordinate: CLLocationCoordinate2D(latitude: 37, longitude: -122),
+				headingDegrees: nil
+			)
+		)
+		continuation?.yield(
+			DeviceContext(
+				coordinate: CLLocationCoordinate2D(latitude: 38, longitude: -121),
+				headingDegrees: nil
+			)
+		)
+		continuation?.finish()
+
+		var received: [DeviceContext] = []
+		for try await context in stream {
+			received.append(context)
+		}
+
+		#expect(received.count == 1)
+		#expect(received.first?.coordinate.latitude == 38)
+		#expect(received.first?.coordinate.longitude == -121)
+	}
+
+	@Test func supersededSpeechCallbackCannotFinishTheCurrentUtterance() {
+		let first = AVSpeechUtterance(string: "First")
+		let second = AVSpeechUtterance(string: "Second")
+		var tracker = SpeechUtteranceTracker()
+
+		tracker.begin(first)
+		tracker.begin(second)
+		let olderCallbackFinished = tracker.finishIfCurrent(first)
+
+		#expect(!olderCallbackFinished)
+		#expect(tracker.currentID == ObjectIdentifier(second))
+		let currentCallbackFinished = tracker.finishIfCurrent(second)
+		#expect(currentCallbackFinished)
+		#expect(tracker.currentID == nil)
+	}
+
 	@Test func systemVoicesMatchTheDeviceLanguageCode() {
 		#expect(LiveSpeechVoice.matchesDeviceLanguage(voiceLanguage: "en-US", deviceLanguageCode: "en"))
 		#expect(LiveSpeechVoice.matchesDeviceLanguage(voiceLanguage: "en-GB", deviceLanguageCode: "en-US"))

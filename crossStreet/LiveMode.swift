@@ -200,18 +200,45 @@ struct LiveMovementMonitor {
 	}
 }
 
+struct SpeechUtteranceTracker {
+	private(set) var currentID: ObjectIdentifier?
+
+	mutating func begin(_ utterance: AVSpeechUtterance) {
+		currentID = ObjectIdentifier(utterance)
+	}
+
+	mutating func clear() {
+		currentID = nil
+	}
+
+	mutating func finishIfCurrent(_ utterance: AVSpeechUtterance) -> Bool {
+		guard currentID == ObjectIdentifier(utterance) else {
+			return false
+		}
+		currentID = nil
+		return true
+	}
+}
+
 @MainActor
-final class SystemSpeechController {
+final class SystemSpeechController: NSObject, @preconcurrency AVSpeechSynthesizerDelegate {
 	static let shared = SystemSpeechController()
 
 	private let synthesizer = AVSpeechSynthesizer()
+	private var utteranceTracker = SpeechUtteranceTracker()
+
+	private override init() {
+		super.init()
+		synthesizer.delegate = self
+	}
 
 	func speak(_ text: String, settings: LiveSpeechSettings, delay: TimeInterval = 0) {
 		guard !text.isEmpty else {
 			return
 		}
-		prepareAudioSession()
+		utteranceTracker.clear()
 		synthesizer.stopSpeaking(at: .immediate)
+		prepareAudioSession()
 		let utterance = AVSpeechUtterance(string: text)
 		if !settings.voiceIdentifier.isEmpty {
 			utterance.voice = AVSpeechSynthesisVoice(identifier: settings.voiceIdentifier)
@@ -219,18 +246,49 @@ final class SystemSpeechController {
 		utterance.rate = Self.speechRate(forPercent: settings.ratePercent)
 		utterance.volume = min(1, max(0, settings.volume))
 		utterance.preUtteranceDelay = max(0, delay)
+		utteranceTracker.begin(utterance)
 		synthesizer.speak(utterance)
 	}
 
 	func stop() {
+		utteranceTracker.clear()
 		synthesizer.stopSpeaking(at: .immediate)
+		deactivateAudioSession()
+	}
+
+	func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+		finish(utterance)
+	}
+
+	func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+		finish(utterance)
+	}
+
+	private func finish(_ utterance: AVSpeechUtterance) {
+		guard utteranceTracker.finishIfCurrent(utterance) else {
+			return
+		}
+		deactivateAudioSession()
 	}
 
 	private func prepareAudioSession() {
 		do {
 			let session = AVAudioSession.sharedInstance()
-			try session.setCategory(.playback, mode: .voicePrompt, options: [.duckOthers])
+			try session.setCategory(
+				.playback,
+				mode: .voicePrompt,
+				options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers]
+			)
 			try session.setActive(true)
+		} catch {}
+	}
+
+	private func deactivateAudioSession() {
+		do {
+			try AVAudioSession.sharedInstance().setActive(
+				false,
+				options: .notifyOthersOnDeactivation
+			)
 		} catch {}
 	}
 

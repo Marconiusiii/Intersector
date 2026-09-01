@@ -155,7 +155,7 @@ private struct LiveVoicePicker: View {
 				Text(voice.label).tag(voice.id)
 			}
 		}
-		.pickerStyle(.navigationLink)
+		.pickerStyle(.wheel)
 		.onAppear {
 			if !voices.contains(where: { $0.id == voiceIdentifier }) {
 				voiceIdentifier = ""
