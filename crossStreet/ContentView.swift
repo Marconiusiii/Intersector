@@ -968,8 +968,8 @@ struct ContentView: View {
 
 	private var liveToggle: some View {
 		Toggle("Live", isOn: liveModeBinding)
-			.accessibilityAction(named: Text("Switch to Walking")) { selectLiveMode(.walking) }
-			.accessibilityAction(named: Text("Switch to Driving")) { selectLiveMode(.driving) }
+			.accessibilityAction(named: Text("Walking Mode")) { selectLiveMode(.walking) }
+			.accessibilityAction(named: Text("Driving Mode")) { selectLiveMode(.driving) }
 			.toggleStyle(.button)
 			.tint(Color.crossScanActive)
 			.font(.body)
@@ -1903,7 +1903,7 @@ struct ContentView: View {
 
 					helpSection(
 						title: "Live Mode",
-						body: "Turn on Live to hear upcoming intersections automatically as you travel. Choose Walking when you are on foot. Choose Driving when you are in a car or bus so intersections are announced sooner. Live Mode continues when you use another app or lock the phone. Live Mode uses the voice, speech rate, and volume selected in Settings. An ascending flourish confirms that Live Mode is on, and a descending flourish confirms that it is off. Use the Live control’s Switch to Walking or Switch to Driving accessibility action to select a travel mode. If Live is on, it switches immediately. If Live is off, turn it on to start the selected mode. In Driving mode, Live automatically turns off when Intersector detects that you have entered a highway. Intersector announces the shutdown and identifies the highway when that information is available. Turn Live back on after exiting the highway to resume intersection announcements. Live Mode stops after you stop moving for the time selected in Settings. Live also stops if location updates remain unavailable. You can also turn it off from Intersector, Siri, or Shortcuts."
+						body: "Turn on Live to hear upcoming intersections automatically as you travel. Choose Walking when you are on foot. Choose Driving when you are in a car or bus so intersections are announced sooner. Live Mode continues when you use another app or lock the phone. Live Mode uses the voice, speech rate, and volume selected in Settings. An ascending flourish confirms that Live Mode is on, and a descending flourish confirms that it is off. On the Live control, choose the Walking Mode or Driving Mode accessibility action and double-tap to start Live in that mode. If Live is already on, the action changes the travel mode and announces the change. In Driving mode, Live automatically turns off when Intersector detects that you have entered a highway. Intersector announces the shutdown and identifies the highway when that information is available. Turn Live back on after exiting the highway to resume intersection announcements. Live Mode stops after you stop moving for the time selected in Settings. Live also stops if location updates remain unavailable. You can also turn it off from Intersector, Siri, or Shortcuts."
 					)
 
 					helpSection(
@@ -2206,7 +2206,7 @@ struct ContentView: View {
 		if liveMode.isActive {
 			liveMode.switchMode(to: mode)
 		} else {
-			VoiceOverAnnouncer.reportUpdated("\(mode.label) selected.")
+			setLiveMode(true)
 		}
 	}
 
