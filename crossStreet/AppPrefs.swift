@@ -118,23 +118,28 @@ struct AnnouncementOptions: Equatable, Hashable, Sendable {
 struct MapDetailOptions: Equatable, Hashable, Sendable {
 	var includeCrossings = false
 	var includeWalkingPaths = false
+	var includeHighways = false
 
 	nonisolated init(
 		includeCrossings: Bool = false,
-		includeWalkingPaths: Bool = false
+		includeWalkingPaths: Bool = false,
+		includeHighways: Bool = false
 	) {
 		self.includeCrossings = includeCrossings
 		self.includeWalkingPaths = includeWalkingPaths
+		self.includeHighways = includeHighways
 	}
 
 	nonisolated static func == (lhs: MapDetailOptions, rhs: MapDetailOptions) -> Bool {
 		lhs.includeCrossings == rhs.includeCrossings &&
-			lhs.includeWalkingPaths == rhs.includeWalkingPaths
+			lhs.includeWalkingPaths == rhs.includeWalkingPaths &&
+			lhs.includeHighways == rhs.includeHighways
 	}
 
 	nonisolated func hash(into hasher: inout Hasher) {
 		hasher.combine(includeCrossings)
 		hasher.combine(includeWalkingPaths)
+		hasher.combine(includeHighways)
 	}
 }
 

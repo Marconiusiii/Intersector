@@ -222,6 +222,9 @@ struct MapDataClient: MapDataFetching {
 			]
 		}
 		let highwayPattern = highwayTypes.joined(separator: "|")
+		let highwayQuery = options.includeHighways ? """
+		  way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"~"^(motorway|motorway_link|trunk|trunk_link)$"];
+		""" : ""
 		let crossingRadius = Int(min(radiusMeters, 225).rounded())
 		let crossingQueries = options.includeCrossings ? """
 		  (
@@ -238,6 +241,7 @@ struct MapDataClient: MapDataFetching {
 		[out:json][timeout:10];
 		(
 		  way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"~"^(\(highwayPattern))$"]["name"];
+		\(highwayQuery)
 		\(crossingQueries)
 		);
 		(._;>;);
@@ -683,14 +687,16 @@ struct IntersectionBuilder {
 		var roads = [MapRoad]()
 		for way in response.elements where way.type == "way" {
 			guard
-				let name = way.tags?["name"],
 				let highway = way.tags?["highway"],
 				let wayNodes = way.nodes,
 				isAllowedWay(way.tags, options: options)
 			else {
 				continue
 			}
-			for nodeID in wayNodes {
+			let name = way.tags?["name"] ?? way.tags?["ref"] ?? ""
+			let isHighway = ["motorway", "motorway_link", "trunk", "trunk_link"].contains(highway)
+			guard isHighway || way.tags?["name"] != nil else { continue }
+			for nodeID in wayNodes where !name.isEmpty && !isHighway {
 				namesByNode[nodeID, default: []].insert(name)
 				if Self.publicStreetHighways.contains(highway) {
 					publicRoadNamesByNode[nodeID, default: []].insert(name)
@@ -702,7 +708,10 @@ struct IntersectionBuilder {
 					name: name,
 					nodeIDs: wayNodes,
 					coordinates: wayNodes.compactMap { nodes[$0] },
-					highway: highway
+					highway: highway,
+					routeReference: way.tags?["ref"],
+					oneWay: way.tags?["oneway"],
+					limitedAccess: highway == "motorway" || way.tags?["expressway"] == "yes"
 				)
 			)
 		}
@@ -1023,6 +1032,9 @@ struct IntersectionBuilder {
 	private func isAllowedWay(_ tags: [String: String]?, options: MapDetailOptions) -> Bool {
 		guard let highway = tags?["highway"] else {
 			return false
+		}
+		if options.includeHighways, ["motorway", "motorway_link", "trunk", "trunk_link"].contains(highway) {
+			return true
 		}
 		let streetHighways = Self.publicStreetHighways
 		if streetHighways.contains(highway) {

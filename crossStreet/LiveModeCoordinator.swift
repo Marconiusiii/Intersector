@@ -12,11 +12,20 @@ final class LiveModeCoordinator: ObservableObject {
 	@Published private(set) var isActive = false
 	@Published private(set) var statusText = "Live Mode off."
 
-	private let locationProvider: LiveLocationProvider
+	private let locationProvider: any LiveLocationProviding
 	private let mapDataClient: MapDataFetching
 	private let reportService: OrientSvc
-	private let speechController: SystemSpeechController
+	private let speechController: any LiveSpeaking
 	private var locationTask: Task<Void, Never>?
+	private var processingTask: Task<Void, Never>?
+	private var pendingContext: (DeviceContext, Date)?
+	private var sessionID = UUID()
+	private var processingID = UUID()
+	private var highwayDetector = LiveHighwayDetector()
+	private var lastLocationAt = Date()
+	private var lastFetchFailed = false
+	private let now: () -> Date
+	private let playsFeedback: Bool
 	private var stationaryTask: Task<Void, Never>?
 	private var matcher = LiveRoadMatcher()
 	private var announcementGate = LiveAnnouncementGate()
@@ -26,6 +35,7 @@ final class LiveModeCoordinator: ObservableObject {
 	private var cachedMapRadius: CLLocationDistance = 0
 	private var cachedMapOptions: MapDetailOptions?
 	private var lastMapFetchAt: Date?
+	private var lastMapFetchOptions: MapDetailOptions?
 	private var activeMode = LiveTravelMode.walking
 	private var activePrefs = AppPrefs()
 	private var activeSpeechSettings = LiveSpeechSettings(voiceIdentifier: "", ratePercent: 50, volume: 1)
@@ -37,20 +47,24 @@ final class LiveModeCoordinator: ObservableObject {
 			locationProvider: LiveLocationProvider(),
 			mapDataClient: MapDataClient(),
 			reportService: .shared,
-			speechController: .shared
+			speechController: SystemSpeechController.shared
 		)
 	}
 
 	init(
-		locationProvider: LiveLocationProvider,
+		locationProvider: any LiveLocationProviding,
 		mapDataClient: MapDataFetching,
 		reportService: OrientSvc,
-		speechController: SystemSpeechController
+		speechController: any LiveSpeaking,
+		now: @escaping () -> Date = Date.init,
+		playsFeedback: Bool = true
 	) {
 		self.locationProvider = locationProvider
 		self.mapDataClient = mapDataClient
 		self.reportService = reportService
 		self.speechController = speechController
+		self.now = now
+		self.playsFeedback = playsFeedback
 	}
 
 	func start(
@@ -62,32 +76,43 @@ final class LiveModeCoordinator: ObservableObject {
 		guard !isActive else {
 			return
 		}
+		sessionID = UUID()
+		let session = sessionID
+		processingID = UUID()
+		highwayDetector.reset()
+		lastLocationAt = now()
+		lastFetchFailed = false
 		activeMode = mode
 		activePrefs = prefs
 		activeSpeechSettings = speechSettings
 		self.stationaryMinutes = stationaryMinutes
 		matcher.reset()
 		announcementGate.reset()
-		movementMonitor.reset()
+		movementMonitor.reset(at: now())
 		cachedMapData = nil
 		cachedMapCenter = nil
 		lastMapFetchAt = nil
+		lastMapFetchOptions = nil
 		isActive = true
 		let message = Self.activationMessage(for: mode)
 		statusText = message
-		LiveModeEarcon.play(isActive: true, hapticsEnabled: prefs.haptics)
+		if playsFeedback { LiveModeEarcon.play(isActive: true, hapticsEnabled: prefs.haptics) }
 		speechController.speak(message, settings: speechSettings, delay: LiveModeEarcon.speechDelay)
 
 		locationTask = Task { [weak self] in
 			guard let self else { return }
 			do {
-				let updates = try await locationProvider.updates(for: mode)
+				guard !Task.isCancelled, isActive, sessionID == session else { return }
+				let updates = try await locationProvider.updates(for: activeMode)
 				for try await context in updates {
-					guard !Task.isCancelled, isActive else { return }
-					await process(context)
+					guard !Task.isCancelled, isActive, sessionID == session else { return }
+					receive(context)
 				}
+				guard !Task.isCancelled, sessionID == session, isActive else { return }
+				stop(message: "Live Mode stopped because location updates ended.")
 			} catch is CancellationError {
 			} catch {
+				guard !Task.isCancelled, sessionID == session, isActive else { return }
 				stop(message: "Live Mode stopped because location is unavailable.")
 			}
 		}
@@ -95,8 +120,8 @@ final class LiveModeCoordinator: ObservableObject {
 		stationaryTask = Task { [weak self] in
 			while !Task.isCancelled {
 				try? await Task.sleep(for: .seconds(15))
-				guard let self, self.isActive else { return }
-				if self.stopIfStationary() {
+				guard !Task.isCancelled, let self, self.isActive, self.sessionID == session else { return }
+				if self.checkTimeouts() {
 					return
 				}
 			}
@@ -109,6 +134,11 @@ final class LiveModeCoordinator: ObservableObject {
 			return
 		}
 		isActive = false
+		sessionID = UUID()
+		processingID = UUID()
+		processingTask?.cancel()
+		processingTask = nil
+		pendingContext = nil
 		locationTask?.cancel()
 		locationTask = nil
 		stationaryTask?.cancel()
@@ -116,7 +146,7 @@ final class LiveModeCoordinator: ObservableObject {
 		locationProvider.stop()
 		speechController.stop()
 		statusText = message
-		LiveModeEarcon.play(isActive: false, hapticsEnabled: activePrefs.haptics)
+		if playsFeedback { LiveModeEarcon.play(isActive: false, hapticsEnabled: activePrefs.haptics) }
 		speechController.speak(message, settings: activeSpeechSettings, delay: LiveModeEarcon.speechDelay)
 	}
 
@@ -124,57 +154,115 @@ final class LiveModeCoordinator: ObservableObject {
 		"Live Mode on. \(mode.label)."
 	}
 
-	private func process(_ context: DeviceContext) async {
-		movementMonitor.record(context)
-		if stopIfStationary() {
+	func switchMode(to mode: LiveTravelMode) {
+		guard isActive else { return }
+		guard activeMode != mode else {
+			speechController.speak("\(mode.label) already selected.", settings: activeSpeechSettings, delay: 0)
 			return
 		}
+		activeMode = mode
+		locationProvider.updateMode(mode)
+		processingID = UUID()
+		processingTask?.cancel()
+		processingTask = nil
+		pendingContext = nil
+		matcher.reset()
+		highwayDetector.reset()
+		announcementGate.reset()
+		let message = "Live Mode switched to \(mode.label)."
+		statusText = message
+		speechController.speak(message, settings: activeSpeechSettings, delay: 0)
+	}
+
+	private var mapOptions: MapDetailOptions {
+		var options = activePrefs.mapDetails
+		options.includeHighways = activeMode == .driving
+		return options
+	}
+
+	private func receive(_ context: DeviceContext) {
+		let now = now()
+		lastLocationAt = now
+		movementMonitor.record(context, at: now)
+		if stopIfStationary() { return }
+		pendingContext = (context, now)
+		guard processingTask == nil else { return }
+		let operation = processingID
+		processingTask = Task { [weak self] in
+			guard let self else { return }
+			while !Task.isCancelled, isActive, processingID == operation, let pending = pendingContext {
+				pendingContext = nil
+				await process(pending.0, receivedAt: pending.1, operation: operation)
+			}
+			if processingID == operation { processingTask = nil }
+		}
+	}
+
+	private func process(_ context: DeviceContext, receivedAt: Date, operation: UUID) async {
 		do {
 			let mapData = try await mapData(for: context)
-			guard let match = matcher.match(context, in: mapData, mode: activeMode) else {
+			guard !Task.isCancelled, isActive, processingID == operation else { return }
+			// Prefer the newest position after a slow fetch; never report a passed location.
+			guard pendingContext == nil, now().timeIntervalSince(receivedAt) <= 10 else { return }
+			if activeMode == .driving,
+			   let highway = highwayDetector.highwayEntered(in: mapData, context: context, now: now()) {
+				stop(message: LiveHighwayDetector.shutdownMessage(for: highway))
 				return
 			}
+			guard let match = matcher.match(context, in: mapData, mode: activeMode) else { return }
 			let result = try await reportService.liveUpcomingResult(
-				from: match.context,
-				mapData: mapData,
-				prefs: activePrefs,
-				preferredRoadName: match.roadName
+				from: match.context, mapData: mapData, prefs: activePrefs, preferredRoadName: match.roadName
 			)
+			guard !Task.isCancelled, isActive, processingID == operation,
+				  pendingContext == nil, now().timeIntervalSince(receivedAt) <= 10 else { return }
 			guard announcementGate.shouldAnnounce(
 				intersectionID: result.primaryIntersectionID,
-				distanceMeters: result.distanceMeters,
-				mode: activeMode
-			) else {
-				return
-			}
+				distanceMeters: result.distanceMeters, mode: activeMode, now: now()
+			) else { return }
 			statusText = result.text
-			speechController.speak(result.text, settings: activeSpeechSettings)
+			speechController.speak(result.text, settings: activeSpeechSettings, delay: 0)
 		} catch {
-			if cachedMapData == nil {
-				statusText = "Live Mode is waiting for map data."
-			}
+			guard !Task.isCancelled, isActive, processingID == operation else { return }
+			if cachedMapData == nil { statusText = "Live Mode is waiting for map data." }
 		}
 	}
 
 	@discardableResult
+	func checkTimeouts() -> Bool {
+		guard isActive else { return false }
+		return stopIfLocationUnavailable() || stopIfStationary()
+	}
+
+	@discardableResult
+	private func stopIfLocationUnavailable() -> Bool {
+		guard now().timeIntervalSince(lastLocationAt) >= max(120, stationaryMinutes * 60) else { return false }
+		stop(message: "Live Mode stopped because no recent location updates are available.")
+		return true
+	}
+
+	@discardableResult
 	private func stopIfStationary() -> Bool {
-		guard movementMonitor.hasTimedOut(after: stationaryMinutes) else {
+		guard movementMonitor.hasTimedOut(after: stationaryMinutes, at: now()) else {
 			return false
 		}
 		let minutes = Int(stationaryMinutes.rounded())
-		stop(message: "Live Mode stopped because you haven't moved for \(minutes) minutes.")
+		let duration = minutes == 1 ? "1 minute" : "\(minutes) minutes"
+		stop(message: "Live Mode stopped because you haven't moved for \(duration).")
 		return true
 	}
 
 	private func mapData(for context: DeviceContext) async throws -> MapDataSet {
-		let now = Date()
+		let now = now()
+		let operation = processingID
+		let options = mapOptions
+		let refreshInterval = activeMode == .driving && !lastFetchFailed ? 60.0 : minimumMapRefreshInterval
 		let refreshIsThrottled = lastMapFetchAt.map {
-			now.timeIntervalSince($0) < minimumMapRefreshInterval
+			now.timeIntervalSince($0) < refreshInterval
 		} ?? false
 		if
 			let cachedMapData,
 			let cachedMapCenter,
-			cachedMapOptions == activePrefs.mapDetails
+			cachedMapOptions == options
 		{
 			let distance = Geo.distanceMeters(from: cachedMapCenter, to: context.coordinate)
 			let remainsCovered = distance + 225 <= cachedMapRadius
@@ -182,24 +270,31 @@ final class LiveModeCoordinator: ObservableObject {
 				return cachedMapData
 			}
 		}
-		if cachedMapData == nil, refreshIsThrottled {
+		if refreshIsThrottled, lastMapFetchOptions == options {
+			if let cachedMapData { return cachedMapData }
 			throw URLError(.resourceUnavailable)
 		}
 
 		let radius = activeMode.mapRadiusMeters
 		lastMapFetchAt = now
+		lastMapFetchOptions = options
 		do {
-			let data = try await mapDataClient.mapData(
+			let data = try await mapDataClient.freshMapData(
 				near: context.coordinate,
 				radiusMeters: radius,
-				options: activePrefs.mapDetails
+				options: options
 			)
+			try Task.checkCancellation()
+			guard isActive, processingID == operation else { throw CancellationError() }
+			lastFetchFailed = false
 			cachedMapData = data
 			cachedMapCenter = context.coordinate
 			cachedMapRadius = radius
-			cachedMapOptions = activePrefs.mapDetails
+			cachedMapOptions = options
 			return data
 		} catch {
+			guard !Task.isCancelled, isActive, processingID == operation else { throw CancellationError() }
+			lastFetchFailed = true
 			if let cachedMapData {
 				return cachedMapData
 			}

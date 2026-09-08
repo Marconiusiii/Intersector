@@ -135,6 +135,8 @@ struct LiveRoadMatcher {
 	}
 
 	private func roadIsAllowed(_ road: MapRoad, mode: LiveTravelMode) -> Bool {
+		if ["motorway", "motorway_link", "trunk", "trunk_link"].contains(road.highway) { return false }
+		guard !road.name.isEmpty else { return false }
 		guard mode == .driving else {
 			return true
 		}
@@ -171,13 +173,19 @@ struct LiveAnnouncementGate {
 struct LiveMovementMonitor {
 	private(set) var anchor: CLLocationCoordinate2D?
 	private(set) var lastMeaningfulMovementAt: Date?
+	private(set) var lastSampleAt: Date?
 
 	mutating func reset(at date: Date = .now) {
 		anchor = nil
 		lastMeaningfulMovementAt = date
+		lastSampleAt = nil
 	}
 
 	mutating func record(_ context: DeviceContext, at date: Date = .now) {
+		if let lastSampleAt, date.timeIntervalSince(lastSampleAt) > 30 {
+			self.anchor = nil
+		}
+		lastSampleAt = date
 		guard let anchor else {
 			self.anchor = context.coordinate
 			lastMeaningfulMovementAt = date
@@ -193,11 +201,78 @@ struct LiveMovementMonitor {
 	}
 
 	func hasTimedOut(after minutes: Double, at date: Date = .now) -> Bool {
-		guard let lastMeaningfulMovementAt else {
+		guard let lastMeaningfulMovementAt, let lastSampleAt,
+			date.timeIntervalSince(lastSampleAt) <= 30 else {
 			return false
 		}
 		return date.timeIntervalSince(lastMeaningfulMovementAt) >= minutes * 60
 	}
+}
+
+// Highway shutdown requires a sustained, unambiguous match to the main road.
+// Ramps supply geometry but never trigger shutdown on their own.
+struct LiveHighwayDetector {
+	private var candidateID: String?
+	private var firstSeen: Date?
+	private var firstCoordinate: CLLocationCoordinate2D?
+	private var samples = 0
+	private var lastSeen: Date?
+	private var previousRoad: MapRoad?
+
+	mutating func reset() { self = Self() }
+
+	mutating func highwayEntered(in data: MapDataSet, context: DeviceContext, now: Date = .now) -> MapRoad? {
+		guard let accuracy = context.horizontalAccuracy, accuracy >= 0, accuracy <= 25,
+			  let course = context.courseDegrees, let courseAccuracy = context.courseAccuracy,
+			  courseAccuracy >= 0, courseAccuracy <= 25,
+			  let speed = context.speedMetersPerSecond, speed >= 1 else {
+			reset()
+			return nil
+		}
+		let candidates = data.roads.compactMap { road -> (MapRoad, Double)? in
+			let distance = road.minimumDistance(to: context.coordinate)
+			guard distance <= 45, let alignment = road.directionSign(for: course, at: context.coordinate),
+				  abs(alignment) >= 0.85 else { return nil }
+			if road.oneWay == "-1" && alignment > 0 { return nil }
+			if (road.oneWay == "yes" || road.oneWay == "1" || (road.highway == "motorway" && road.oneWay == nil)) && alignment < 0 { return nil }
+			return (road, distance + (1 - abs(alignment)) * 45)
+		}.sorted { $0.1 < $1.1 }
+		guard let best = candidates.first,
+			  best.0.highway == "motorway" || (best.0.highway == "trunk" && best.0.limitedAccess),
+			  best.0.minimumDistance(to: context.coordinate) <= max(12, accuracy),
+			  !candidates.dropFirst().contains(where: { $0.1 < best.1 + 12 && $0.0.id != best.0.id }) else {
+			reset()
+			return nil
+		}
+		let key = best.0.routeReference ?? (best.0.name.isEmpty ? best.0.id : best.0.name)
+		let connected = previousRoad.map { previous in
+			previous.id == best.0.id || !Set(previous.nodeIDs).isDisjoint(with: best.0.nodeIDs)
+		} ?? true
+		if key != candidateID || !connected || lastSeen.map({ now.timeIntervalSince($0) > 20 }) == true {
+			reset()
+			candidateID = key
+			firstSeen = now
+			firstCoordinate = context.coordinate
+		}
+		lastSeen = now
+		previousRoad = best.0
+		samples += 1
+		guard samples >= 3, let firstSeen, now.timeIntervalSince(firstSeen) >= 4,
+			  let firstCoordinate, Geo.distanceMeters(from: firstCoordinate, to: context.coordinate) >= 25 else { return nil }
+		return best.0
+	}
+
+	static func shutdownMessage(for road: MapRoad) -> String {
+		let identity = road.routeReference.flatMap { $0.isEmpty ? nil : $0 } ?? road.name
+		let entrance = identity.isEmpty ? "Entering highway." : "Entering \(identity)."
+		return "\(entrance) Live Mode off. Turn Live back on after exiting the highway."
+	}
+}
+
+@MainActor
+protocol LiveSpeaking {
+	func speak(_ text: String, settings: LiveSpeechSettings, delay: TimeInterval)
+	func stop()
 }
 
 struct SpeechUtteranceTracker {
@@ -221,7 +296,7 @@ struct SpeechUtteranceTracker {
 }
 
 @MainActor
-final class SystemSpeechController: NSObject, @preconcurrency AVSpeechSynthesizerDelegate {
+final class SystemSpeechController: NSObject, LiveSpeaking, @preconcurrency AVSpeechSynthesizerDelegate {
 	static let shared = SystemSpeechController()
 
 	private let synthesizer = AVSpeechSynthesizer()

@@ -413,6 +413,9 @@ struct MapRoad: Equatable, Identifiable {
 	var nodeIDs: [Int64]
 	var coordinates: [CLLocationCoordinate2D]
 	var highway: String = "road"
+	var routeReference: String? = nil
+	var oneWay: String? = nil
+	var limitedAccess = false
 }
 
 private struct RoadGraphEdge {

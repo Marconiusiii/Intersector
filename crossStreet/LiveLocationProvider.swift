@@ -7,8 +7,17 @@ import CoreLocation
 import Foundation
 
 @MainActor
-final class LiveLocationProvider: NSObject {
+protocol LiveLocationProviding: AnyObject {
+	func updates(for mode: LiveTravelMode) async throws -> AsyncThrowingStream<DeviceContext, Error>
+	func updateMode(_ mode: LiveTravelMode)
+	func stop()
+}
+
+@MainActor
+final class LiveLocationProvider: NSObject, LiveLocationProviding {
 	private let manager = CLLocationManager()
+	private var sessionID = UUID()
+	private var requestedMode = LiveTravelMode.walking
 	private var authorizationContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
 	private var updateContinuation: AsyncThrowingStream<DeviceContext, Error>.Continuation?
 	private var backgroundActivitySession: CLBackgroundActivitySession?
@@ -19,18 +28,24 @@ final class LiveLocationProvider: NSObject {
 	}
 
 	func updates(for mode: LiveTravelMode) async throws -> AsyncThrowingStream<DeviceContext, Error> {
+		stop()
+		let session = sessionID
+		requestedMode = mode
 		let authorization = await authorizationStatus()
+		try Task.checkCancellation()
+		guard session == sessionID else { throw CancellationError() }
 		guard authorization == .authorizedWhenInUse || authorization == .authorizedAlways else {
 			throw CLError(.denied)
 		}
 
-		configure(for: mode)
+		configure(for: requestedMode)
 		return Self.newestUpdateStream { continuation in
 			self.updateContinuation?.finish()
 			self.updateContinuation = continuation
 			continuation.onTermination = { [weak self] _ in
 				Task { @MainActor [weak self] in
-					self?.stop()
+					guard let self, self.sessionID == session else { return }
+					self.stop()
 				}
 			}
 			self.backgroundActivitySession = CLBackgroundActivitySession()
@@ -44,7 +59,19 @@ final class LiveLocationProvider: NSObject {
 		AsyncThrowingStream(bufferingPolicy: .bufferingNewest(1), build)
 	}
 
+	func updateMode(_ mode: LiveTravelMode) {
+		requestedMode = mode
+		if updateContinuation != nil { configure(for: mode) }
+	}
+
 	func stop() {
+		sessionID = UUID()
+		let authorization = authorizationContinuation
+		authorizationContinuation = nil
+		authorization?.resume(returning: manager.authorizationStatus)
+		let continuation = updateContinuation
+		updateContinuation = nil
+		continuation?.finish()
 		manager.stopUpdatingLocation()
 		manager.allowsBackgroundLocationUpdates = false
 		backgroundActivitySession?.invalidate()
@@ -107,8 +134,13 @@ extension LiveLocationProvider: CLLocationManagerDelegate {
 		}
 	}
 
+	static func isRecoverable(_ error: Error) -> Bool {
+		guard let code = (error as? CLError)?.code else { return false }
+		return code == .locationUnknown || code == .network
+	}
+
 	func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-		guard (error as? CLError)?.code != .locationUnknown else {
+		guard !Self.isRecoverable(error) else {
 			return
 		}
 		updateContinuation?.finish(throwing: error)
