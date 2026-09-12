@@ -6,6 +6,18 @@ import Testing
 
 @MainActor
 struct LiveModeTests {
+	@Test func liveModeAvailabilityPreservesExistingAccessAndHonorsSavedSwitch() throws {
+		let suiteName = "LiveModeTests.availability.\(UUID().uuidString)"
+		let defaults = try #require(UserDefaults(suiteName: suiteName))
+		defer { defaults.removePersistentDomain(forName: suiteName) }
+
+		#expect(LiveModeAvailability.isEnabled(in: defaults))
+		defaults.set(false, forKey: LiveModeAvailability.enabledKey)
+		#expect(!LiveModeAvailability.isEnabled(in: defaults))
+		defaults.set(true, forKey: LiveModeAvailability.enabledKey)
+		#expect(LiveModeAvailability.isEnabled(in: defaults))
+	}
+
 	@Test func speechRatePercentageMapsAcrossTheSystemSpeechRange() {
 		#expect(SystemSpeechController.speechRate(forPercent: 0) == AVSpeechUtteranceMinimumSpeechRate)
 		#expect(SystemSpeechController.speechRate(forPercent: 100) == AVSpeechUtteranceMaximumSpeechRate)

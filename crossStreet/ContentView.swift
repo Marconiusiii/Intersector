@@ -707,6 +707,7 @@ struct ContentView: View {
 	@AppStorage("manhattanSnobMode") private var manhattanSnobMode = false
 	@AppStorage("showRankedControls") private var showRankedControls = true
 	@AppStorage("displayLayout") private var displayLayoutRaw = DisplayLayout.standard.rawValue
+	@AppStorage(LiveModeAvailability.enabledKey) private var liveModeEnabled = true
 	@AppStorage("liveTravelMode") private var liveTravelModeRaw = LiveTravelMode.walking.rawValue
 	@AppStorage("liveStationaryMinutes") private var liveStationaryMinutes = 5.0
 	@AppStorage("liveVoiceIdentifier") private var liveVoiceIdentifier = ""
@@ -914,6 +915,11 @@ struct ContentView: View {
 			.onChange(of: mapReadinessSignature) { _, _ in
 				restartInitialPreparation()
 			}
+			.onChange(of: liveModeEnabled) { _, enabled in
+				if !enabled {
+					disableLiveMode()
+				}
+			}
 			.onChange(of: liveMode.statusText) { _, text in
 				presentStatusText(text)
 			}
@@ -955,11 +961,15 @@ struct ContentView: View {
 	private var headerControls: some View {
 		ViewThatFits(in: .horizontal) {
 			HStack(spacing: 0) {
-				liveToggle
+				if liveModeEnabled {
+					liveToggle
+				}
 				settingsButton
 			}
 			VStack(alignment: .trailing, spacing: 0) {
-				liveToggle
+				if liveModeEnabled {
+					liveToggle
+				}
 				settingsButton
 			}
 		}
@@ -1546,71 +1556,76 @@ struct ContentView: View {
 		Group {
 			settingsHeader("Live Mode")
 			settingsControlRow {
-				VStack(alignment: .leading, spacing: 8) {
-					Text("Travel Mode")
-						.foregroundStyle(Color.crossText)
-					Picker("Travel Mode", selection: liveTravelModeBinding) {
-						ForEach(LiveTravelMode.allCases) { mode in
-							Text(mode.label).tag(mode)
+				Toggle("Live Mode", isOn: $liveModeEnabled)
+			}
+			if liveModeEnabled {
+				settingsControlRow {
+					VStack(alignment: .leading, spacing: 8) {
+						Text("Travel Mode")
+							.foregroundStyle(Color.crossText)
+						Picker("Travel Mode", selection: liveTravelModeBinding) {
+							ForEach(LiveTravelMode.allCases) { mode in
+								Text(mode.label).tag(mode)
+							}
 						}
+						.pickerStyle(.segmented)
 					}
-					.pickerStyle(.segmented)
 				}
-			}
-			settingsHelperText("Choose Walking when you are on foot. Choose Driving when you are in a car or bus so intersections are announced sooner.")
-			settingsControlRow {
-				VStack(alignment: .leading, spacing: 8) {
-					Text("Stop When Stationary: \(Int(liveStationaryMinutes.rounded())) minutes")
-						.foregroundStyle(Color.crossText)
-						.accessibilityHidden(true)
-					Slider(
-						value: $liveStationaryMinutes,
-						in: 5...30,
-						step: 1,
-						label: { Text("Stop When Stationary, \(Int(liveStationaryMinutes.rounded())) minutes") }
-					)
+				settingsHelperText("Choose Walking when you are on foot. Choose Driving when you are in a car or bus so intersections are announced sooner.")
+				settingsControlRow {
+					VStack(alignment: .leading, spacing: 8) {
+						Text("Stop When Stationary: \(Int(liveStationaryMinutes.rounded())) minutes")
+							.foregroundStyle(Color.crossText)
+							.accessibilityHidden(true)
+						Slider(
+							value: $liveStationaryMinutes,
+							in: 5...30,
+							step: 1,
+							label: { Text("Stop When Stationary, \(Int(liveStationaryMinutes.rounded())) minutes") }
+						)
+					}
 				}
-			}
-			settingsHelperText("Stops Live Mode after you stop moving for the selected time, including while Intersector is in the background or the phone is locked.")
-			settingsHeader("System Speech")
-			settingsControlRow {
-				LiveVoicePicker(voiceIdentifier: $liveVoiceIdentifier)
-			}
-			settingsControlRow {
-				VStack(alignment: .leading, spacing: 8) {
-					Text("Speech Rate: \(liveSpeechRatePercent) percent")
-						.foregroundStyle(Color.crossText)
-						.accessibilityHidden(true)
-					Slider(
-						value: liveSpeechRateBinding,
-						in: 0...100,
-						step: 5,
-						label: { Text("Speech Rate") }
-					)
+				settingsHelperText("Stops Live Mode after you stop moving for the selected time, including while Intersector is in the background or the phone is locked.")
+				settingsHeader("System Speech")
+				settingsControlRow {
+					LiveVoicePicker(voiceIdentifier: $liveVoiceIdentifier)
 				}
-			}
-			settingsControlRow {
-				VStack(alignment: .leading, spacing: 8) {
-					Text("Speech Volume")
-						.foregroundStyle(Color.crossText)
-						.accessibilityHidden(true)
-					Slider(
-						value: $liveSpeechVolume,
-						in: 0...1,
-						label: { Text("Speech Volume") }
-					)
+				settingsControlRow {
+					VStack(alignment: .leading, spacing: 8) {
+						Text("Speech Rate: \(liveSpeechRatePercent) percent")
+							.foregroundStyle(Color.crossText)
+							.accessibilityHidden(true)
+						Slider(
+							value: liveSpeechRateBinding,
+							in: 0...100,
+							step: 5,
+							label: { Text("Speech Rate") }
+						)
+					}
 				}
-			}
-			settingsControlRow {
-				Button {
-					SystemSpeechController.shared.speak(
-						"Welcome to Intersector!",
-						settings: liveSpeechSettings
-					)
-				} label: {
-					settingsButtonLabel("Test Speech")
+				settingsControlRow {
+					VStack(alignment: .leading, spacing: 8) {
+						Text("Speech Volume")
+							.foregroundStyle(Color.crossText)
+							.accessibilityHidden(true)
+						Slider(
+							value: $liveSpeechVolume,
+							in: 0...1,
+							label: { Text("Speech Volume") }
+						)
+					}
 				}
-				.buttonStyle(.plain)
+				settingsControlRow {
+					Button {
+						SystemSpeechController.shared.speak(
+							"Welcome to Intersector!",
+							settings: liveSpeechSettings
+						)
+					} label: {
+						settingsButtonLabel("Test Speech")
+					}
+					.buttonStyle(.plain)
+				}
 			}
 		}
 	}
@@ -1903,7 +1918,7 @@ struct ContentView: View {
 
 					helpSection(
 						title: "Live Mode",
-						body: "Turn on Live to hear upcoming intersections automatically as you travel. Choose Walking when you are on foot. Choose Driving when you are in a car or bus so intersections are announced sooner. Live Mode continues when you use another app or lock the phone. Live Mode uses the voice, speech rate, and volume selected in Settings. An ascending flourish confirms that Live Mode is on, and a descending flourish confirms that it is off. On the Live control, choose the Walking Mode or Driving Mode accessibility action and double-tap to start Live in that mode. If Live is already on, the action changes the travel mode and announces the change. In Driving mode, Live automatically turns off when Intersector detects that you have entered a highway. Intersector announces the shutdown and identifies the highway when that information is available. Turn Live back on after exiting the highway to resume intersection announcements. Live Mode stops after you stop moving for the time selected in Settings. Live also stops if location updates remain unavailable. You can also turn it off from Intersector, Siri, or Shortcuts."
+						body: "The Live Mode switch in Settings shows or hides the Live control and its settings. Turning this switch off also stops Live Mode. Your travel and speech preferences are kept when you turn it back on. Turn on Live on the home screen to hear upcoming intersections automatically as you travel. Choose Walking when you are on foot. Choose Driving when you are in a car or bus so intersections are announced sooner. Live Mode continues when you use another app or lock the phone. Live Mode uses the voice, speech rate, and volume selected in Settings. An ascending flourish confirms that Live Mode is on, and a descending flourish confirms that it is off. On the Live control, choose the Walking Mode or Driving Mode accessibility action and double-tap to start Live in that mode. If Live is already on, the action changes the travel mode and announces the change. In Driving mode, Live automatically turns off when Intersector detects that you have entered a highway. Intersector announces the shutdown and identifies the highway when that information is available. Turn Live back on after exiting the highway to resume intersection announcements. Live Mode stops after you stop moving for the time selected in Settings. Live also stops if location updates remain unavailable. You can also turn it off from Intersector, Siri, or Shortcuts."
 					)
 
 					helpSection(
@@ -1920,7 +1935,7 @@ struct ContentView: View {
 
 					helpSection(
 						title: "Siri and Shortcuts",
-						body: "Intersector includes shortcut actions for Nearest Intersection, Upcoming Intersection, My Direction, Scan Mode, Start Live Mode, and Stop Live Mode. Starting Live Mode uses your saved Walking or Driving and speech settings. In the Shortcuts app, you can create your own phrases for Intersector actions."
+						body: "Intersector includes shortcut actions for Nearest Intersection, Upcoming Intersection, My Direction, Scan Mode, Start Live Mode, and Stop Live Mode. Starting Live Mode requires the Live Mode switch in Settings to be on and uses your saved Walking or Driving and speech settings. In the Shortcuts app, you can create your own phrases for Intersector actions."
 					)
 
 					helpSection(
@@ -2201,7 +2216,16 @@ struct ContentView: View {
 		}
 	}
 
+	private func disableLiveMode() {
+		hasPendingLiveModeStart = false
+		liveModeShortcutCommandRaw = ""
+		if liveMode.isActive {
+			liveMode.stop()
+		}
+	}
+
 	private func selectLiveMode(_ mode: LiveTravelMode) {
+		guard liveModeEnabled else { return }
 		liveTravelModeRaw = mode.rawValue
 		if liveMode.isActive {
 			liveMode.switchMode(to: mode)
@@ -2212,7 +2236,13 @@ struct ContentView: View {
 
 	private func setLiveMode(_ shouldStart: Bool) {
 		if !shouldStart {
+			hasPendingLiveModeStart = false
 			liveMode.stop()
+			return
+		}
+
+		guard liveModeEnabled else {
+			disableLiveMode()
 			return
 		}
 
@@ -2237,6 +2267,11 @@ struct ContentView: View {
 
 		switch command {
 		case .start:
+			guard liveModeEnabled else {
+				disableLiveMode()
+				presentStatusText(LiveModeAvailability.disabledMessage)
+				return
+			}
 			hasPendingLiveModeStart = true
 			if pointScanner.isScanning || pointScanner.isPreparing {
 				scanPreparationStatusOperationID = nil
@@ -2256,6 +2291,10 @@ struct ContentView: View {
 	}
 
 	private func startPendingLiveModeIfReady() {
+		guard liveModeEnabled else {
+			disableLiveMode()
+			return
+		}
 		guard hasPendingLiveModeStart, isMapDataReady, scenePhase == .active else {
 			return
 		}

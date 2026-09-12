@@ -382,6 +382,10 @@ struct StartLiveModeIntent: AppIntent {
 
 	@MainActor
 	func perform() async throws -> some IntentResult & ProvidesDialog {
+		guard LiveModeAvailability.isEnabled() else {
+			UserDefaults.standard.removeObject(forKey: LaunchKeys.liveModeCommand)
+			return .result(dialog: IntentDialog(stringLiteral: LiveModeAvailability.disabledMessage))
+		}
 		let command = LiveModeShortcutCommand.start
 		UserDefaults.standard.set(false, forKey: LaunchKeys.startPointScan)
 		UserDefaults.standard.set(command.rawValue, forKey: LaunchKeys.liveModeCommand)

@@ -227,6 +227,8 @@ The useful pattern here is that `ReportKind` changes behavior without duplicatin
 
 ## How Live Mode Works
 
+The saved Live Mode switch in Settings defaults to on. Turning it off removes the home-screen Live control and the dependent Live settings, stops an active Live session, and cancels pending starts. Turning it back on restores the controls without starting a session or resetting travel and speech preferences. Start Live Mode shortcuts require this switch to be on.
+
 The Live toggle starts `LiveModeCoordinator` with the saved travel mode, announcement preferences, speech settings, and stationary timeout. Live Mode and Scan Mode are mutually exclusive, so starting either one stops the other.
 
 Walking and Driving use the same Upcoming report formatter as the main Upcoming action. This keeps the information spoken during Live Mode consistent with what the user would hear by repeatedly choosing Upcoming. Walking announces an intersection when it is within 90 meters. Driving announces it within 350 meters so the user has more time at a higher speed. Driving also ignores roads mapped only for pedestrians.

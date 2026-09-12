@@ -7,6 +7,15 @@ import AVFoundation
 import CoreLocation
 import Foundation
 
+enum LiveModeAvailability {
+	static let enabledKey = "liveModeEnabled"
+	static let disabledMessage = "Turn on Live Mode in Settings before starting Live Mode."
+
+	static func isEnabled(in defaults: UserDefaults = .standard) -> Bool {
+		defaults.object(forKey: enabledKey) == nil || defaults.bool(forKey: enabledKey)
+	}
+}
+
 enum LiveTravelMode: String, CaseIterable, Identifiable, Sendable {
 	case walking
 	case driving
