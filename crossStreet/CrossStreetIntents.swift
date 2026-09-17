@@ -12,7 +12,7 @@ import Foundation
 private func intersectorResult(
 	_ text: String
 ) -> some IntentResult & ProvidesDialog {
-	.result(dialog: IntentDialog(stringLiteral: text))
+	.result(dialog: IntentDialog("\(text)"))
 }
 
 struct IntersectorShortcutResult: AppEntity {
@@ -155,9 +155,9 @@ struct UpcomingIntersectionIntent: AppIntent {
 		do {
 			let prefs = AppPrefs.saved()
 			let text = try await OrientSvc.shared.spokenText(.upcoming, prefs: prefs)
-			return intersectorResult(text)
+			return intersectorResult("iPhone response. \(text)")
 		} catch {
-			return intersectorResult("I couldn't find your upcoming intersection. Please try again.")
+			return intersectorResult("iPhone response. I couldn't find your upcoming intersection. Please try again.")
 		}
 	}
 }

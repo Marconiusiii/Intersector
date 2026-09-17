@@ -11,7 +11,7 @@ import Foundation
 private func watchIntersectorResult(
 	_ text: String
 ) -> some IntentResult & ProvidesDialog {
-	.result(dialog: IntentDialog(stringLiteral: text))
+	.result(dialog: IntentDialog("\(text)"))
 }
 
 struct WatchIntersectorShortcutResult: AppEntity {
@@ -126,7 +126,7 @@ struct WatchUpcomingIntersectionIntent: AppIntent {
 	@MainActor
 	func perform() async throws -> some IntentResult & ProvidesDialog {
 		let text = await IntersectorWatchReporter.reportText(for: .upcoming)
-		return watchIntersectorResult(text)
+		return watchIntersectorResult("Watch response. \(text)")
 	}
 }
 
@@ -259,7 +259,9 @@ struct IntersectorWatchShortcuts: AppShortcutsProvider {
 				"Upcoming intersection in \(.applicationName)",
 				"What intersection is ahead with \(.applicationName)",
 				"What's my upcoming intersection with \(.applicationName)",
-				"What intersection is coming up with \(.applicationName)"
+				"What intersection is coming up with \(.applicationName)",
+				"What is my upcoming intersection with \(.applicationName)",
+				"What's the next intersection with \(.applicationName)"
 			],
 			shortTitle: "Upcoming",
 			systemImageName: "arrow.up.circle.fill"

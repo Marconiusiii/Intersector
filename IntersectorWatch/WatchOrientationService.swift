@@ -1681,7 +1681,14 @@ extension WatchMapRoad {
 
 @MainActor
 final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
-	private let manager = CLLocationManager()
+	private let manager: CLLocationManager
+	private let headingAvailable: () -> Bool
+	private var contextHeadingTask: Task<Void, Never>?
+	private var contextTimeoutTask: Task<Void, Never>?
+	private var pendingLocation: CLLocation?
+	private var waitingForHeading = false
+	private var contextRequestID = UUID()
+	private var headingRequestID = UUID()
 	private var continuation: CheckedContinuation<WatchDeviceContext, Error>?
 	private var authorizationContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
 	private var headingContinuation: CheckedContinuation<CLLocationDirection, Error>?
@@ -1690,7 +1697,9 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 	private var latestHeading: CLLocationDirection?
 	private var latestHeadingDate: Date?
 
-	override init() {
+	init(manager: CLLocationManager = CLLocationManager(), headingAvailable: @escaping () -> Bool = CLLocationManager.headingAvailable) {
+		self.manager = manager
+		self.headingAvailable = headingAvailable
 		super.init()
 		manager.delegate = self
 		manager.desiredAccuracy = kCLLocationAccuracyBest
@@ -1717,30 +1726,51 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 			throw WatchReportError.locationUnavailable
 		}
 
-		if CLLocationManager.headingAvailable() {
-			manager.startUpdatingHeading()
-		}
-
-		if requiresFreshHeading {
-			do {
-				_ = try await currentHeading(timeout: 1.2, allowCached: false)
-			} catch {
-				let hasRecentHeading = latestHeading != nil &&
-					latestHeadingDate.map { Date().timeIntervalSince($0) <= 2 } == true
-				if !hasRecentHeading {
-					clearHeading()
+		try Task.checkCancellation()
+		let requestID = UUID()
+		contextRequestID = requestID
+		return try await withTaskCancellationHandler {
+			try await withCheckedThrowingContinuation { continuation in
+				guard !Task.isCancelled else {
+					continuation.resume(throwing: CancellationError())
+					return
+				}
+				self.continuation = continuation
+				pendingLocation = nil
+				waitingForHeading = requiresFreshHeading
+				if headingAvailable() { manager.startUpdatingHeading() }
+				manager.startUpdatingLocation()
+				contextTimeoutTask = Task { [weak self] in
+					do { try await Task.sleep(for: .seconds(12)) } catch { return }
+					self?.finish(.failure(WatchReportError.locationUnavailable))
+				}
+				if requiresFreshHeading {
+					contextHeadingTask = Task { [weak self] in
+						guard let self else { return }
+						do {
+							_ = try await currentHeading(timeout: 1.2, allowCached: false)
+						} catch {
+							guard contextRequestID == requestID, !Task.isCancelled else { return }
+							let hasRecentHeading = latestHeading != nil &&
+								latestHeadingDate.map { Date().timeIntervalSince($0) <= 2 } == true
+							if !hasRecentHeading { clearHeading() }
+						}
+						guard contextRequestID == requestID, !Task.isCancelled else { return }
+						waitingForHeading = false
+						finishContextIfReady()
+					}
 				}
 			}
-		}
-
-		return try await withCheckedThrowingContinuation { continuation in
-			self.continuation = continuation
-			manager.startUpdatingLocation()
+		} onCancel: {
+			Task { @MainActor [weak self] in
+				guard let self, contextRequestID == requestID else { return }
+				finish(.failure(CancellationError()))
+			}
 		}
 	}
 
 	func currentHeading(timeout: TimeInterval = 1.5, allowCached: Bool = true) async throws -> CLLocationDirection {
-		guard CLLocationManager.headingAvailable() else {
+		guard headingAvailable() else {
 			throw WatchReportError.headingUnavailable
 		}
 		if allowCached,
@@ -1749,18 +1779,29 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 		   Date().timeIntervalSince(latestHeadingDate) < 2 {
 			return latestHeading
 		}
-		manager.startUpdatingHeading()
-		return try await withCheckedThrowingContinuation { continuation in
-			headingContinuation = continuation
-			headingSettlingTask?.cancel()
-			headingSettlingTask = nil
-			headingTimeoutTask?.cancel()
-			headingTimeoutTask = Task { [weak self] in
-				let nanoseconds = UInt64(timeout * 1_000_000_000)
-				try? await Task.sleep(nanoseconds: nanoseconds)
-				await MainActor.run {
+		try Task.checkCancellation()
+		let requestID = UUID()
+		headingRequestID = requestID
+		return try await withTaskCancellationHandler {
+			try await withCheckedThrowingContinuation { continuation in
+				guard !Task.isCancelled else {
+					continuation.resume(throwing: CancellationError())
+					return
+				}
+				headingContinuation = continuation
+				headingSettlingTask?.cancel()
+				headingSettlingTask = nil
+				headingTimeoutTask?.cancel()
+				manager.startUpdatingHeading()
+				headingTimeoutTask = Task { [weak self] in
+					do { try await Task.sleep(for: .seconds(timeout)) } catch { return }
 					self?.finishHeading(with: .failure(WatchReportError.headingUnavailable))
 				}
+			}
+		} onCancel: {
+			Task { @MainActor [weak self] in
+				guard let self, headingRequestID == requestID else { return }
+				finishHeading(with: .failure(CancellationError()))
 			}
 		}
 	}
@@ -1768,9 +1809,22 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 	private func requestWhenInUseAuthorization() async -> CLAuthorizationStatus {
 		switch manager.authorizationStatus {
 		case .notDetermined:
-			return await withCheckedContinuation { continuation in
-				authorizationContinuation = continuation
-				manager.requestWhenInUseAuthorization()
+			return await withTaskCancellationHandler {
+				await withCheckedContinuation { continuation in
+					guard !Task.isCancelled else {
+						continuation.resume(returning: .denied)
+						return
+					}
+					authorizationContinuation = continuation
+					manager.requestWhenInUseAuthorization()
+				}
+			} onCancel: {
+				Task { @MainActor [weak self] in
+					guard let self else { return }
+					let pending = authorizationContinuation
+					authorizationContinuation = nil
+					pending?.resume(returning: .denied)
+				}
 			}
 		default:
 			return manager.authorizationStatus
@@ -1788,22 +1842,26 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 		_ manager: CLLocationManager,
 		didUpdateLocations locations: [CLLocation]
 	) {
+		guard continuation != nil else { return }
 		guard let location = locations.first(where: { $0.horizontalAccuracy >= 0 }) else {
 			finish(.failure(WatchReportError.locationUnavailable))
 			return
 		}
-		finish(
-			.success(
-					WatchDeviceContext(
-						coordinate: location.coordinate,
-						headingDegrees: latestHeading,
-					courseDegrees: location.course >= 0 ? location.course : nil,
-					courseAccuracy: location.courseAccuracy >= 0 ? location.courseAccuracy : nil,
-					speedMetersPerSecond: location.speed >= 0 ? location.speed : nil,
-					horizontalAccuracy: location.horizontalAccuracy >= 0 ? location.horizontalAccuracy : nil
-				)
-			)
-		)
+		pendingLocation = location
+		manager.stopUpdatingLocation()
+		finishContextIfReady()
+	}
+
+	private func finishContextIfReady() {
+		guard !waitingForHeading, let location = pendingLocation else { return }
+		finish(.success(WatchDeviceContext(
+			coordinate: location.coordinate,
+			headingDegrees: latestHeading,
+			courseDegrees: location.course >= 0 ? location.course : nil,
+			courseAccuracy: location.courseAccuracy >= 0 ? location.courseAccuracy : nil,
+			speedMetersPerSecond: location.speed >= 0 ? location.speed : nil,
+			horizontalAccuracy: location.horizontalAccuracy >= 0 ? location.horizontalAccuracy : nil
+		)))
 	}
 
 	func locationManager(
@@ -1828,7 +1886,7 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 		latestHeadingDate = Date()
 		if headingContinuation != nil, headingSettlingTask == nil {
 			headingSettlingTask = Task { [weak self] in
-				try? await Task.sleep(for: .milliseconds(250))
+				do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
 				await MainActor.run {
 					guard let self, let settledHeading = self.latestHeading else {
 						return
@@ -1844,6 +1902,13 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 			return
 		}
 		self.continuation = nil
+		contextHeadingTask?.cancel()
+		contextHeadingTask = nil
+		contextTimeoutTask?.cancel()
+		contextTimeoutTask = nil
+		pendingLocation = nil
+		waitingForHeading = false
+		finishHeading(with: .failure(CancellationError()))
 		manager.stopUpdatingLocation()
 		stopHeadingIfIdle()
 		switch result {
@@ -1873,7 +1938,7 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 	}
 
 	private func stopHeadingIfIdle() {
-		if headingContinuation == nil {
+		if headingContinuation == nil && continuation == nil {
 			manager.stopUpdatingHeading()
 		}
 	}
@@ -2995,22 +3060,14 @@ enum WatchGeo {
 
 	static func manhattanDirection(for direction: String) -> String {
 		switch direction {
-		case "north":
-			"uptown"
-		case "south":
-			"downtown"
-		case "east":
+		case "north", "northeast":
+			"Uptown"
+		case "east", "southeast":
 			"East Side"
-		case "west":
+		case "south", "southwest":
+			"Downtown"
+		case "west", "northwest":
 			"West Side"
-		case "northeast":
-			"uptown toward the East Side"
-		case "northwest":
-			"uptown toward the West Side"
-		case "southeast":
-			"downtown toward the East Side"
-		case "southwest":
-			"downtown toward the West Side"
 		default:
 			direction
 		}
