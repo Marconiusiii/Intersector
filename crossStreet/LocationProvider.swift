@@ -37,11 +37,33 @@ final class LocationProvider: NSObject, LocationProviding {
 		manager.headingFilter = 5
 	}
 
+	@MainActor
 	func currentContext() async throws -> DeviceContext {
 		try await currentContext(requiresFreshHeading: false)
 	}
 
+	@MainActor
 	func currentContext(requiresFreshHeading: Bool) async throws -> DeviceContext {
+		try await withTaskCancellationHandler {
+			try Task.checkCancellation()
+			let context = try await loadContext(requiresFreshHeading: requiresFreshHeading)
+			try Task.checkCancellation()
+			return context
+		} onCancel: {
+			Task { @MainActor [weak self] in self?.cancelPendingLookup() }
+		}
+	}
+
+	private func cancelPendingLookup() {
+		let authorization = authorizationContinuation
+		authorizationContinuation = nil
+		authorization?.resume(returning: .denied)
+		finishHeading(with: .failure(CancellationError()))
+		finish(with: .failure(CancellationError()))
+		finishPrewarm(success: false)
+	}
+
+	private func loadContext(requiresFreshHeading: Bool) async throws -> DeviceContext {
 		switch manager.authorizationStatus {
 		case .notDetermined:
 			let status = await requestWhenInUseAuthorization()
@@ -72,6 +94,7 @@ final class LocationProvider: NSObject, LocationProviding {
 			}
 		}
 
+		try Task.checkCancellation()
 		if let location = latestLocation, isRecentEnough(location), isUsable(location) {
 			let context = DeviceContext(
 				coordinate: location.coordinate,
@@ -86,7 +109,7 @@ final class LocationProvider: NSObject, LocationProviding {
 			bestActiveLocation = nil
 			locationTimeoutTask?.cancel()
 			locationTimeoutTask = Task { [weak self] in
-				try? await Task.sleep(nanoseconds: self?.locationTimeoutNanoseconds ?? 7_000_000_000)
+				do { try await Task.sleep(nanoseconds: self?.locationTimeoutNanoseconds ?? 7_000_000_000) } catch { return }
 				await MainActor.run {
 					self?.finishWithBestLocationOrFailure()
 				}
@@ -99,6 +122,7 @@ final class LocationProvider: NSObject, LocationProviding {
 		switch manager.authorizationStatus {
 		case .notDetermined:
 			return await withCheckedContinuation { continuation in
+				guard !Task.isCancelled else { continuation.resume(returning: .denied); return }
 				authorizationContinuation = continuation
 				manager.requestWhenInUseAuthorization()
 			}
@@ -107,6 +131,7 @@ final class LocationProvider: NSObject, LocationProviding {
 		}
 	}
 
+	@MainActor
 	func prewarmContext(timeout: TimeInterval = 4) async -> Bool {
 		switch manager.authorizationStatus {
 		case .notDetermined:
@@ -131,7 +156,7 @@ final class LocationProvider: NSObject, LocationProviding {
 			prewarmTimeoutTask?.cancel()
 			prewarmTimeoutTask = Task { [weak self] in
 				let nanoseconds = UInt64(timeout * 1_000_000_000)
-				try? await Task.sleep(nanoseconds: nanoseconds)
+				do { try await Task.sleep(nanoseconds: nanoseconds) } catch { return }
 				await MainActor.run {
 					guard let self else {
 						return
@@ -164,7 +189,7 @@ final class LocationProvider: NSObject, LocationProviding {
 			headingTimeoutTask?.cancel()
 			headingTimeoutTask = Task { [weak self] in
 				let nanoseconds = UInt64(timeout * 1_000_000_000)
-				try? await Task.sleep(nanoseconds: nanoseconds)
+				do { try await Task.sleep(nanoseconds: nanoseconds) } catch { return }
 				await MainActor.run {
 					self?.finishHeading(with: .failure(OrientError.headingUnavailable))
 				}
@@ -358,7 +383,7 @@ extension LocationProvider: CLLocationManagerDelegate {
 			latestHeadingDate = Date()
 			if headingContinuation != nil, headingSettlingTask == nil {
 				headingSettlingTask = Task { [weak self] in
-					try? await Task.sleep(for: .milliseconds(250))
+					do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
 					await MainActor.run {
 						guard let self, let settledHeading = self.latestHeading else {
 							return

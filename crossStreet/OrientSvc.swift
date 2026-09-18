@@ -25,7 +25,7 @@ enum OrientError: LocalizedError {
 	}
 }
 
-protocol LocationProviding {
+nonisolated protocol LocationProviding {
 	func currentContext() async throws -> DeviceContext
 	func currentContext(requiresFreshHeading: Bool) async throws -> DeviceContext
 	func prewarmContext(timeout: TimeInterval) async -> Bool
@@ -41,7 +41,7 @@ extension LocationProviding {
 	}
 }
 
-protocol MapDataFetching {
+nonisolated protocol MapDataFetching {
 	func intersections(
 		near coordinate: CLLocationCoordinate2D,
 		radiusMeters: CLLocationDistance,
@@ -109,7 +109,7 @@ extension MapDataFetching {
 	}
 }
 
-protocol NeighborhoodProviding {
+nonisolated protocol NeighborhoodProviding {
 	func neighborhoods(near coordinate: CLLocationCoordinate2D, radiusMeters: CLLocationDistance) async throws -> [NeighborhoodCandidate]
 }
 
@@ -171,29 +171,26 @@ struct OrientSvc {
 
 	func prewarmInitialReportMapData(prefs: AppPrefs = AppPrefs()) async -> Bool {
 		do {
-			let context = try await locationProvider.currentContext(requiresFreshHeading: false)
-			let nearestPrefs = await prefsForFirstLookup(kind: .nearest, rank: 1, prefs: prefs)
-			_ = try await mapData(
-				for: .nearest,
-				from: context,
-				minimumCandidateCount: 1,
-				prefs: nearestPrefs
-			)
-
-			let upcomingPrefs = await prefsForFirstLookup(kind: .upcoming, rank: 1, prefs: prefs)
-			let upcomingData = try await initialUpcomingMapData(from: context, prefs: upcomingPrefs)
-			if upcomingData.intersections.isEmpty {
-				_ = try await mapData(
-					for: .upcoming,
-					from: context,
-					minimumCandidateCount: 1,
-					prefs: upcomingPrefs
-				)
-			}
+			try await prepareInitialMapData(prefs: prefs)
 			return true
-		} catch {
-			return false
-		}
+		} catch { return false }
+	}
+
+	func prepareInitialMapData(prefs: AppPrefs = AppPrefs(), locationReady: () -> Void = {}) async throws {
+		let context = try await locationProvider.currentContext(requiresFreshHeading: false)
+		try Task.checkCancellation()
+		locationReady()
+		// Prepare one nearby area; action-specific expansion happens on demand.
+		let initialPrefs = await prefsForFirstLookup(kind: .nearest, rank: 1, prefs: prefs)
+		_ = try await mapDataClient.immediateMapData(
+			near: context.coordinate, radiusMeters: 225, options: initialPrefs.mapDetails
+		)
+		try Task.checkCancellation()
+	}
+
+	static func interactiveSession() -> OrientSvc {
+		OrientSvc(locationProvider: LocationProvider(), mapDataClient: MapDataClient(),
+			neighborhoodProvider: NeighborhoodProvider())
 	}
 
 	func report(

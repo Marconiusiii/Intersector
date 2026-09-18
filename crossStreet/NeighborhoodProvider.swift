@@ -105,7 +105,7 @@ struct NeighborhoodProvider: NeighborhoodProviding {
 			switch mapError {
 			case .serverError(let statusCode):
 				return [429, 500, 502, 503, 504].contains(statusCode)
-			case .invalidResponse, .invalidMapData:
+			case .invalidResponse, .invalidMapData, .serversCoolingDown:
 				return false
 			}
 		}
@@ -154,59 +154,78 @@ actor NeighborhoodCache {
 	private struct InFlightRequest {
 		var center: CLLocationCoordinate2D
 		var radiusMeters: CLLocationDistance
-		var task: Task<[NeighborhoodCandidate], Error>
+		var task: Task<Void, Never>
+		var waiters: [UUID: CheckedContinuation<[NeighborhoodCandidate], Error>]
 	}
 
 	private let reuseDistanceMeters: CLLocationDistance = 250
 	private let timeToLive: TimeInterval = 900
 	private let maxEntries = 4
 	private var entries: [Entry] = []
-	private var inFlightRequest: InFlightRequest?
+	private var requests: [UUID: InFlightRequest] = [:]
 
 	func data(
 		near coordinate: CLLocationCoordinate2D,
 		radiusMeters: CLLocationDistance,
 		fetch: @escaping @Sendable () async throws -> [NeighborhoodCandidate]
 	) async throws -> [NeighborhoodCandidate] {
+		try Task.checkCancellation()
 		if let entry = entries.first(where: { canReuse($0, for: coordinate, radiusMeters: radiusMeters) }) {
 			return entry.data
 		}
 
-		if let inFlightRequest,
-		   sameArea(
-		   	center: inFlightRequest.center,
-		   	radiusMeters: inFlightRequest.radiusMeters,
-		   	as: coordinate,
-		   	requestedRadius: radiusMeters
-		   ) {
-			return try await inFlightRequest.task.value
-		}
-
-		let task = Task {
-			try await fetch()
-		}
-		inFlightRequest = InFlightRequest(
-			center: coordinate,
-			radiusMeters: radiusMeters,
-			task: task
-		)
-
-		do {
-			let data = try await task.value
-			store(
-				Entry(
-					center: coordinate,
-					radiusMeters: radiusMeters,
-					storedAt: Date(),
-					data: data
+		let waiterID = UUID()
+		let requestID = requests.first(where: {
+			sameArea(center: $0.value.center, radiusMeters: $0.value.radiusMeters, as: coordinate, requestedRadius: radiusMeters)
+		})?.key ?? UUID()
+		return try await withTaskCancellationHandler {
+			try await withCheckedThrowingContinuation { waiter in
+				guard !Task.isCancelled else {
+					waiter.resume(throwing: CancellationError())
+					return
+				}
+				if requests[requestID] != nil {
+					requests[requestID]?.waiters[waiterID] = waiter
+					return
+				}
+				let task = Task {
+					let result: Result<[NeighborhoodCandidate], Error>
+					do {
+						let data = try await fetch()
+						try Task.checkCancellation()
+						result = .success(data)
+					} catch {
+						result = .failure(error)
+					}
+					complete(requestID, result: result)
+				}
+				requests[requestID] = InFlightRequest(
+					center: coordinate, radiusMeters: radiusMeters,
+					task: task, waiters: [waiterID: waiter]
 				)
-			)
-			inFlightRequest = nil
-			return data
-		} catch {
-			inFlightRequest = nil
-			throw error
+			}
+		} onCancel: {
+			Task { await self.cancelWaiter(waiterID, requestID: requestID) }
 		}
+	}
+
+	private func cancelWaiter(_ waiterID: UUID, requestID: UUID) {
+		guard let waiter = requests[requestID]?.waiters.removeValue(forKey: waiterID) else { return }
+		if requests[requestID]?.waiters.isEmpty == true {
+			let request = requests.removeValue(forKey: requestID)
+			request?.task.cancel()
+		}
+		waiter.resume(throwing: CancellationError())
+	}
+
+	private func complete(_ id: UUID, result: Result<[NeighborhoodCandidate], Error>) {
+		// An abandoned request cannot overwrite the cache or finish a newer attempt.
+		guard let request = requests.removeValue(forKey: id) else { return }
+		if case .success(let data) = result {
+			store(Entry(center: request.center, radiusMeters: request.radiusMeters,
+				storedAt: Date(), data: data))
+		}
+		for waiter in request.waiters.values { waiter.resume(with: result) }
 	}
 
 	private func store(_ entry: Entry) {

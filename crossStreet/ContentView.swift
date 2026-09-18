@@ -739,6 +739,7 @@ struct ContentView: View {
 	@State private var isShowingMailComposer = false
 	@State private var hasPreparedInitialLocation = false
 	@State private var startupTask: Task<Void, Never>?
+	@State private var startupAttemptID = UUID()
 	@State private var hasPendingLiveModeStart = false
 	@State private var onboardingLocationProvider = LocationProvider()
 	@State private var directionLocationProvider = LocationProvider()
@@ -1215,7 +1216,7 @@ struct ContentView: View {
 			"Nearest",
 			systemImage: "location.fill",
 			accessibilityLabel: "Nearest Intersection",
-			isDisabled: isStartupLoading || !isMapDataReady || pointScanner.isScanning || pointScanner.isPreparing,
+			isDisabled: isLoading || isStartupLoading || isMapPreparationLoading || pointScanner.isScanning || pointScanner.isPreparing,
 			drawsChrome: !showRankedControls,
 			isVisuallyDimmed: pointScanner.isScanning || pointScanner.isPreparing
 		) {
@@ -1238,7 +1239,7 @@ struct ContentView: View {
 			"Upcoming",
 			systemImage: "arrow.up.circle.fill",
 			accessibilityLabel: "Upcoming Intersection",
-			isDisabled: isStartupLoading || !isMapDataReady || pointScanner.isScanning || pointScanner.isPreparing,
+			isDisabled: isLoading || isStartupLoading || isMapPreparationLoading || pointScanner.isScanning || pointScanner.isPreparing,
 			drawsChrome: !showRankedControls,
 			isVisuallyDimmed: pointScanner.isScanning || pointScanner.isPreparing
 		) {
@@ -1324,7 +1325,7 @@ struct ContentView: View {
 		}
 		.menuStyle(.button)
 		.buttonStyle(.plain)
-		.disabled(isStartupLoading || !isMapDataReady || pointScanner.isScanning || pointScanner.isPreparing)
+		.disabled(isLoading || isStartupLoading || isMapPreparationLoading || pointScanner.isScanning || pointScanner.isPreparing)
 		.accessibilityHidden(true)
 	}
 
@@ -2313,78 +2314,55 @@ struct ContentView: View {
 	}
 
 	private func updateReport(_ kind: ReportKind, rank: Int = 1) async {
-		guard !isLoading else {
-			return
-		}
+		guard !isLoading else { return }
 		cancelStartupPreparationIfNeeded()
 		let operationID = beginLoadingPresentation()
+		let requestPrefs = prefs
+		let service = OrientSvc.interactiveSession()
 		isLoading = true
-		defer {
-			isLoading = false
-			finishLoadingPresentation(operationID: operationID)
-		}
 		let loadingTask = Task { @MainActor in
 			do {
 				try await Task.sleep(for: .seconds(2))
-				guard !isMapPreparationLoading else {
-					return
-				}
-				LoadingThrobber.start(hapticsEnabled: prefs.haptics)
+				LoadingThrobber.start(hapticsEnabled: requestPrefs.haptics)
 				VoiceOverAnnouncer.statusUpdated(lookupLoadingText)
 				try await Task.sleep(for: .seconds(8))
 				VoiceOverAnnouncer.statusUpdated(extendedLookupLoadingText)
 			} catch {}
 		}
-
-		while true {
-			do {
-				let text = if rank == 1 {
-					try await OrientSvc.shared.spokenText(kind, prefs: prefs)
-				} else {
-					try await OrientSvc.shared.report(kind, rank: rank, prefs: prefs).text(with: prefs, rank: rank)
+		defer {
+			loadingTask.cancel()
+			LoadingThrobber.stop()
+			isLoading = false
+			finishLoadingPresentation(operationID: operationID)
+		}
+		do {
+			let text = try await LookupAttempt.run {
+				if rank == 1 {
+					return try await service.spokenText(kind, prefs: requestPrefs)
 				}
-				loadingTask.cancel()
-				LoadingThrobber.stop()
-				isMapPreparationLoading = false
-				isMapDataReady = true
-				presentStatusText(text)
-				VoiceOverAnnouncer.reportUpdated(text)
-				break
-			} catch {
-				if rank == 1, kind != .scan, isMapLoadingError(error) {
-					await recoverMapDataForPendingReport()
-					continue
-				}
-				loadingTask.cancel()
-				LoadingThrobber.stop()
-				let text = reportFailureText(kind, rank: rank, error: error)
-				presentStatusText(text)
-				VoiceOverAnnouncer.reportUpdated(text)
-				break
+				return try await service.report(kind, rank: rank, prefs: requestPrefs).text(with: requestPrefs, rank: rank)
 			}
+			try Task.checkCancellation()
+			isMapDataReady = true
+			presentStatusText(text)
+			VoiceOverAnnouncer.reportUpdated(text)
+		} catch {
+			guard !Task.isCancelled else { return }
+			let text = reportFailureText(kind, rank: rank, error: error)
+			presentStatusText(text)
+			VoiceOverAnnouncer.reportUpdated(text)
 		}
-
-	}
-
-	private func isMapLoadingError(_ error: Error) -> Bool {
-		error is MapDataError || error is URLError
-	}
-
-	private func recoverMapDataForPendingReport() async {
-		isMapDataReady = false
-		isMapPreparationLoading = true
-		VoiceOverAnnouncer.statusUpdated(mapWaitingText)
-
-		var hasPreparedMapData = await OrientSvc.shared.prewarmInitialReportMapData(prefs: prefs)
-		while !hasPreparedMapData {
-			try? await Task.sleep(for: .seconds(2))
-			hasPreparedMapData = await OrientSvc.shared.prewarmInitialReportMapData(prefs: prefs)
-		}
-		isMapPreparationLoading = false
-		isMapDataReady = true
 	}
 
 	private func reportFailureText(_ kind: ReportKind, rank: Int, error: Error) -> String {
+		if case MapDataError.serversCoolingDown = error {
+			return "Map services are temporarily busy. Please wait a minute, then choose Nearest or Upcoming to try again."
+		}
+		if let locationError = error as? CLError {
+			return locationError.code == .denied
+				? "Allow Intersector to use your location in iPhone Settings, then choose Nearest or Upcoming to try again."
+				: "Intersector could not get your location yet. Choose Nearest or Upcoming to try again."
+		}
 		if rank > 1 {
 			return "Intersector could not find the \(rankedFailureLabel(kind, rank: rank)). Please try again."
 		}
@@ -2400,7 +2378,7 @@ struct ContentView: View {
 				break
 			}
 		}
-		return "Intersector is having trouble loading map data. Please try again."
+		return "Intersector is having trouble loading map data. Choose Nearest or Upcoming to try again."
 	}
 
 	private func rankedFailureLabel(_ kind: ReportKind, rank: Int) -> String {
@@ -2457,89 +2435,72 @@ struct ContentView: View {
 	}
 
 	private func prepareInitialLocationIfNeeded() {
-		guard !hasPreparedInitialLocation else {
-			return
-		}
+		guard !hasPreparedInitialLocation, !isLoading else { return }
 		hasPreparedInitialLocation = true
+		let attemptID = UUID()
+		startupAttemptID = attemptID
 		let operationID = beginLoadingPresentation()
+		let requestPrefs = prefs
+		let service = OrientSvc.interactiveSession()
+		isStartupLoading = true
+		isMapPreparationLoading = true
 		startupTask = Task {
 			defer {
-				finishLoadingPresentation(operationID: operationID)
+				if startupAttemptID == attemptID {
+					LoadingThrobber.stop()
+					isStartupLoading = false
+					isMapPreparationLoading = false
+					startupTask = nil
+					finishLoadingPresentation(operationID: operationID)
+				}
 			}
-			isStartupLoading = true
 			VoiceOverAnnouncer.reportUpdated(startupLoadingText)
-			LoadingThrobber.start(hapticsEnabled: prefs.haptics)
-
-			var hasLocation = await OrientSvc.shared.prewarmLocation()
-			while !hasLocation, !Task.isCancelled {
-				let text = "Intersector could not get your location yet. Retrying automatically."
+			LoadingThrobber.start(hapticsEnabled: requestPrefs.haptics)
+			do {
+				try await LookupAttempt.run {
+					try await service.prepareInitialMapData(prefs: requestPrefs) {
+						if startupAttemptID == attemptID { isStartupLoading = false }
+					}
+				}
+				guard !Task.isCancelled, startupAttemptID == attemptID else { return }
+				isMapDataReady = true
+				if hasPendingLiveModeStart {
+					startPendingLiveModeIfReady()
+					return
+				}
+				ReadyEarcon.play(hapticsEnabled: requestPrefs.haptics)
+				presentStatusText(readyText)
+				Task { @MainActor in
+					do { try await Task.sleep(for: .milliseconds(1_350)) } catch { return }
+					guard startupAttemptID == attemptID else { return }
+					VoiceOverAnnouncer.reportUpdated(readyText)
+				}
+			} catch {
+				guard !Task.isCancelled, startupAttemptID == attemptID else { return }
+				isMapDataReady = false
+				hasPendingLiveModeStart = false
+				hasPreparedInitialLocation = false
+				let text = reportFailureText(.nearest, rank: 1, error: error)
 				presentStatusText(text)
 				VoiceOverAnnouncer.reportUpdated(text)
-				try? await Task.sleep(for: .seconds(2))
-				guard !Task.isCancelled else {
-					return
-				}
-				hasLocation = await OrientSvc.shared.prewarmLocation()
-			}
-			guard !Task.isCancelled else {
-				return
-			}
-
-			isStartupLoading = false
-			isMapPreparationLoading = true
-
-			var hasPreparedMapData = await OrientSvc.shared.prewarmInitialReportMapData(prefs: prefs)
-			var announcedWaiting = false
-			while !hasPreparedMapData, !Task.isCancelled {
-				if !announcedWaiting {
-					VoiceOverAnnouncer.reportUpdated(mapWaitingText)
-					announcedWaiting = true
-				}
-				try? await Task.sleep(for: .seconds(2))
-				guard !Task.isCancelled else {
-					return
-				}
-				hasPreparedMapData = await OrientSvc.shared.prewarmInitialReportMapData(prefs: prefs)
-			}
-			guard !Task.isCancelled else {
-				return
-			}
-
-			LoadingThrobber.stop()
-			isMapPreparationLoading = false
-			isMapDataReady = true
-			if hasPendingLiveModeStart {
-				startPendingLiveModeIfReady()
-				return
-			}
-			ReadyEarcon.play(hapticsEnabled: prefs.haptics)
-			presentStatusText(readyText)
-			Task { @MainActor in
-				try? await Task.sleep(for: .milliseconds(1_350))
-				VoiceOverAnnouncer.reportUpdated(readyText)
 			}
 		}
 	}
 
 	private func restartInitialPreparation() {
-		startupTask?.cancel()
-		startupTask = nil
-		LoadingThrobber.stop()
-		isStartupLoading = false
-		isMapPreparationLoading = false
+		cancelStartupPreparationIfNeeded()
 		isMapDataReady = false
 		hasPreparedInitialLocation = false
 		prepareInitialLocationIfNeeded()
 	}
 
 	private func cancelStartupPreparationIfNeeded() {
+		startupAttemptID = UUID()
 		startupTask?.cancel()
 		startupTask = nil
-		guard isStartupLoading else {
-			return
-		}
 		LoadingThrobber.stop()
 		isStartupLoading = false
+		isMapPreparationLoading = false
 	}
 
 	@discardableResult

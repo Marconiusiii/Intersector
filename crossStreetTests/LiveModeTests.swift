@@ -352,7 +352,9 @@ private final class LiveTestMap: MapDataFetching {
 	var suspend = false
 	var failure: Error?
 	var continuation: CheckedContinuation<MapDataSet, Error>?
+	@MainActor
 	func intersections(near coordinate: CLLocationCoordinate2D, radiusMeters: CLLocationDistance, options: MapDetailOptions) async throws -> [IntersectionCandidate] { data.intersections }
+	@MainActor
 	func mapData(near coordinate: CLLocationCoordinate2D, radiusMeters: CLLocationDistance, options: MapDetailOptions) async throws -> MapDataSet {
 		requests += 1
 		self.options.append(options)

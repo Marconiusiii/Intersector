@@ -9,10 +9,10 @@ import CoreLocation
 import Foundation
 
 struct MapDataClient: MapDataFetching {
-	var endpoint = URL(string: "https://overpass.private.coffee/api/interpreter")!
+	var endpoint = URL(string: "https://overpass-api.de/api/interpreter")!
 	var fallbackEndpoints = [
-		URL(string: "https://maps.mail.ru/osm/tools/overpass/api/interpreter")!,
-		URL(string: "https://overpass-api.de/api/interpreter")!
+		URL(string: "https://overpass.private.coffee/api/interpreter")!,
+		URL(string: "https://maps.mail.ru/osm/tools/overpass/api/interpreter")!
 	]
 	var session: URLSession = .shared
 	var requestHandler: (@Sendable (URLRequest) async throws -> MapHTTPResponse)?
@@ -110,19 +110,28 @@ struct MapDataClient: MapDataFetching {
 			primary: endpoint,
 			fallbacks: fallbackEndpoints
 		)
+		guard !endpoints.isEmpty else { throw MapDataError.serversCoolingDown }
 		var lastError: Error = MapDataError.invalidResponse
-		for endpoint in endpoints {
+		let deadline = LookupDeadline.current ?? ContinuousClock.now.advanced(by: .seconds(20))
+		for (index, endpoint) in endpoints.enumerated() {
+			try Task.checkCancellation()
+			// An exhausted caller budget must not mark an untried server unhealthy.
+			let allowance = try LookupDeadline.serverAllowance(until: deadline, remainingServers: endpoints.count - index)
 			do {
+				let data = try await LookupAttempt.run(timeout: .seconds(allowance)) {
+					try await fetchMapData(from: endpoint, options: options, query: query, timeout: allowance)
+				}
 				try Task.checkCancellation()
-				let data = try await fetchMapData(
-					from: endpoint,
-					options: options,
-					query: query
-				)
 				await Self.endpointHealth.markSuccess(endpoint)
 				return data
 			} catch {
+				try Task.checkCancellation()
 				lastError = error
+				// A lost connection is not evidence that every map server is unhealthy.
+				if let urlError = error as? URLError,
+				   [.notConnectedToInternet, .networkConnectionLost].contains(urlError.code) {
+					throw error
+				}
 				if case MapDataError.serverError(429) = error {
 					await Self.endpointHealth.markTemporaryFailure(endpoint)
 					throw error
@@ -139,11 +148,12 @@ struct MapDataClient: MapDataFetching {
 	private func fetchMapData(
 		from endpoint: URL,
 		options: MapDetailOptions,
-		query: String
+		query: String,
+		timeout: TimeInterval
 	) async throws -> MapDataSet {
 		var request = URLRequest(url: endpoint)
 		request.httpMethod = "POST"
-		request.timeoutInterval = 12
+		request.timeoutInterval = timeout
 		request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
 		request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 		request.httpBody = query.data(using: .utf8)
@@ -177,7 +187,7 @@ struct MapDataClient: MapDataFetching {
 			switch mapError {
 			case .serverError(let statusCode):
 				return [500, 502, 503, 504].contains(statusCode)
-			case .invalidResponse, .invalidMapData:
+			case .invalidResponse, .invalidMapData, .serversCoolingDown:
 				return false
 			}
 		}
@@ -325,7 +335,7 @@ actor MapEndpointHealth {
 			}
 			return retryAfter <= now
 		}
-		let availableEndpoints = healthyEndpoints.isEmpty ? endpoints : healthyEndpoints
+		let availableEndpoints = healthyEndpoints
 
 		guard let preferredEndpoint, availableEndpoints.contains(preferredEndpoint) else {
 			return availableEndpoints
@@ -354,12 +364,15 @@ private extension Array where Element: Hashable {
 }
 
 enum MapDataError: LocalizedError {
+	case serversCoolingDown
 	case invalidResponse
 	case serverError(Int)
 	case invalidMapData
 
 	var errorDescription: String? {
 		switch self {
+		case .serversCoolingDown:
+			"Map services are temporarily busy. Please wait a minute before trying again."
 		case .invalidResponse:
 			"The map server returned an unreadable response."
 		case .serverError(let statusCode):
@@ -396,7 +409,8 @@ actor MapDataCache {
 		var center: CLLocationCoordinate2D
 		var radiusMeters: CLLocationDistance
 		var options: MapDetailOptions
-		var task: Task<MapDataSet, Error>
+		var task: Task<Void, Never>
+		var waiters: [UUID: CheckedContinuation<MapDataSet, Error>]
 	}
 
 	private let reuseDistanceMeters: CLLocationDistance = 150
@@ -404,7 +418,9 @@ actor MapDataCache {
 	private let staleTimeToLive: TimeInterval = 900
 	private let maxEntries = 4
 	private var entries: [Entry] = []
-	private var inFlightRequest: InFlightRequest?
+	private var requests: [UUID: InFlightRequest] = [:]
+
+	var activeWaiterCount: Int { requests.values.reduce(0) { $0 + $1.waiters.count } }
 
 	func data(
 		near coordinate: CLLocationCoordinate2D,
@@ -412,49 +428,66 @@ actor MapDataCache {
 		options: MapDetailOptions = MapDetailOptions(),
 		fetch: @escaping @Sendable () async throws -> MapDataSet
 	) async throws -> MapDataSet {
+		try Task.checkCancellation()
 		if let entry = entries.first(where: { canReuse($0, for: coordinate, radiusMeters: radiusMeters, options: options) }) {
 			return entry.data
 		}
-
-		if let inFlightRequest,
-		   canReuse(inFlightRequest, for: coordinate, radiusMeters: radiusMeters, options: options) {
-			return try await inFlightRequest.task.value
-		}
-
 		if let entry = entries.first(where: { canReuseStale($0, for: coordinate, radiusMeters: radiusMeters, options: options) }) {
 			return entry.data
 		}
 
-		let task = Task {
-			try await fetch()
-		}
-		inFlightRequest = InFlightRequest(
-			center: coordinate,
-			radiusMeters: radiusMeters,
-			options: options,
-			task: task
-		)
-
-		do {
-			let data = try await task.value
-			store(
-				Entry(
-					center: coordinate,
-					radiusMeters: radiusMeters,
-					options: options,
-					storedAt: Date(),
-					data: data
+		let waiterID = UUID()
+		let requestID = requests.first(where: {
+			canReuse($0.value, for: coordinate, radiusMeters: radiusMeters, options: options)
+		})?.key ?? UUID()
+		return try await withTaskCancellationHandler {
+			try await withCheckedThrowingContinuation { waiter in
+				guard !Task.isCancelled else {
+					waiter.resume(throwing: CancellationError())
+					return
+				}
+				if requests[requestID] != nil {
+					requests[requestID]?.waiters[waiterID] = waiter
+					return
+				}
+				let task = Task {
+					let result: Result<MapDataSet, Error>
+					do {
+						let data = try await fetch()
+						try Task.checkCancellation()
+						result = .success(data)
+					} catch {
+						result = .failure(error)
+					}
+					complete(requestID, result: result)
+				}
+				requests[requestID] = InFlightRequest(
+					center: coordinate, radiusMeters: radiusMeters, options: options,
+					task: task, waiters: [waiterID: waiter]
 				)
-			)
-			inFlightRequest = nil
-			return data
-		} catch {
-			inFlightRequest = nil
-			if let entry = entries.first(where: { canReuseStale($0, for: coordinate, radiusMeters: radiusMeters, options: options) }) {
-				return entry.data
 			}
-			throw error
+		} onCancel: {
+			Task { await self.cancelWaiter(waiterID, requestID: requestID) }
 		}
+	}
+
+	private func cancelWaiter(_ waiterID: UUID, requestID: UUID) {
+		guard let waiter = requests[requestID]?.waiters.removeValue(forKey: waiterID) else { return }
+		if requests[requestID]?.waiters.isEmpty == true {
+			let request = requests.removeValue(forKey: requestID)
+			request?.task.cancel()
+		}
+		waiter.resume(throwing: CancellationError())
+	}
+
+	private func complete(_ id: UUID, result: Result<MapDataSet, Error>) {
+		// An abandoned request cannot overwrite the cache or finish a newer attempt.
+		guard let request = requests.removeValue(forKey: id) else { return }
+		if case .success(let data) = result {
+			store(Entry(center: request.center, radiusMeters: request.radiusMeters,
+				options: request.options, storedAt: Date(), data: data))
+		}
+		for waiter in request.waiters.values { waiter.resume(with: result) }
 	}
 
 	private func store(_ entry: Entry) {

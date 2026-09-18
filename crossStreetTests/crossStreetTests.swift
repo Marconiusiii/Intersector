@@ -2828,7 +2828,7 @@ struct IntersectorTests {
 		])
 	}
 
-	@Test func initialReportPrewarmLoadsNearestAndWalkingPathVariants() async throws {
+	@Test func initialReportPrewarmDefersWalkingPathVariantUntilRequested() async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37.0, longitude: -122.0)
 		let data = crossingFirstData(origin: origin)
 		let mapClient = ImmediateRecordingMapDataClient(fullData: data, immediateData: data)
@@ -2852,9 +2852,7 @@ struct IntersectorTests {
 		#expect(await mapClient.immediateOptions == [
 			MapDetailOptions(includeCrossings: true)
 		])
-		#expect(await mapClient.fullOptions == [
-			MapDetailOptions(includeCrossings: true, includeWalkingPaths: true)
-		])
+		#expect(await mapClient.fullOptions.isEmpty)
 	}
 
 	@Test func firstNearestWithOptionalMapDetailsKeepsCrossingsOnImmediateLookup() async throws {

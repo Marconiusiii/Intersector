@@ -584,31 +584,33 @@ Actors protect their stored state from being changed by multiple tasks at the sa
 The cache stores:
 
 - recent successful map results
-- a currently running request
+- running requests, each with its own waiting callers
 
 It can:
 
 - reuse fresh nearby data
 - let matching callers share one in-flight request
-- return stale nearby data if a fresh network request fails
+- reuse covered nearby data within the existing stale-data allowance
+- cancel a fetch when its last waiting caller leaves
+- prevent abandoned fetches from overwriting newer cached results
 
 This avoids unnecessary network calls and reduces how often a temporary map server problem becomes a visible app error.
 
 ## Endpoint Fallback
 
-`MapDataClient` has one primary endpoint and two fallback endpoints. Requests identify Intersector with a `User-Agent`, use a practical network timeout, and remember temporarily unhealthy endpoints so the next request can prefer a working server.
+`MapDataClient` tries `overpass-api.de` first, followed by `overpass.private.coffee` and `maps.mail.ru`. Requests identify Intersector with a `User-Agent`, use a practical network timeout, and remember temporarily unhealthy endpoints so the next request can prefer a working server.
 
-If the primary endpoint fails with a temporary network or server problem, the client tries the fallback endpoint.
+Each server receives a share of the remaining lookup time based on how many eligible servers are left, capped at 12 seconds per server. A cancellation-aware timer enforces that allowance as well as the URL request timeout. Time spent acquiring location reduces the remaining allowance; a new user attempt gets a fresh deadline.
 
-Temporary errors include examples like:
+If an endpoint times out or reports a temporary server error, the client can try another eligible endpoint. A rate-limit response ends that attempt rather than immediately moving the same query to another server. Failed endpoints have a 60-second cooldown. If every endpoint is cooling down, the app explains that the user should wait before retrying.
 
-- timeout
-- connection loss
-- too many requests
-- temporary server unavailable
-- gateway timeout
+An offline or lost connection ends the attempt without marking servers unhealthy, allowing a new attempt after connectivity returns. Invalid map data is allowed to surface rather than repeating the same query across servers.
 
-Invalid map data is not treated as temporary. If the app cannot decode the response, retrying the same query on another endpoint may not fix it, so that error is allowed to surface.
+## Startup and manual retries
+
+Startup prepares one 225-meter map area using the shared cache, without first loading additional Upcoming or walking-path coverage. Actions request any additional coverage they need. Startup and each manual intersection lookup have separate 20-second budgets, including location acquisition. Successful startup means that nearby map data was fetched; it does not guarantee that an intersection exists in every direction.
+
+A failure stops loading feedback and leaves the existing Nearest and Upcoming controls available for another attempt. Recovery does not retry indefinitely. Each attempt has its own location provider and deadline, while successful map and neighborhood data remain shared. Concurrent matching map requests share one fetch; cancelling one caller does not cancel another caller's fetch. When no callers remain, the abandoned request is removed before a retry can attach to it.
 
 ## IntersectionFinder
 
