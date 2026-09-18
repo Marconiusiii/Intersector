@@ -135,13 +135,12 @@ struct NearestIntersectionIntent: AppIntent {
 
 	@MainActor
 	func perform() async throws -> some IntentResult & ProvidesDialog {
-		do {
-			let prefs = AppPrefs.saved()
-			let text = try await OrientSvc.shared.spokenText(.nearest, prefs: prefs)
-			return intersectorResult(text)
-		} catch {
-			return intersectorResult("I couldn't find your nearest intersection. Please try again.")
-		}
+		intersectorResult(try await response(using: .shared, prefs: AppPrefs.saved()))
+	}
+
+	@MainActor
+	func response(using request: SiriIntersectionRequest, prefs: AppPrefs) async throws -> String {
+		try await request.response(for: .nearest, prefs: prefs)
 	}
 }
 
@@ -152,13 +151,12 @@ struct UpcomingIntersectionIntent: AppIntent {
 
 	@MainActor
 	func perform() async throws -> some IntentResult & ProvidesDialog {
-		do {
-			let prefs = AppPrefs.saved()
-			let text = try await OrientSvc.shared.spokenText(.upcoming, prefs: prefs)
-			return intersectorResult("iPhone response. \(text)")
-		} catch {
-			return intersectorResult("iPhone response. I couldn't find your upcoming intersection. Please try again.")
-		}
+		intersectorResult(try await response(using: .shared, prefs: AppPrefs.saved()))
+	}
+
+	@MainActor
+	func response(using request: SiriIntersectionRequest, prefs: AppPrefs) async throws -> String {
+		try await request.response(for: .upcoming, prefs: prefs)
 	}
 }
 

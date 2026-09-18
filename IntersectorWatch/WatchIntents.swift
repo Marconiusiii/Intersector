@@ -126,7 +126,7 @@ struct WatchUpcomingIntersectionIntent: AppIntent {
 	@MainActor
 	func perform() async throws -> some IntentResult & ProvidesDialog {
 		let text = await IntersectorWatchReporter.reportText(for: .upcoming)
-		return watchIntersectorResult("Watch response. \(text)")
+		return watchIntersectorResult(text)
 	}
 }
 

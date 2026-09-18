@@ -15,6 +15,7 @@ struct MapDataClient: MapDataFetching {
 		URL(string: "https://maps.mail.ru/osm/tools/overpass/api/interpreter")!
 	]
 	var session: URLSession = .shared
+	var minimumCacheDate: Date?
 	var requestHandler: (@Sendable (URLRequest) async throws -> MapHTTPResponse)?
 	private static let cache = MapDataCache()
 	private static let endpointHealth = MapEndpointHealth()
@@ -35,7 +36,8 @@ struct MapDataClient: MapDataFetching {
 		try await Self.cache.data(
 			near: coordinate,
 			radiusMeters: radiusMeters,
-			options: options
+			options: options,
+			minimumRequestedAt: minimumCacheDate
 		) {
 			try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: options)
 			}
@@ -61,7 +63,8 @@ struct MapDataClient: MapDataFetching {
 		return try await Self.cache.data(
 			near: coordinate,
 			radiusMeters: radiusMeters,
-			options: immediateCoreOptions
+			options: immediateCoreOptions,
+			minimumRequestedAt: minimumCacheDate
 		) {
 			try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: immediateCoreOptions)
 		}
@@ -402,6 +405,7 @@ actor MapDataCache {
 		var radiusMeters: CLLocationDistance
 		var options: MapDetailOptions
 		var storedAt: Date
+		var requestedAt: Date
 		var data: MapDataSet
 	}
 
@@ -409,6 +413,7 @@ actor MapDataCache {
 		var center: CLLocationCoordinate2D
 		var radiusMeters: CLLocationDistance
 		var options: MapDetailOptions
+		var startedAt: Date
 		var task: Task<Void, Never>
 		var waiters: [UUID: CheckedContinuation<MapDataSet, Error>]
 	}
@@ -426,19 +431,23 @@ actor MapDataCache {
 		near coordinate: CLLocationCoordinate2D,
 		radiusMeters: CLLocationDistance,
 		options: MapDetailOptions = MapDetailOptions(),
+		minimumRequestedAt: Date? = nil,
 		fetch: @escaping @Sendable () async throws -> MapDataSet
 	) async throws -> MapDataSet {
 		try Task.checkCancellation()
-		if let entry = entries.first(where: { canReuse($0, for: coordinate, radiusMeters: radiusMeters, options: options) }) {
+		let earliestRequest = minimumRequestedAt ?? .distantPast
+		if let entry = entries.first(where: { entry in
+			entry.requestedAt >= earliestRequest && canReuse(entry, for: coordinate, radiusMeters: radiusMeters, options: options) }) {
 			return entry.data
 		}
-		if let entry = entries.first(where: { canReuseStale($0, for: coordinate, radiusMeters: radiusMeters, options: options) }) {
+		if let entry = entries.first(where: { entry in
+			entry.requestedAt >= earliestRequest && canReuseStale(entry, for: coordinate, radiusMeters: radiusMeters, options: options) }) {
 			return entry.data
 		}
 
 		let waiterID = UUID()
 		let requestID = requests.first(where: {
-			canReuse($0.value, for: coordinate, radiusMeters: radiusMeters, options: options)
+			$0.value.startedAt >= earliestRequest && canReuse($0.value, for: coordinate, radiusMeters: radiusMeters, options: options)
 		})?.key ?? UUID()
 		return try await withTaskCancellationHandler {
 			try await withCheckedThrowingContinuation { waiter in
@@ -463,7 +472,7 @@ actor MapDataCache {
 				}
 				requests[requestID] = InFlightRequest(
 					center: coordinate, radiusMeters: radiusMeters, options: options,
-					task: task, waiters: [waiterID: waiter]
+					startedAt: Date(), task: task, waiters: [waiterID: waiter]
 				)
 			}
 		} onCancel: {
@@ -485,12 +494,17 @@ actor MapDataCache {
 		guard let request = requests.removeValue(forKey: id) else { return }
 		if case .success(let data) = result {
 			store(Entry(center: request.center, radiusMeters: request.radiusMeters,
-				options: request.options, storedAt: Date(), data: data))
+				options: request.options, storedAt: Date(), requestedAt: request.startedAt, data: data))
 		}
 		for waiter in request.waiters.values { waiter.resume(with: result) }
 	}
 
 	private func store(_ entry: Entry) {
+		guard !entries.contains(where: {
+			$0.options == entry.options && $0.requestedAt > entry.requestedAt &&
+				sameArea(center: $0.center, radiusMeters: $0.radiusMeters,
+					as: entry.center, requestedRadius: entry.radiusMeters)
+		}) else { return }
 		entries.removeAll {
 			$0.options == entry.options && sameArea(
 				center: $0.center,

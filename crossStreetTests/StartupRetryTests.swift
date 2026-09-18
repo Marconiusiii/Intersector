@@ -8,6 +8,69 @@ import Testing
 struct StartupRetryTests {
 	private let origin = CLLocationCoordinate2D(latitude: 37, longitude: -122)
 
+	@Test func explicitRefreshIgnoresOlderInFlightWorkAndKeepsNewerResult() async throws {
+		let cache = MapDataCache()
+		let coordinate = origin
+		let gate = RetryTestGate()
+		let counter = FetchCounter()
+		let first = Task {
+			try await cache.data(near: coordinate, radiusMeters: 225) {
+				await gate.wait()
+				return await counter.nextDataSet()
+			}
+		}
+		await gate.waitUntilEntered()
+		let cutoff = Date()
+		let refreshed = try await cache.data(near: coordinate, radiusMeters: 225, minimumRequestedAt: cutoff) {
+			await counter.nextDataSet()
+		}
+		#expect(refreshed.intersections.first?.id == "fetch-1")
+		await gate.release()
+		_ = try await first.value
+		let cached = try await cache.data(near: coordinate, radiusMeters: 225) { await counter.nextDataSet() }
+		#expect(cached.intersections.first?.id == "fetch-1")
+		#expect(await counter.count == 2)
+	}
+
+	@Test func explicitRefreshKeepsOtherAreasAndReusesItsNewData() async throws {
+		let cache = MapDataCache()
+		let counter = FetchCounter()
+		let distant = CLLocationCoordinate2D(latitude: 39, longitude: -122)
+		_ = try await cache.data(near: distant, radiusMeters: 225) { await counter.nextDataSet() }
+		_ = try await cache.data(near: origin, radiusMeters: 225) { await counter.nextDataSet() }
+		let cutoff = Date()
+		let refresh = try await cache.data(near: origin, radiusMeters: 225, minimumRequestedAt: cutoff) { await counter.nextDataSet() }
+		let reused = try await cache.data(near: origin, radiusMeters: 225, minimumRequestedAt: cutoff) { await counter.nextDataSet() }
+		let other = try await cache.data(near: distant, radiusMeters: 225) { await counter.nextDataSet() }
+		#expect(refresh.intersections.first?.id == "fetch-3")
+		#expect(reused.intersections.first?.id == "fetch-3")
+		#expect(other.intersections.first?.id == "fetch-1")
+		#expect(await counter.count == 3)
+	}
+
+	@Test func mapClientPassesRefreshRequirementToBothCachePaths() async throws {
+		var client = MapDataClient()
+		client.endpoint = URL(string: "https://siri-refresh-\(UUID().uuidString).example")!
+		client.fallbackEndpoints = []
+		let log = ServerBudgetLog()
+		client.requestHandler = { request in
+			await log.begin(request)
+			await log.end()
+			return MapHTTPResponse(data: Data("{\"elements\":[]}".utf8),
+				response: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+		}
+		let coordinate = CLLocationCoordinate2D(latitude: 46.123456, longitude: -71.987654)
+		_ = try await client.mapData(near: coordinate, radiusMeters: 225)
+		_ = try await client.mapData(near: coordinate, radiusMeters: 225)
+		#expect(await log.urls.count == 1)
+		client.minimumCacheDate = Date()
+		_ = try await client.immediateMapData(near: coordinate, radiusMeters: 225)
+		#expect(await log.urls.count == 2)
+		client.minimumCacheDate = Date()
+		_ = try await client.mapData(near: coordinate, radiusMeters: 225)
+		#expect(await log.urls.count == 3)
+	}
+
 	@Test func failedFetchDoesNotPoisonImmediateRetry() async throws {
 		let cache = MapDataCache()
 		let counter = FetchCounter()
