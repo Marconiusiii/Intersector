@@ -600,15 +600,15 @@ This avoids unnecessary network calls and reduces how often a temporary map serv
 
 `MapDataClient` tries `overpass-api.de` first, followed by `overpass.private.coffee` and `maps.mail.ru`. Requests identify Intersector with a `User-Agent`, use a practical network timeout, and remember temporarily unhealthy endpoints so the next request can prefer a working server.
 
-Each server receives a share of the remaining lookup time based on how many eligible servers are left, capped at 12 seconds per server. A cancellation-aware timer enforces that allowance as well as the URL request timeout. Time spent acquiring location reduces the remaining allowance; a new user attempt gets a fresh deadline.
+Each server receives up to 12 seconds; the allowance is no longer divided among fallback servers. A cancellation-aware timer enforces that allowance as well as the URL request timeout. The overall request has a 60-second safety limit, including location acquisition and all map requests. A new user attempt gets a fresh deadline. Only the remaining overall limit can shorten a server attempt.
 
-If an endpoint times out or reports a temporary server error, the client can try another eligible endpoint. A rate-limit response ends that attempt rather than immediately moving the same query to another server. Failed endpoints have a 60-second cooldown. If every endpoint is cooling down, the app explains that the user should wait before retrying.
+If an endpoint times out or reports a temporary server error, the client can try another eligible endpoint. A rate-limit response ends that attempt rather than immediately moving the same query to another server. Explicit server failures have a 60-second cooldown. A local timeout alone does not exclude an endpoint from the next user request. If every endpoint is cooling down, the app explains that the user should wait before retrying.
 
-An offline or lost connection ends the attempt without marking servers unhealthy, allowing a new attempt after connectivity returns. Invalid map data is allowed to surface rather than repeating the same query across servers.
+An offline or lost connection ends the attempt without marking servers unhealthy, allowing a new attempt after connectivity returns. Incomplete or unreadable map responses can use a bounded fallback and are not cached as successful empty maps.
 
 ## Startup and manual retries
 
-Startup prepares one 225-meter map area using the shared cache, without first loading additional Upcoming or walking-path coverage. Actions request any additional coverage they need. Startup and each manual intersection lookup have separate 20-second budgets, including location acquisition. Successful startup means that nearby map data was fetched; it does not guarantee that an intersection exists in every direction.
+Startup prepares one 225-meter map area using the shared cache, without first loading additional Upcoming or walking-path coverage. Actions request any additional coverage they need. Startup and each manual intersection lookup have separate 60-second safety limits, including location acquisition. Successful startup means that nearby map data was fetched; it does not guarantee that an intersection exists in every direction.
 
 A failure stops loading feedback and leaves the existing Nearest and Upcoming controls available for another attempt. Recovery does not retry indefinitely. Each attempt has its own location provider and deadline, while successful map and neighborhood data remain shared. Concurrent matching map requests share one fetch; cancelling one caller does not cancel another caller's fetch. When no callers remain, the abandoned request is removed before a retry can attach to it.
 

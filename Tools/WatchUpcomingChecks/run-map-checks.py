@@ -3,6 +3,7 @@
 from pathlib import Path
 import subprocess
 import tempfile
+import sys
 root = Path(__file__).resolve().parents[2]
 with tempfile.TemporaryDirectory(prefix='intersector-watch-map-') as directory:
     executable = Path(directory) / 'checks'
@@ -22,4 +23,4 @@ with tempfile.TemporaryDirectory(prefix='intersector-watch-map-') as directory:
         str(root / 'crossStreet/LookupAttempt.swift'),
         str(service),
         str(Path(__file__).parent / 'MapChecks.swift'), '-o', str(executable)], check=True)
-    subprocess.run([str(executable)], check=True, timeout=35)
+    subprocess.run([str(executable), *sys.argv[1:]], check=True, timeout=60)

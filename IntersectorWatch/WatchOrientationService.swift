@@ -2043,10 +2043,10 @@ struct WatchMapDataClient {
 		)
 		guard !endpoints.isEmpty else { throw WatchReportError.serversCoolingDown }
 		var lastError: Error = WatchReportError.invalidResponse
-		let deadline = LookupDeadline.current ?? ContinuousClock.now.advanced(by: .seconds(20))
-		for (index, endpoint) in endpoints.enumerated() {
+		let deadline = LookupDeadline.current ?? ContinuousClock.now.advanced(by: LookupDeadline.requestTimeout)
+		for endpoint in endpoints {
 			try Task.checkCancellation()
-			let allowance = try LookupDeadline.serverAllowance(until: deadline, remainingServers: endpoints.count - index)
+			let allowance = try LookupDeadline.serverAllowance(until: deadline)
 			do {
 				let data = try await LookupAttempt.run(timeout: .seconds(allowance), stage: "map download \(endpoint.host ?? "unknown")") {
 					try await mapData(from: endpoint, options: options, query: query, timeout: allowance)
@@ -2064,7 +2064,11 @@ struct WatchMapDataClient {
 					throw error
 				}
 				guard isTemporary(error) else { throw error }
-				await Self.endpointHealth.markTemporaryFailure(endpoint)
+				// A local timeout is not a server rejection. Keep it eligible for
+				// the next explicit request, while still trying this request's fallback.
+				if (error as? URLError)?.code != .timedOut {
+					await Self.endpointHealth.markTemporaryFailure(endpoint)
+				}
 			}
 		}
 		throw lastError

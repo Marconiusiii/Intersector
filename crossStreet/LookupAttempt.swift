@@ -2,18 +2,19 @@ import Foundation
 import OSLog
 
 nonisolated enum LookupDeadline {
+	static let requestTimeout: Duration = .seconds(60)
 	@TaskLocal static var current: ContinuousClock.Instant?
 
 	static func serverAllowance(
 		until deadline: ContinuousClock.Instant,
-		remainingServers: Int,
 		now: ContinuousClock.Instant = .now
 	) throws -> TimeInterval {
 		let duration = now.duration(to: deadline).components
 		let seconds = Double(duration.seconds) + Double(duration.attoseconds) / 1e18
-		guard seconds > 0, remainingServers > 0 else { throw URLError(.timedOut) }
-		// Leave a small margin for cancellation, decoding, and returning the result.
-		return min(12, seconds * 0.9 / Double(remainingServers))
+		guard seconds > 0 else { throw URLError(.timedOut) }
+		// Each endpoint gets the former 12-second allowance, independent of how
+		// many fallbacks remain. The outer deadline still bounds the entire action.
+		return min(12, seconds)
 	}
 }
 
@@ -21,7 +22,7 @@ nonisolated enum LookupDeadline {
 @MainActor
 enum LookupAttempt {
 	static func run<Value: Sendable>(
-		timeout: Duration = .seconds(20),
+		timeout: Duration = LookupDeadline.requestTimeout,
 		stage: String = "request",
 		operation: @escaping @MainActor @Sendable () async throws -> Value
 	) async throws -> Value {

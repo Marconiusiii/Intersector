@@ -7,9 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		7C0010102FE9000000000001 /* LookupAttempt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C0010112FE9000000000001 /* LookupAttempt.swift */; };
 		7C0010012FE9000000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7C0010002FE9000000000001 /* PrivacyInfo.xcprivacy */; };
 		7C0010022FE9000000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7C0010002FE9000000000001 /* PrivacyInfo.xcprivacy */; };
+		7C0010102FE9000000000001 /* crossStreet/LookupAttempt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C0010112FE9000000000001 /* crossStreet/LookupAttempt.swift */; };
 		A1B2C3D42FE0000000000014 /* Intersector Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = A1B2C3D42FE0000000000002 /* Intersector Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -52,8 +52,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		7C0010112FE9000000000001 /* LookupAttempt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = crossStreet/LookupAttempt.swift; sourceTree = SOURCE_ROOT; };
 		7C0010002FE9000000000001 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		7C0010112FE9000000000001 /* crossStreet/LookupAttempt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = crossStreet/LookupAttempt.swift; sourceTree = SOURCE_ROOT; };
 		82E8319E2FD62E4300071B9D /* Intersector.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Intersector.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		82E831AB2FD62E4400071B9D /* IntersectorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntersectorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		82E831B52FD62E4400071B9D /* IntersectorUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntersectorUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -128,6 +128,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		826DEB7B3074B14600AE8B26 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				7C0010112FE9000000000001 /* crossStreet/LookupAttempt.swift */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		82E831952FD62E4300071B9D = {
 			isa = PBXGroup;
 			children = (
@@ -137,6 +145,7 @@
 				82E831AE2FD62E4400071B9D /* crossStreetTests */,
 				82E831B82FD62E4400071B9D /* crossStreetUITests */,
 				82E8319F2FD62E4300071B9D /* Products */,
+				826DEB7B3074B14600AE8B26 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -353,7 +362,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7C0010102FE9000000000001 /* LookupAttempt.swift in Sources */,
+				7C0010102FE9000000000001 /* crossStreet/LookupAttempt.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -526,7 +535,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.3.3;
+				MARKETING_VERSION = 1.3.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.marconius.crossStreet;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -564,7 +573,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.3.3;
+				MARKETING_VERSION = 1.3.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.marconius.crossStreet;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -678,7 +687,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.3.3;
+				MARKETING_VERSION = 1.3.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.marconius.crossStreet.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -712,7 +721,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.3.3;
+				MARKETING_VERSION = 1.3.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.marconius.crossStreet.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;

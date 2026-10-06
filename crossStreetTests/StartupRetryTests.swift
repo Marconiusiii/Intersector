@@ -223,82 +223,48 @@ struct StartupRetryTests {
 		#expect(data.intersections.isEmpty)
 	}
 
-	@Test func serverTimeAllowanceReservesRemainingFallbacks() throws {
+	@Test func serverAllowanceIsNotDividedBetweenFallbacks() throws {
 		let now = ContinuousClock.now
-		#expect(try LookupDeadline.serverAllowance(until: now.advanced(by: .seconds(20)), remainingServers: 3, now: now) == 6)
-		#expect(try LookupDeadline.serverAllowance(until: now.advanced(by: .seconds(8)), remainingServers: 2, now: now) == 3.6)
-		#expect(try LookupDeadline.serverAllowance(until: now.advanced(by: .seconds(20)), remainingServers: 1, now: now) == 12)
+		#expect(try LookupDeadline.serverAllowance(until: now.advanced(by: .seconds(60)), now: now) == 12)
+		#expect(try LookupDeadline.serverAllowance(until: now.advanced(by: .seconds(52)), now: now) == 12)
+		#expect(try LookupDeadline.serverAllowance(until: now.advanced(by: .seconds(8)), now: now) == 8)
 	}
 
-	@Test func twoSlowServersStillAllowThirdServerWithinSharedBudget() async throws {
-		let hosts = (0..<3).map { URL(string: "https://budget-\(UUID().uuidString)-\($0).example")! }
+	@Test func localTimeoutDoesNotBlacklistEndpointForExplicitRetry() async throws {
+		var client = MapDataClient()
+		client.endpoint = URL(string: "https://local-timeout-\(UUID().uuidString).example")!
+		client.fallbackEndpoints = []
+		client.requestHandler = { _ in throw URLError(.timedOut) }
+		do { _ = try await client.freshMapData(near: origin, radiusMeters: 225); Issue.record("Expected timeout") }
+		catch { #expect((error as? URLError)?.code == .timedOut) }
+		let log = ServerBudgetLog()
+		client.requestHandler = { request in
+			await log.begin(request)
+			await log.end()
+			return MapHTTPResponse(data: Data("{\"elements\":[]}".utf8), response: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+		}
+		_ = try await client.freshMapData(near: origin, radiusMeters: 225)
+		#expect(await log.urls.count == 1)
+	}
+
+	@Test func sequentialFallbacksEachReceiveFullAllowance() async throws {
+		let hosts = (0..<3).map { URL(string: "https://full-allowance-\(UUID().uuidString)-\($0).example")! }
 		let log = ServerBudgetLog()
 		var client = MapDataClient()
 		client.endpoint = hosts[0]
 		client.fallbackEndpoints = Array(hosts.dropFirst())
 		client.requestHandler = { request in
 			await log.begin(request)
-			do {
-				if request.url != hosts[2] { try await Task.sleep(for: .seconds(5)) }
-				await log.end()
-				return MapHTTPResponse(data: Data("{\"elements\":[]}".utf8),
-					response: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
-			} catch {
-				await log.end()
-				throw error
-			}
+			await log.end()
+			if request.url != hosts[2] { throw URLError(.timedOut) }
+			return MapHTTPResponse(data: Data("{\"elements\":[]}".utf8), response: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
 		}
 		let configured = client
-		let coordinate = CLLocationCoordinate2D(latitude: 42.3456, longitude: -73.1234)
-		let result = try await LookupAttempt.run(timeout: .seconds(1)) {
-			// Simulate time already spent acquiring location. Also exercise deadline
-			// propagation through the cache's shared fetch task.
-			try await Task.sleep(for: .milliseconds(100))
-			return try await configured.mapData(near: coordinate, radiusMeters: 226)
-		}
-		#expect(result.intersections.isEmpty)
+		let coordinate = origin
+		_ = try await LookupAttempt.run { try await configured.freshMapData(near: coordinate, radiusMeters: 225) }
 		#expect(await log.urls == hosts)
+		#expect(await log.allowances == [12, 12, 12])
 		#expect(await log.maximumActive == 1)
-		let allowances = await log.allowances
-		#expect(allowances.count == 3)
-		#expect(allowances.allSatisfy { $0 > 0 && $0 < 0.4 })
-	}
-
-	@Test func retryAfterSlowPrimaryAndLostConnectionUsesFreshFallbackBudget() async throws {
-		let primary = URL(string: "https://slow-retry-\(UUID().uuidString).example")!
-		let fallback = URL(string: "https://good-retry-\(UUID().uuidString).example")!
-		let log = ServerBudgetLog()
-		var client = MapDataClient()
-		client.endpoint = primary
-		client.fallbackEndpoints = [fallback]
-		client.requestHandler = { request in
-			await log.begin(request)
-			do {
-				if request.url == primary { try await Task.sleep(for: .seconds(5)) }
-				if await log.urls.filter({ $0 == fallback }).count == 1 {
-					throw URLError(.networkConnectionLost)
-				}
-				try await Task.sleep(for: .milliseconds(80))
-				await log.end()
-				return MapHTTPResponse(data: Data("{\"elements\":[]}".utf8),
-					response: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
-			} catch { await log.end(); throw error }
-		}
-		let configured = client
-		let coordinate = CLLocationCoordinate2D(latitude: 42.3457, longitude: -73.1234)
-		do {
-			_ = try await LookupAttempt.run(timeout: .milliseconds(400)) {
-				try await configured.mapData(near: coordinate, radiusMeters: 227)
-			}
-			Issue.record("Expected connection loss")
-		} catch { #expect((error as? URLError)?.code == .networkConnectionLost) }
-		let result = try await LookupAttempt.run(timeout: .seconds(1)) {
-			try await configured.mapData(near: coordinate, radiusMeters: 227)
-		}
-		#expect(result.intersections.isEmpty)
-		#expect(await log.urls == [primary, fallback, fallback])
-		#expect(await log.maximumActive == 1)
-		#expect(try #require(await log.allowances.last) > 0.7)
 	}
 
 	@Test func expiredBudgetDoesNotPutUntriedServerInCooldown() async throws {

@@ -9,7 +9,7 @@ final class SiriIntersectionRequest {
 	private var refreshNext: Set<ReportKind> = []
 	private var attempts: [ReportKind: UUID] = [:]
 
-	init(timeout: Duration = .seconds(20), makeService: @escaping @MainActor (Date?) -> OrientSvc = { minimumDate in
+	init(timeout: Duration = LookupDeadline.requestTimeout, makeService: @escaping @MainActor (Date?) -> OrientSvc = { minimumDate in
 		var client = MapDataClient()
 		client.minimumCacheDate = minimumDate
 		return OrientSvc(locationProvider: LocationProvider(), mapDataClient: client,
