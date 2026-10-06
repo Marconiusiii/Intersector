@@ -32,6 +32,7 @@ nonisolated enum WatchReportKind {
 }
 
 enum WatchReportError: LocalizedError {
+	case serversCoolingDown
 	case noIntersections
 	case headingUnavailable
 	case locationUnavailable
@@ -41,6 +42,8 @@ enum WatchReportError: LocalizedError {
 
 	var errorDescription: String? {
 		switch self {
+		case .serversCoolingDown:
+			"I can't get intersection information right now. Please wait a minute and try again."
 		case .noIntersections:
 			"No nearby mapped intersections were found."
 		case .headingUnavailable:
@@ -229,8 +232,36 @@ enum IntersectorWatchReporter {
 		do {
 			return try await WatchOrientationService().spokenText(kind, prefs: prefs)
 		} catch {
-			return "I couldn't find your \(kind.intentLabel.lowercased()). Please try again."
+			return failureMessage(error, kind: kind)
 		}
+	}
+
+	@MainActor
+	static func report(for kind: WatchReportKind, rank: Int = 1, prefs: WatchAppPrefs) async throws -> WatchOrientationReport {
+		do { return try await WatchOrientationService().report(kind, rank: rank, prefs: prefs) }
+		catch {
+			try Task.checkCancellation()
+			throw WatchActionFailure(message: failureMessage(error, kind: kind, rank: rank))
+		}
+	}
+
+	static func failureMessage(_ error: Error, kind: WatchReportKind, rank: Int = 1) -> String {
+		if let error = error as? URLError {
+			if error.code == .timedOut { return "This is taking too long. Please try again." }
+			return "I couldn't connect. Check your internet connection and try again."
+		}
+		if case WatchReportError.serversCoolingDown = error { return "I can't get intersection information right now. Please wait a minute and try again." }
+		if case WatchReportError.serverError(429) = error { return "I can't get intersection information right now. Please wait a minute and try again." }
+		if case WatchReportError.headingUnavailable = error { return "I couldn't tell which way you're facing. Hold your Watch steady and try again." }
+		if case WatchReportError.locationUnavailable = error { return "I couldn't get your location. Please try again." }
+		if case WatchReportError.noIntersections = error {
+			if rank > 1 {
+				let order = rank == 2 ? "second" : "third"
+				return "I couldn't find your \(order) \(kind == .upcoming ? "upcoming" : "nearest") intersection. Please try again."
+			}
+			return kind == .upcoming ? "I couldn't find an intersection ahead. Try facing along the street and ask again." : "I couldn't find a nearby intersection. Please try again."
+		}
+		return "I can't get intersection information right now. Please try again."
 	}
 
 	@MainActor
@@ -254,11 +285,17 @@ struct WatchOrientationService {
 
 	@MainActor
 	func spokenText(_ kind: WatchReportKind, prefs: WatchAppPrefs) async throws -> String {
+		try await LookupAttempt.run(stage: "spoken intersection") {
+			try await self.loadSpokenText(kind, prefs: prefs)
+		}
+	}
+
+	private func loadSpokenText(_ kind: WatchReportKind, prefs: WatchAppPrefs) async throws -> String {
 		guard prefs.spokenIntersectionCount != .one else {
 			return try await report(kind, prefs: prefs).text(with: prefs)
 		}
 
-		var context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming)
+		var context = try await LookupAttempt.run(stage: "location and heading") { try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming) }
 		let requestedCount = prefs.spokenIntersectionCount.rawValue
 		let resultCount = requestedCount
 		let firstLookupPrefs = await prefsForFirstLookup(kind: kind, rank: 1, prefs: prefs)
@@ -339,28 +376,9 @@ struct WatchOrientationService {
 		minimumCandidateCount: Int,
 		prefs: WatchAppPrefs
 	) async throws -> WatchMapDataSet {
-		try await withThrowingTaskGroup(of: WatchMapDataSet.self) { group in
-			group.addTask {
-				try await mapData(
-					for: kind,
-					from: context,
-					minimumCandidateCount: minimumCandidateCount,
-					prefs: prefs,
-					allowsRankedExpansion: kind == .upcoming && minimumCandidateCount > 1
-				)
-			}
-			group.addTask {
-				try await Task.sleep(for: Self.spokenExpansionTimeout)
-				throw URLError(.timedOut)
-			}
-
-			defer {
-				group.cancelAll()
-			}
-			guard let data = try await group.next() else {
-				throw WatchReportError.noIntersections
-			}
-			return data
+		try await LookupAttempt.optional(maximum: Self.spokenExpansionTimeout) {
+			try await mapData(for: kind, from: context, minimumCandidateCount: minimumCandidateCount,
+				prefs: prefs, allowsRankedExpansion: kind == .upcoming && minimumCandidateCount > 1)
 		}
 	}
 
@@ -405,7 +423,13 @@ struct WatchOrientationService {
 
 	@MainActor
 	func report(_ kind: WatchReportKind, rank: Int = 1, prefs: WatchAppPrefs) async throws -> WatchOrientationReport {
-		var context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming)
+		try await LookupAttempt.run(stage: "intersection report") {
+			try await self.loadReport(kind, rank: rank, prefs: prefs)
+		}
+	}
+
+	private func loadReport(_ kind: WatchReportKind, rank: Int = 1, prefs: WatchAppPrefs) async throws -> WatchOrientationReport {
+		var context = try await LookupAttempt.run(stage: "location and heading") { try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming) }
 		let lookupPrefs = await prefsForFirstLookup(kind: kind, rank: rank, prefs: prefs)
 		var mapData = if kind == .upcoming, rank == 1 {
 			try await initialUpcomingMapData(from: context, prefs: lookupPrefs)
@@ -718,10 +742,9 @@ struct WatchOrientationService {
 			return WatchNeighborhoodContext(area: nil, toward: nil)
 		}
 		do {
-			let neighborhoods = try await neighborhoodProvider.neighborhoods(
-				near: context.coordinate,
-				radiusMeters: 1_500
-			)
+			let neighborhoods = try await LookupAttempt.optional {
+				try await neighborhoodProvider.neighborhoods(near: context.coordinate, radiusMeters: 1_500)
+			}
 			return neighborhoodResolver.context(
 				from: neighborhoods,
 				origin: context.coordinate,
@@ -1950,13 +1973,15 @@ final class WatchLocationProvider: NSObject, CLLocationManagerDelegate {
 }
 
 struct WatchMapDataClient {
-	private let endpoint = URL(string: "https://overpass-api.de/api/interpreter")!
-	private let fallbackEndpoints = [
+	var endpoint = URL(string: "https://overpass-api.de/api/interpreter")!
+	var fallbackEndpoints = [
 		URL(string: "https://overpass.private.coffee/api/interpreter")!,
 		URL(string: "https://maps.mail.ru/osm/tools/overpass/api/interpreter")!
 	]
-	private let session: URLSession = .shared
+	var session: URLSession = .shared
+	var requestHandler: (@Sendable (URLRequest) async throws -> (Data, URLResponse))?
 	private static let endpointHealth = WatchMapEndpointHealth()
+	private let requestData = WatchRequestMapData()
 
 	func mapData(
 		near coordinate: CLLocationCoordinate2D,
@@ -2009,40 +2034,59 @@ struct WatchMapDataClient {
 		options: WatchMapDetailOptions,
 		query: String
 	) async throws -> WatchMapDataSet {
+		try Task.checkCancellation()
+		let key = "\(options)-\(query)"
+		if let data = await requestData.value(for: key) { return data }
 		let endpoints = await Self.endpointHealth.orderedEndpoints(
 			primary: endpoint,
 			fallbacks: fallbackEndpoints
 		)
-		for endpoint in endpoints {
+		guard !endpoints.isEmpty else { throw WatchReportError.serversCoolingDown }
+		var lastError: Error = WatchReportError.invalidResponse
+		let deadline = LookupDeadline.current ?? ContinuousClock.now.advanced(by: .seconds(20))
+		for (index, endpoint) in endpoints.enumerated() {
+			try Task.checkCancellation()
+			let allowance = try LookupDeadline.serverAllowance(until: deadline, remainingServers: endpoints.count - index)
 			do {
-				let data = try await mapData(from: endpoint, options: options, query: query)
+				let data = try await LookupAttempt.run(timeout: .seconds(allowance), stage: "map download \(endpoint.host ?? "unknown")") {
+					try await mapData(from: endpoint, options: options, query: query, timeout: allowance)
+				}
+				try Task.checkCancellation()
 				await Self.endpointHealth.markSuccess(endpoint)
+				await requestData.store(data, for: key)
 				return data
 			} catch {
-				if isTemporary(error) {
+				try Task.checkCancellation()
+				lastError = error
+				if let error = error as? URLError, [.notConnectedToInternet, .networkConnectionLost].contains(error.code) { throw error }
+				if case WatchReportError.serverError(429) = error {
 					await Self.endpointHealth.markTemporaryFailure(endpoint)
-				}
-				guard isTemporary(error), endpoint != endpoints.last else {
 					throw error
 				}
+				guard isTemporary(error) else { throw error }
+				await Self.endpointHealth.markTemporaryFailure(endpoint)
 			}
 		}
-		throw WatchReportError.invalidResponse
+		throw lastError
 	}
 
 	private func mapData(
 		from endpoint: URL,
 		options: WatchMapDetailOptions,
-		query: String
+		query: String,
+		timeout: TimeInterval
 	) async throws -> WatchMapDataSet {
 		var request = URLRequest(url: endpoint)
 		request.httpMethod = "POST"
-		request.timeoutInterval = 12
+		request.timeoutInterval = timeout
 		request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
 		request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 		request.httpBody = query.data(using: .utf8)
 
-		let (data, urlResponse) = try await session.data(for: request)
+		let data: Data
+		let urlResponse: URLResponse
+		if let requestHandler { (data, urlResponse) = try await requestHandler(request) }
+		else { (data, urlResponse) = try await session.data(for: request) }
 		guard let httpResponse = urlResponse as? HTTPURLResponse else {
 			throw WatchReportError.invalidResponse
 		}
@@ -2051,6 +2095,10 @@ struct WatchMapDataClient {
 		}
 		do {
 			let response = try JSONDecoder().decode(WatchOverpassResponse.self, from: data)
+			guard response.remark?.isEmpty != false else { throw WatchReportError.invalidMapData }
+			try Task.checkCancellation()
+			let started = ContinuousClock.now
+			defer { LookupDiagnostics.event("map processing", detail: "\(started.duration(to: .now)); \(response.elements.count) elements") }
 			return WatchIntersectionBuilder().mapData(from: response, options: options)
 		} catch {
 			throw WatchReportError.invalidMapData
@@ -2062,6 +2110,8 @@ struct WatchMapDataClient {
 			switch mapError {
 			case .serverError(let statusCode):
 				return [429, 500, 502, 503, 504].contains(statusCode)
+			case .invalidMapData, .invalidResponse:
+				return true
 			default:
 				return false
 			}
@@ -2172,6 +2222,7 @@ struct WatchMapDataClient {
 }
 
 struct WatchOverpassResponse: Decodable {
+	var remark: String? = nil
 	var elements: [WatchOverpassElement]
 }
 
@@ -2760,9 +2811,11 @@ struct WatchNeighborhoodProvider {
 	) async throws -> [WatchNeighborhoodCandidate] {
 		let endpoints = ([endpoint] + fallbackEndpoints).removingDuplicates()
 		for endpoint in endpoints {
+			try Task.checkCancellation()
 			do {
 				return try await neighborhoods(from: endpoint, near: coordinate, radiusMeters: radiusMeters)
 			} catch {
+				try Task.checkCancellation()
 				guard endpoint != endpoints.last else {
 					throw error
 				}
@@ -3116,7 +3169,7 @@ actor WatchMapEndpointHealth {
 			}
 			return retryAfter <= now
 		}
-		let availableEndpoints = healthyEndpoints.isEmpty ? endpoints : healthyEndpoints
+		let availableEndpoints = healthyEndpoints
 
 		guard let preferredEndpoint, availableEndpoints.contains(preferredEndpoint) else {
 			return availableEndpoints
@@ -3148,4 +3201,15 @@ extension CLLocationCoordinate2D: @retroactive Equatable {
 	public static func == (lhs: CLLocationCoordinate2D, rhs: CLLocationCoordinate2D) -> Bool {
 		lhs.latitude == rhs.latitude && lhs.longitude == rhs.longitude
 	}
+}
+
+private actor WatchRequestMapData {
+	private var entries: [String: WatchMapDataSet] = [:]
+	func value(for key: String) -> WatchMapDataSet? { entries[key] }
+	func store(_ data: WatchMapDataSet, for key: String) { entries[key] = data }
+}
+
+private struct WatchActionFailure: LocalizedError {
+	let message: String
+	var errorDescription: String? { message }
 }

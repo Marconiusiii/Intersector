@@ -567,13 +567,13 @@ struct LiveDrivingReliabilityTests {
 		location.continuation?.yield(context(0.001))
 		await settle()
 		#expect(map.requests == 2)
-		for _ in 0..<4 {
+		for _ in 0..<1 {
 			clock.date = clock.date.addingTimeInterval(30)
 			location.continuation?.yield(context(0.02))
 			await settle()
 		}
 		#expect(map.requests == 2)
-		clock.date = clock.date.addingTimeInterval(61)
+		clock.date = clock.date.addingTimeInterval(31)
 		map.failure = nil
 		location.continuation?.yield(context(0.02))
 		await settle()

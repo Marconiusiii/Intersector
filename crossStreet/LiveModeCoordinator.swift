@@ -223,7 +223,7 @@ final class LiveModeCoordinator: ObservableObject {
 			speechController.speak(result.text, settings: activeSpeechSettings, delay: 0)
 		} catch {
 			guard !Task.isCancelled, isActive, processingID == operation else { return }
-			if cachedMapData == nil { statusText = "Live Mode is waiting for map data." }
+			if cachedMapData == nil { statusText = SiriIntersectionRequest.failureMessage(error, kind: .upcoming) }
 		}
 	}
 
@@ -255,7 +255,7 @@ final class LiveModeCoordinator: ObservableObject {
 		let now = now()
 		let operation = processingID
 		let options = mapOptions
-		let refreshInterval = activeMode == .driving && !lastFetchFailed ? 60.0 : minimumMapRefreshInterval
+		let refreshInterval = lastFetchFailed ? 60.0 : (activeMode == .driving ? 60.0 : minimumMapRefreshInterval)
 		let refreshIsThrottled = lastMapFetchAt.map {
 			now.timeIntervalSince($0) < refreshInterval
 		} ?? false
@@ -279,11 +279,9 @@ final class LiveModeCoordinator: ObservableObject {
 		lastMapFetchAt = now
 		lastMapFetchOptions = options
 		do {
-			let data = try await mapDataClient.freshMapData(
-				near: context.coordinate,
-				radiusMeters: radius,
-				options: options
-			)
+			let data = try await LookupAttempt.run(stage: "Live map") {
+				try await self.mapDataClient.freshMapData(near: context.coordinate, radiusMeters: radius, options: options)
+			}
 			try Task.checkCancellation()
 			guard isActive, processingID == operation else { throw CancellationError() }
 			lastFetchFailed = false

@@ -40,6 +40,7 @@ struct NeighborhoodProvider: NeighborhoodProviding {
 		var lastError: Error?
 
 		for endpoint in endpoints {
+			try Task.checkCancellation()
 			do {
 				return try await fetchNeighborhoods(
 					from: endpoint,
@@ -47,6 +48,7 @@ struct NeighborhoodProvider: NeighborhoodProviding {
 					radiusMeters: radiusMeters
 				)
 			} catch {
+				try Task.checkCancellation()
 				lastError = error
 				guard isTemporary(error), endpoint != endpoints.last else {
 					throw error

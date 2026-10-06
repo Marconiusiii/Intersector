@@ -121,7 +121,7 @@ struct MapDataClient: MapDataFetching {
 			// An exhausted caller budget must not mark an untried server unhealthy.
 			let allowance = try LookupDeadline.serverAllowance(until: deadline, remainingServers: endpoints.count - index)
 			do {
-				let data = try await LookupAttempt.run(timeout: .seconds(allowance)) {
+				let data = try await LookupAttempt.run(timeout: .seconds(allowance), stage: "map download \(endpoint.host ?? "unknown")") {
 					try await fetchMapData(from: endpoint, options: options, query: query, timeout: allowance)
 				}
 				try Task.checkCancellation()
@@ -182,6 +182,10 @@ struct MapDataClient: MapDataFetching {
 		} catch {
 			throw MapDataError.invalidMapData
 		}
+		guard response.remark?.isEmpty != false else { throw MapDataError.invalidMapData }
+		try Task.checkCancellation()
+		let started = ContinuousClock.now
+		defer { LookupDiagnostics.event("map processing", detail: "\(started.duration(to: .now)); \(response.elements.count) elements") }
 		return IntersectionBuilder().mapData(from: response, options: options)
 	}
 
@@ -190,7 +194,9 @@ struct MapDataClient: MapDataFetching {
 			switch mapError {
 			case .serverError(let statusCode):
 				return [500, 502, 503, 504].contains(statusCode)
-			case .invalidResponse, .invalidMapData, .serversCoolingDown:
+			case .invalidResponse, .invalidMapData:
+				return true
+			case .serversCoolingDown:
 				return false
 			}
 		}
@@ -598,6 +604,7 @@ actor MapDataCache {
 }
 
 struct OverpassResponse: Decodable {
+	var remark: String? = nil
 	var elements: [OverpassElement]
 }
 

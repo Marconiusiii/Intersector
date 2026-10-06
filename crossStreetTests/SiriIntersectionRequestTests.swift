@@ -59,6 +59,47 @@ struct SiriIntersectionRequestTests {
 		#expect(count == 2)
 	}
 
+	@Test(arguments: [ReportKind.nearest, .upcoming], [1, 2, 3])
+	func structuredRequestGetsFreshAttemptAfterConnectionFailure(kind: ReportKind, rank: Int) async throws {
+		var count = 0
+		let request = SiriIntersectionRequest { _ in
+			count += 1
+			return service(client: SiriControlledMap(data: goodData, error: count == 1 ? URLError(.networkConnectionLost) : nil))
+		}
+		do { _ = try await request.report(for: kind, rank: rank, prefs: AppPrefs()); Issue.record("Expected connection loss") }
+		catch { #expect((error as? URLError)?.code == .networkConnectionLost) }
+		let report = try await request.report(for: kind, rank: rank, prefs: AppPrefs())
+		#expect(report.cross.contains(["First Street", "Second Street", "Third Street"][rank - 1]))
+		#expect(count == 2)
+	}
+
+	@Test func slowNeighborhoodDoesNotDiscardIntersectionAtDeadline() async throws {
+		let svc = OrientSvc(locationProvider: FakeLocationProvider(context: DeviceContext(coordinate: origin, headingDegrees: 0)),
+			mapDataClient: StaticMapDataClient(data: goodData), neighborhoodProvider: SlowSiriNeighborhood())
+		var prefs = AppPrefs()
+		prefs.areaMode = .near
+		prefs.announcementOptions.includeNeighborhood = true
+		let configured = prefs
+		let report = try await LookupAttempt.run(timeout: .milliseconds(700)) { try await svc.report(.nearest, prefs: configured) }
+		#expect(report.cross.contains("First Street"))
+		#expect(report.area == nil)
+	}
+
+	@Test func cancellingOneSiriRequestDoesNotCancelAnother() async throws {
+		var count = 0
+		let request = SiriIntersectionRequest { _ in
+			count += 1
+			return service(client: SiriControlledMap(data: goodData, delay: count == 1 ? .seconds(30) : .milliseconds(30)))
+		}
+		let first = Task { try await request.report(for: .nearest, prefs: AppPrefs()) }
+		while count == 0 { await Task.yield() }
+		let second = Task { try await request.report(for: .nearest, prefs: AppPrefs()) }
+		while count < 2 { await Task.yield() }
+		first.cancel()
+		do { _ = try await first.value; Issue.record("Expected cancellation") } catch is CancellationError {}
+		#expect(try await second.value.cross.contains("First Street"))
+	}
+
 	@Test func cancellationDoesNotBecomeSpokenFailure() async throws {
 		let request = SiriIntersectionRequest { _ in
 			service(client: SiriControlledMap(data: goodData, delay: .seconds(30)))
@@ -89,7 +130,9 @@ struct SiriIntersectionRequestTests {
 
 	private var goodData: MapDataSet {
 		MapDataSet(intersections: [IntersectionCandidate(id: "first", names: ["Oak Street", "First Street"],
-			coordinate: CLLocationCoordinate2D(latitude: origin.latitude + 0.001, longitude: origin.longitude))],
+			coordinate: CLLocationCoordinate2D(latitude: origin.latitude + 0.001, longitude: origin.longitude)),
+			IntersectionCandidate(id: "second", names: ["Oak Street", "Second Street"], coordinate: CLLocationCoordinate2D(latitude: origin.latitude + 0.0015, longitude: origin.longitude)),
+			IntersectionCandidate(id: "third", names: ["Oak Street", "Third Street"], coordinate: CLLocationCoordinate2D(latitude: origin.latitude + 0.002, longitude: origin.longitude))],
 			roads: [MapRoad(id: "oak", name: "Oak Street", nodeIDs: [1, 2], coordinates: [
 				CLLocationCoordinate2D(latitude: origin.latitude - 0.002, longitude: origin.longitude),
 				CLLocationCoordinate2D(latitude: origin.latitude + 0.003, longitude: origin.longitude)])])
@@ -119,5 +162,12 @@ private struct SiriControlledMap: MapDataFetching {
 		if let error { throw error }
 		if delay > .zero { try await Task.sleep(for: delay) }
 		return data
+	}
+}
+
+private struct SlowSiriNeighborhood: NeighborhoodProviding {
+	func neighborhoods(near coordinate: CLLocationCoordinate2D, radiusMeters: CLLocationDistance) async throws -> [NeighborhoodCandidate] {
+		try await Task.sleep(for: .seconds(30))
+		return []
 	}
 }

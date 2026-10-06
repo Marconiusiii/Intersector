@@ -71,6 +71,22 @@ struct StartupRetryTests {
 		#expect(await log.urls.count == 3)
 	}
 
+	@Test func incompleteSuccessfulHTTPResponseUsesFallbackInsteadOfCachingEmptyData() async throws {
+		var client = MapDataClient()
+		let primary = URL(string: "https://incomplete-\(UUID().uuidString).example")!
+		client.endpoint = primary
+		client.fallbackEndpoints = [URL(string: "https://complete-\(UUID().uuidString).example")!]
+		let log = ServerBudgetLog()
+		client.requestHandler = { request in
+			await log.begin(request)
+			await log.end()
+			let body = request.url == primary ? "{\"remark\":\"runtime error: timeout\",\"elements\":[]}" : "{\"elements\":[]}"
+			return MapHTTPResponse(data: Data(body.utf8), response: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+		}
+		_ = try await client.freshMapData(near: origin, radiusMeters: 225)
+		#expect(await log.urls.count == 2)
+	}
+
 	@Test func failedFetchDoesNotPoisonImmediateRetry() async throws {
 		let cache = MapDataCache()
 		let counter = FetchCounter()

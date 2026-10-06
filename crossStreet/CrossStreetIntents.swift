@@ -124,8 +124,13 @@ private func getIntersectionResult(
 	rank: Int = 1
 ) async throws -> IntersectorShortcutResult {
 	let prefs = AppPrefs.saved()
-	let report = try await OrientSvc.shared.report(kind, rank: rank, prefs: prefs)
-	return shortcutResult(from: report, prefs: prefs, rank: rank == 1 ? nil : rank)
+	do {
+		let report = try await SiriIntersectionRequest.shared.report(for: kind, rank: rank, prefs: prefs)
+		return shortcutResult(from: report, prefs: prefs, rank: rank == 1 ? nil : rank)
+	} catch {
+		try Task.checkCancellation()
+		throw SiriActionFailure(message: SiriIntersectionRequest.failureMessage(error, kind: kind, rank: rank))
+	}
 }
 
 struct NearestIntersectionIntent: AppIntent {
@@ -169,11 +174,12 @@ struct SecondNearestIntersectionIntent: AppIntent {
 	func perform() async throws -> some IntentResult & ProvidesDialog {
 		do {
 			let prefs = AppPrefs.saved()
-			let report = try await OrientSvc.shared.report(.nearest, rank: 2, prefs: prefs)
+			let report = try await SiriIntersectionRequest.shared.report(for: .nearest, rank: 2, prefs: prefs)
 			let text = report.text(with: prefs, rank: 2)
 			return intersectorResult(text)
 		} catch {
-			return intersectorResult("I couldn't find your second nearest intersection. Please try again.")
+			try Task.checkCancellation()
+			return intersectorResult(SiriIntersectionRequest.failureMessage(error, kind: .nearest, rank: 2))
 		}
 	}
 }
@@ -187,11 +193,12 @@ struct ThirdNearestIntersectionIntent: AppIntent {
 	func perform() async throws -> some IntentResult & ProvidesDialog {
 		do {
 			let prefs = AppPrefs.saved()
-			let report = try await OrientSvc.shared.report(.nearest, rank: 3, prefs: prefs)
+			let report = try await SiriIntersectionRequest.shared.report(for: .nearest, rank: 3, prefs: prefs)
 			let text = report.text(with: prefs, rank: 3)
 			return intersectorResult(text)
 		} catch {
-			return intersectorResult("I couldn't find your third nearest intersection. Please try again.")
+			try Task.checkCancellation()
+			return intersectorResult(SiriIntersectionRequest.failureMessage(error, kind: .nearest, rank: 3))
 		}
 	}
 }
@@ -205,11 +212,12 @@ struct SecondUpcomingIntersectionIntent: AppIntent {
 	func perform() async throws -> some IntentResult & ProvidesDialog {
 		do {
 			let prefs = AppPrefs.saved()
-			let report = try await OrientSvc.shared.report(.upcoming, rank: 2, prefs: prefs)
+			let report = try await SiriIntersectionRequest.shared.report(for: .upcoming, rank: 2, prefs: prefs)
 			let text = report.text(with: prefs, rank: 2)
 			return intersectorResult(text)
 		} catch {
-			return intersectorResult("I couldn't find your second upcoming intersection. Please try again.")
+			try Task.checkCancellation()
+			return intersectorResult(SiriIntersectionRequest.failureMessage(error, kind: .upcoming, rank: 2))
 		}
 	}
 }
@@ -223,11 +231,12 @@ struct ThirdUpcomingIntersectionIntent: AppIntent {
 	func perform() async throws -> some IntentResult & ProvidesDialog {
 		do {
 			let prefs = AppPrefs.saved()
-			let report = try await OrientSvc.shared.report(.upcoming, rank: 3, prefs: prefs)
+			let report = try await SiriIntersectionRequest.shared.report(for: .upcoming, rank: 3, prefs: prefs)
 			let text = report.text(with: prefs, rank: 3)
 			return intersectorResult(text)
 		} catch {
-			return intersectorResult("I couldn't find your third upcoming intersection. Please try again.")
+			try Task.checkCancellation()
+			return intersectorResult(SiriIntersectionRequest.failureMessage(error, kind: .upcoming, rank: 3))
 		}
 	}
 }
@@ -533,4 +542,9 @@ struct IntersectorShortcuts: AppShortcutsProvider {
 			systemImageName: "stop.circle.fill"
 		)
 	}
+}
+
+private struct SiriActionFailure: LocalizedError {
+	let message: String
+	var errorDescription: String? { message }
 }

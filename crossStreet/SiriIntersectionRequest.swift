@@ -20,27 +20,36 @@ final class SiriIntersectionRequest {
 	}
 
 	func response(for kind: ReportKind, prefs: AppPrefs) async throws -> String {
-		let attempt = UUID()
-		attempts[kind] = attempt
-		let minimumDate = refreshNext.contains(kind) ? Date() : nil
-		let service = makeService(minimumDate)
 		do {
-			let text = try await LookupAttempt.run(timeout: timeout) {
-				try await service.spokenText(kind, prefs: prefs)
-			}
-			if attempts[kind] == attempt { refreshNext.remove(kind) }
-			return text
+			return try await perform(kind: kind) { service in try await service.spokenText(kind, prefs: prefs) }
 		} catch {
 			try Task.checkCancellation()
-			if case OrientError.noIntersections = error, attempts[kind] == attempt {
-				// Refresh only on the next explicit invocation, never in an automatic loop.
-				refreshNext.insert(kind)
-			}
 			return Self.failureMessage(error, kind: kind)
 		}
 	}
 
-	static func failureMessage(_ error: Error, kind: ReportKind) -> String {
+	func report(for kind: ReportKind, rank: Int = 1, prefs: AppPrefs) async throws -> OrientReport {
+		try await perform(kind: kind) { service in try await service.report(kind, rank: rank, prefs: prefs) }
+	}
+
+	private func perform<Value: Sendable>(kind: ReportKind, operation: @escaping @MainActor @Sendable (OrientSvc) async throws -> Value) async throws -> Value {
+		let attempt = UUID()
+		attempts[kind] = attempt
+		let service = makeService(refreshNext.contains(kind) ? Date() : nil)
+		do {
+			let value = try await LookupAttempt.run(timeout: timeout, stage: "Siri intersection") {
+				try await operation(service)
+			}
+			if attempts[kind] == attempt { refreshNext.remove(kind) }
+			return value
+		} catch {
+			try Task.checkCancellation()
+			if case OrientError.noIntersections = error, attempts[kind] == attempt { refreshNext.insert(kind) }
+			throw error
+		}
+	}
+
+	static func failureMessage(_ error: Error, kind: ReportKind, rank: Int = 1) -> String {
 		if let urlError = error as? URLError {
 			if urlError.code == .timedOut { return "This is taking too long. Please try again." }
 			return "I couldn't connect. Check your internet connection and try again."
@@ -63,6 +72,10 @@ final class SiriIntersectionRequest {
 				: "I couldn't get your location. Please try again."
 		}
 		if case OrientError.noIntersections = error {
+			if rank > 1 {
+				let order = rank == 2 ? "second" : "third"
+				return "I couldn't find your \(order) \(kind == .upcoming ? "upcoming" : "nearest") intersection. Please try again."
+			}
 			return kind == .upcoming
 				? "I couldn't find an intersection ahead. Try facing along the street and ask again."
 				: "I couldn't find a nearby intersection. Please try again."

@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 nonisolated enum LookupDeadline {
 	@TaskLocal static var current: ContinuousClock.Instant?
@@ -21,12 +22,18 @@ nonisolated enum LookupDeadline {
 enum LookupAttempt {
 	static func run<Value: Sendable>(
 		timeout: Duration = .seconds(20),
+		stage: String = "request",
 		operation: @escaping @MainActor @Sendable () async throws -> Value
 	) async throws -> Value {
 		try Task.checkCancellation()
+		let started = ContinuousClock.now
+		let identifier = UUID().uuidString
+		LookupDiagnostics.event(stage, id: identifier, detail: "started")
+		var outcome = "failed or cancelled"
+		defer { LookupDiagnostics.event(stage, id: identifier, detail: "\(outcome) after \(started.duration(to: .now))") }
 		let ownDeadline = ContinuousClock.now.advanced(by: timeout)
 		let deadline = min(LookupDeadline.current ?? ownDeadline, ownDeadline)
-		return try await withThrowingTaskGroup(of: Value.self) { group in
+		let result = try await withThrowingTaskGroup(of: Value.self) { group in
 			group.addTask {
 				try await LookupDeadline.$current.withValue(deadline) { try await operation() }
 			}
@@ -39,5 +46,26 @@ enum LookupAttempt {
 			try Task.checkCancellation()
 			return value
 		}
+		outcome = "succeeded"
+		return result
+	}
+}
+
+nonisolated enum LookupDiagnostics {
+	static let logger = Logger(subsystem: "com.marconius.crossStreet", category: "Lookup")
+	static func event(_ stage: String, id: String = "", detail: String) {
+#if DEBUG
+		logger.debug("\(stage, privacy: .public) \(id, privacy: .public): \(detail, privacy: .public)")
+#endif
+	}
+}
+
+extension LookupAttempt {
+	/// Optional details must leave time to return an already-found intersection.
+	static func optional<Value: Sendable>(maximum: Duration = .seconds(2), operation: @escaping @MainActor @Sendable () async throws -> Value) async throws -> Value {
+		let available = ContinuousClock.now.duration(to: LookupDeadline.current ?? .now.advanced(by: .seconds(3)))
+		let allowance = min(maximum, available - .milliseconds(300))
+		guard allowance > .zero else { throw URLError(.timedOut) }
+		return try await run(timeout: allowance, stage: "optional details", operation: operation)
 	}
 }

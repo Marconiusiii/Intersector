@@ -150,7 +150,7 @@ struct WatchGetNearestIntersectionIntent: AppIntent {
 	@MainActor
 	func perform() async throws -> some IntentResult & ReturnsValue<WatchIntersectorShortcutResult> {
 		let prefs = WatchAppPrefs.saved()
-		let report = try await WatchOrientationService().report(.nearest, prefs: prefs)
+		let report = try await IntersectorWatchReporter.report(for: .nearest, prefs: prefs)
 		return .result(value: watchShortcutResult(from: report, prefs: prefs))
 	}
 }
@@ -163,7 +163,7 @@ struct WatchGetSecondNearestIntersectionIntent: AppIntent {
 	@MainActor
 	func perform() async throws -> some IntentResult & ReturnsValue<WatchIntersectorShortcutResult> {
 		let prefs = WatchAppPrefs.saved()
-		let report = try await WatchOrientationService().report(.nearest, rank: 2, prefs: prefs)
+		let report = try await IntersectorWatchReporter.report(for: .nearest, rank: 2, prefs: prefs)
 		return .result(value: watchShortcutResult(from: report, prefs: prefs, rank: 2))
 	}
 }
@@ -176,7 +176,7 @@ struct WatchGetThirdNearestIntersectionIntent: AppIntent {
 	@MainActor
 	func perform() async throws -> some IntentResult & ReturnsValue<WatchIntersectorShortcutResult> {
 		let prefs = WatchAppPrefs.saved()
-		let report = try await WatchOrientationService().report(.nearest, rank: 3, prefs: prefs)
+		let report = try await IntersectorWatchReporter.report(for: .nearest, rank: 3, prefs: prefs)
 		return .result(value: watchShortcutResult(from: report, prefs: prefs, rank: 3))
 	}
 }
@@ -189,7 +189,7 @@ struct WatchGetUpcomingIntersectionIntent: AppIntent {
 	@MainActor
 	func perform() async throws -> some IntentResult & ReturnsValue<WatchIntersectorShortcutResult> {
 		let prefs = WatchAppPrefs.saved()
-		let report = try await WatchOrientationService().report(.upcoming, prefs: prefs)
+		let report = try await IntersectorWatchReporter.report(for: .upcoming, prefs: prefs)
 		return .result(value: watchShortcutResult(from: report, prefs: prefs))
 	}
 }
@@ -202,7 +202,7 @@ struct WatchGetSecondUpcomingIntersectionIntent: AppIntent {
 	@MainActor
 	func perform() async throws -> some IntentResult & ReturnsValue<WatchIntersectorShortcutResult> {
 		let prefs = WatchAppPrefs.saved()
-		let report = try await WatchOrientationService().report(.upcoming, rank: 2, prefs: prefs)
+		let report = try await IntersectorWatchReporter.report(for: .upcoming, rank: 2, prefs: prefs)
 		return .result(value: watchShortcutResult(from: report, prefs: prefs, rank: 2))
 	}
 }
@@ -215,7 +215,7 @@ struct WatchGetThirdUpcomingIntersectionIntent: AppIntent {
 	@MainActor
 	func perform() async throws -> some IntentResult & ReturnsValue<WatchIntersectorShortcutResult> {
 		let prefs = WatchAppPrefs.saved()
-		let report = try await WatchOrientationService().report(.upcoming, rank: 3, prefs: prefs)
+		let report = try await IntersectorWatchReporter.report(for: .upcoming, rank: 3, prefs: prefs)
 		return .result(value: watchShortcutResult(from: report, prefs: prefs, rank: 3))
 	}
 }

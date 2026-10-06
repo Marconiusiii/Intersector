@@ -348,6 +348,7 @@ struct WatchContentView: View {
 				statusText = watchLookupLoadingText
 			} catch {}
 		}
+		defer { loadingTask.cancel(); isLoading = false }
 		do {
 			let text = if rank == 1 {
 				try await WatchOrientationService().spokenText(kind, prefs: prefs)
@@ -359,19 +360,14 @@ struct WatchContentView: View {
 			WatchVoiceOverAnnouncer.reportUpdated(text)
 		} catch {
 			loadingTask.cancel()
-			let text = reportFailureText(kind, rank: rank)
+			guard !Task.isCancelled else { return }
+			let text = IntersectorWatchReporter.failureMessage(error, kind: kind, rank: rank)
 			statusText = text
 			WatchVoiceOverAnnouncer.reportUpdated(text)
 		}
 		isLoading = false
 	}
 
-	private func reportFailureText(_ kind: WatchReportKind, rank: Int) -> String {
-		if rank > 1 {
-			return "Intersector could not find the \(rankedFailureLabel(kind, rank: rank)). Please try again."
-		}
-		return "Intersector is having trouble loading map data. Please try again."
-	}
 
 	private func rankedFailureLabel(_ kind: WatchReportKind, rank: Int) -> String {
 		switch kind {

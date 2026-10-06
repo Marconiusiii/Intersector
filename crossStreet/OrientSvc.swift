@@ -198,7 +198,17 @@ struct OrientSvc {
 		rank: Int = 1,
 		prefs: AppPrefs = AppPrefs()
 	) async throws -> OrientReport {
-		var context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming || kind == .scan)
+		try await LookupAttempt.run(stage: "intersection report") {
+			try await self.loadReport(kind, rank: rank, prefs: prefs)
+		}
+	}
+
+	private func loadReport(
+		_ kind: ReportKind,
+		rank: Int = 1,
+		prefs: AppPrefs = AppPrefs()
+	) async throws -> OrientReport {
+		var context = try await LookupAttempt.run(stage: "location and heading") { try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming || kind == .scan) }
 		let requiresRankedRoadLookup = kind == .upcoming && rank > 1
 		let lookupPrefs = await prefsForFirstLookup(kind: kind, rank: rank, prefs: prefs)
 		var mapData = if kind == .upcoming, rank == 1 {
@@ -267,11 +277,20 @@ struct OrientSvc {
 		_ kind: ReportKind,
 		prefs: AppPrefs = AppPrefs()
 	) async throws -> String {
+		try await LookupAttempt.run(stage: "spoken intersection") {
+			try await self.loadSpokenText(kind, prefs: prefs)
+		}
+	}
+
+	private func loadSpokenText(
+		_ kind: ReportKind,
+		prefs: AppPrefs = AppPrefs()
+	) async throws -> String {
 		guard prefs.spokenIntersectionCount != .one else {
 			return try await report(kind, prefs: prefs).text(with: prefs)
 		}
 
-		var context = try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming || kind == .scan)
+		var context = try await LookupAttempt.run(stage: "location and heading") { try await locationProvider.currentContext(requiresFreshHeading: kind == .upcoming || kind == .scan) }
 		let requestedCount = prefs.spokenIntersectionCount.rawValue
 		let resultCount = requestedCount
 		let firstLookupPrefs = await prefsForFirstLookup(kind: kind, rank: 1, prefs: prefs)
@@ -448,28 +467,9 @@ struct OrientSvc {
 		minimumCandidateCount: Int,
 		prefs: AppPrefs
 	) async throws -> MapDataSet {
-		try await withThrowingTaskGroup(of: MapDataSet.self) { group in
-			group.addTask {
-				try await mapData(
-					for: kind,
-					from: context,
-					minimumCandidateCount: minimumCandidateCount,
-					prefs: prefs,
-					allowsRankedExpansion: kind == .upcoming && minimumCandidateCount > 1
-				)
-			}
-			group.addTask {
-				try await Task.sleep(for: Self.spokenExpansionTimeout)
-				throw URLError(.timedOut)
-			}
-
-			defer {
-				group.cancelAll()
-			}
-			guard let data = try await group.next() else {
-				throw OrientError.noIntersections
-			}
-			return data
+		try await LookupAttempt.optional(maximum: Self.spokenExpansionTimeout) {
+			try await mapData(for: kind, from: context, minimumCandidateCount: minimumCandidateCount,
+				prefs: prefs, allowsRankedExpansion: kind == .upcoming && minimumCandidateCount > 1)
 		}
 	}
 
@@ -852,10 +852,9 @@ struct OrientSvc {
 		}
 
 		do {
-			let neighborhoods = try await neighborhoodProvider.neighborhoods(
-				near: context.coordinate,
-				radiusMeters: 1_500
-			)
+			let neighborhoods = try await LookupAttempt.optional {
+				try await neighborhoodProvider.neighborhoods(near: context.coordinate, radiusMeters: 1_500)
+			}
 			return neighborhoodResolver.context(
 				from: neighborhoods,
 				origin: context.coordinate,

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		7C0010102FE9000000000001 /* LookupAttempt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C0010112FE9000000000001 /* LookupAttempt.swift */; };
 		7C0010012FE9000000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7C0010002FE9000000000001 /* PrivacyInfo.xcprivacy */; };
 		7C0010022FE9000000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7C0010002FE9000000000001 /* PrivacyInfo.xcprivacy */; };
 		A1B2C3D42FE0000000000014 /* Intersector Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = A1B2C3D42FE0000000000002 /* Intersector Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -51,6 +52,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		7C0010112FE9000000000001 /* LookupAttempt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = crossStreet/LookupAttempt.swift; sourceTree = SOURCE_ROOT; };
 		7C0010002FE9000000000001 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		82E8319E2FD62E4300071B9D /* Intersector.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Intersector.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		82E831AB2FD62E4400071B9D /* IntersectorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntersectorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -351,6 +353,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7C0010102FE9000000000001 /* LookupAttempt.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
