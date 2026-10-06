@@ -197,7 +197,7 @@ private enum LoadingThrobber {
 			IntersectorAudioSession.prepareForFeedback()
 			if player == nil {
 				player = try AVAudioPlayer(data: cueData())
-				player?.volume = 0.42
+				player?.volume = 1.0
 				player?.numberOfLoops = -1
 				player?.prepareToPlay()
 			}
@@ -270,10 +270,7 @@ private enum LoadingThrobber {
 				(delay: 0.31, gain: 0.11)
 			]
 		)
-		for value in echoedSamples {
-			let sample = Int16(max(-1, min(1, value)) * 2_300)
-			data.append(sample.littleEndianData)
-		}
+		data.append(echoedSamples.fullVolumePCM())
 
 		return data
 	}
@@ -371,7 +368,7 @@ private enum ReadyEarcon {
 		do {
 			IntersectorAudioSession.prepareForFeedback()
 			player = try AVAudioPlayer(data: cueData())
-			player?.volume = 0.42
+			player?.volume = 1.0
 			player?.prepareToPlay()
 			player?.play()
 		} catch {}
@@ -415,10 +412,7 @@ private enum ReadyEarcon {
 				(delay: 0.34, gain: 0.10)
 			]
 		)
-		for value in echoedSamples {
-			let sample = Int16(max(-1, min(1, value)) * 2_900)
-			data.append(sample.littleEndianData)
-		}
+		data.append(echoedSamples.fullVolumePCM())
 		return data
 	}
 
@@ -496,7 +490,7 @@ enum LiveModeEarcon {
 		do {
 			IntersectorAudioSession.prepareForFeedback()
 			player = try AVAudioPlayer(data: cueData(isActive: isActive))
-			player?.volume = 0.42
+			player?.volume = 1.0
 			player?.prepareToPlay()
 			player?.play()
 		} catch {}
@@ -527,14 +521,16 @@ enum LiveModeEarcon {
 		data.append(UInt32(dataSize).littleEndianData)
 
 		let cueFrequencies = frequencies(isActive: isActive)
+		var samples: [Double] = []
+		samples.reserveCapacity(frameCount)
 		for index in 0..<frameCount {
 			let time = Double(index) / Double(sampleRate)
 			let value = zip(noteStarts, cueFrequencies).reduce(0.0) { partialResult, note in
 				partialResult + noteValue(time: time, start: note.0, frequency: note.1)
 			}
-			let sample = Int16(max(-1, min(1, value)) * 2_900)
-			data.append(sample.littleEndianData)
+			samples.append(value)
 		}
+		data.append(samples.fullVolumePCM())
 		return data
 	}
 
@@ -582,6 +578,18 @@ enum LiveModeEarcon {
 }
 
 private extension Array where Element == Double {
+	/// Normalize the complete cue uniformly so its fades and note balance remain intact.
+	func fullVolumePCM() -> Data {
+		let peak = reduce(0.0) { Swift.max($0, abs($1)) }
+		let scale = peak > 0 ? Double(Int16.max) / peak : 0
+		var data = Data(capacity: count * MemoryLayout<Int16>.size)
+		for value in self {
+			let sample = Int16(Swift.max(-Double(Int16.max), Swift.min(Double(Int16.max), value * scale)))
+			data.append(sample.littleEndianData)
+		}
+		return data
+	}
+
 	func addingEcho(
 		sampleRate: Int,
 		taps: [(delay: Double, gain: Double)]
