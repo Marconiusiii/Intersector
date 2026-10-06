@@ -197,7 +197,7 @@ private enum LoadingThrobber {
 			IntersectorAudioSession.prepareForFeedback()
 			if player == nil {
 				player = try AVAudioPlayer(data: cueData())
-				player?.volume = 1.0
+				player?.volume = 0.55
 				player?.numberOfLoops = -1
 				player?.prepareToPlay()
 			}
@@ -208,10 +208,16 @@ private enum LoadingThrobber {
 	}
 
 	static func stop() {
-		player?.stop()
-		player?.currentTime = 0
 		hapticTask?.cancel()
 		hapticTask = nil
+		guard let endingPlayer = player else { return }
+		// Detach this playback so its release cannot stop a newly started loop.
+		player = nil
+		endingPlayer.setVolume(0, fadeDuration: 0.20)
+		Task { @MainActor in
+			try? await Task.sleep(for: .milliseconds(200))
+			endingPlayer.stop()
+		}
 	}
 
 	private static func cueData() -> Data {
@@ -368,7 +374,7 @@ private enum ReadyEarcon {
 		do {
 			IntersectorAudioSession.prepareForFeedback()
 			player = try AVAudioPlayer(data: cueData())
-			player?.volume = 1.0
+			player?.volume = 0.55
 			player?.prepareToPlay()
 			player?.play()
 		} catch {}
@@ -377,7 +383,8 @@ private enum ReadyEarcon {
 
 	private static func cueData() -> Data {
 		let sampleRate = 22_050
-		let duration = 1.42
+		// Include the final note's release and the complete echo tail.
+		let duration = 1.80
 		let frameCount = Int(Double(sampleRate) * duration)
 		let dataSize = frameCount * MemoryLayout<Int16>.size
 		var data = Data()
@@ -432,8 +439,8 @@ private enum ReadyEarcon {
 		gain: Double
 	) -> Double {
 		let attack = 0.028
-		let sustain = 0.08
-		let decay = 0.24
+		let sustain = 0.12
+		let decay = 0.38
 		let duration = attack + sustain + decay
 		guard time >= start, time <= start + duration else {
 			return 0
@@ -446,7 +453,7 @@ private enum ReadyEarcon {
 			envelope = 1
 		} else {
 			let decayProgress = (localTime - attack - sustain) / decay
-			envelope = max(0, 1 - decayProgress)
+			envelope = (1 + cos(Double.pi * decayProgress)) / 2
 		}
 		let angle = 2 * Double.pi * frequency * localTime
 		return sin(angle) * envelope * gain
@@ -490,7 +497,7 @@ enum LiveModeEarcon {
 		do {
 			IntersectorAudioSession.prepareForFeedback()
 			player = try AVAudioPlayer(data: cueData(isActive: isActive))
-			player?.volume = 1.0
+			player?.volume = 0.55
 			player?.prepareToPlay()
 			player?.play()
 		} catch {}
@@ -503,7 +510,8 @@ enum LiveModeEarcon {
 
 	private static func cueData(isActive: Bool) -> Data {
 		let sampleRate = 22_050
-		let duration = speechDelay
+		// Let the quiet release finish without delaying the spoken status.
+		let duration = 1.0
 		let frameCount = Int(Double(sampleRate) * duration)
 		let dataSize = frameCount * MemoryLayout<Int16>.size
 		var data = Data()
@@ -536,8 +544,8 @@ enum LiveModeEarcon {
 
 	private static func noteValue(time: Double, start: Double, frequency: Double) -> Double {
 		let attack = 0.025
-		let sustain = 0.06
-		let decay = 0.22
+		let sustain = 0.10
+		let decay = 0.40
 		let duration = attack + sustain + decay
 		guard time >= start, time <= start + duration else {
 			return 0
@@ -550,7 +558,7 @@ enum LiveModeEarcon {
 			envelope = 1
 		} else {
 			let decayProgress = (localTime - attack - sustain) / decay
-			envelope = max(0, 1 - decayProgress)
+			envelope = (1 + cos(Double.pi * decayProgress)) / 2
 		}
 		return sin(2 * Double.pi * frequency * localTime) * envelope * 0.62
 	}
