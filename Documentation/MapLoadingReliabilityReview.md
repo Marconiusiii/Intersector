@@ -1,5 +1,53 @@
 # Map-loading reliability review
 
+## Documented request policy: October 6, 2026
+
+The shared phone/Watch server allowance now accounts for up to 15 seconds of Overpass queueing, a declared 10-second execution limit, and a five-second transport margin. Each attempt gets at most 30 seconds within the existing 60-second overall deadline. Near the overall deadline, an attempt may receive less time. This is a client correction, not proof of Siri's execution lifetime or public-server reliability.
+
+Road and neighborhood requests share endpoint health. HTTP 429 and 406 stop rotation within that request, and Retry-After seconds or HTTP dates extend the minimum 60-second cooldown. Offline failures and local timeouts do not blacklist a service. Optional neighborhood work retains its short deadline.
+
+Queries declare a 32 MiB memory limit. The six cases below use templates extracted from the production query builders and a fixed public Times Square coordinate. The resource cap was accepted on these samples; the public API does not report exact peak server memory. This is not a worldwide coverage benchmark.
+
+| Query | Response bytes | Elements | Elapsed seconds | Result |
+|---|---|---|---|---|
+| Roads, 225 meters | 36,016 | 156 | 5.206 | Complete |
+| Crossings, 225 meters | 58,207 | 271 | 9.910 | Complete |
+| Roads and walking paths, 1,200 meters | 948,446 | 3,712 | 2.228 | Complete |
+| Crossings, 1,200 meters | 941,288 | 3,662 | 2.816 | Complete |
+| Focused road with crossings, 1,200 meters | 315,691 | 1,356 | 2.268 | Complete |
+| Neighborhoods, 1,000 meters, after backoff | 5,256 | 12 | 1.463 | Complete |
+
+The first neighborhood probe received HTTP 429 from the primary. The probe script then tried a fallback, which timed out after 30.342 seconds. That probe behavior did not follow the intended backoff policy and was corrected for the follow-up: one primary-only request after backoff succeeded. Production clients now stop rotation on rate-limit responses.
+
+Successful basic road responses persist in a protected, bounded cache: four areas, 15-minute reuse, 8 MiB per response, 32 MiB total archive. The existing coverage and option checks apply. Explicit fresh requests bypass stored responses; incomplete/cancelled results are not saved. No background polling or saved-area controls were added.
+
+Lookup diagnostics now use system notices in both Debug and Release builds. Phone and Watch Nearest/Upcoming intents log entry and prepared dialog return with request correlation. Startup has a separate request identifier. Logs exclude coordinates, street names, response bodies, and spoken results.
+
+References: [Overpass queueing and resource rules](https://dev.overpass-api.de/overpass-doc/en/preface/commons.html) and [Overpass request format and usage guidance](https://wiki.openstreetmap.org/wiki/Overpass_API).
+
+Validation: all 173 phone unit tests passed, with 187 executions including parameterized cases and no failures or skipped tests. Production Watch checks passed offline retry, request reuse, incomplete-response fallback, queued valid responses, timeout retry, cooldown, disk restoration, resource declarations, and Retry-After handling. The final Release iPhone build, including the Watch app, passed with signing disabled. The diff check passed.
+
+Regression coverage also verifies that disk restoration preserves the original download age and area center when populating the phone memory cache, rather than extending expiration or shifting coverage. Physical cold Siri, locked-phone, GPS, VoiceOver, Watch transport, and battery behavior remain unverified.
+
+
+## Startup investigation: October 5, 2026
+
+Startup now identifies location acquisition separately and gives related diagnostic events a request identifier. Debug output includes cache decisions, host, per-server allowance, HTTP status, response byte count, malformed or incomplete payload classification, deadlines, and error domain/code. It excludes coordinates, street names, response bodies, and localized error details. Request allowances and endpoint selection are unchanged.
+
+A bounded check extracted the production 225-meter startup query and its form encoding directly from `MapDataClient.swift`. It used the fixed public Times Square coordinate, once without crossings and once with crossings; walking paths and highways were off. Requests followed the configured endpoint order with the existing 12-second allowance.
+
+| Query | Primary endpoint | First fallback | Second fallback | Total |
+|---|---|---|---|---|
+| Streets | HTTP 504 in 7.63 seconds | No response bytes within 12 seconds | No response bytes within 12 seconds | 31.70 seconds |
+| Streets and crossings | No response bytes within 12 seconds | No response bytes within 12 seconds | No response bytes within 12 seconds | 36.09 seconds |
+
+No usable map response was received in this check. This reproduces a download failure outside the app from the development connection, but does not establish the cause on the user's phone or prove a global outage. Map reliability remains unresolved. The next device evidence is the Lookup output from a failed startup and its retry, using the added stage diagnostics.
+
+The home screen now uses a native navigation title and toolbar. Physical VoiceOver startup focus still requires testing. Settings helper paragraphs have moved to the relevant Help topics.
+
+Validation: the generic iPhone build, including the Watch app, passed. All 159 tests in eight suites passed in 110.512 seconds, including slow responses, retries, Siri requests, and the new diagnostic privacy and request-correlation checks. These automated results do not establish reliable live downloads or correct physical-device VoiceOver focus.
+
+
 ## Scope
 
 Phone app startup and intersection requests, phone Live, built-in Siri intersection actions, structured Get actions, and Watch app/Siri requests. Saved-area downloads remain deferred.

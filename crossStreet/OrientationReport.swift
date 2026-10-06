@@ -436,6 +436,14 @@ private struct RoadStartSegment {
 struct MapDataSet: Equatable {
 	var intersections: [IntersectionCandidate]
 	var roads: [MapRoad]
+	// Retain original download age when disk data enters the memory cache.
+	var cacheStoredAt: Date? = nil
+	var cacheRequestedAt: Date? = nil
+	var cacheArea: OverpassMapArea? = nil
+
+	static func == (lhs: Self, rhs: Self) -> Bool {
+		lhs.intersections == rhs.intersections && lhs.roads == rhs.roads
+	}
 
 	func merging(_ other: MapDataSet) -> MapDataSet {
 		var mergedIntersections = intersections

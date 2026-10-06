@@ -15,6 +15,20 @@ private func intersectorResult(
 	.result(dialog: IntentDialog("\(text)"))
 }
 
+@MainActor
+private func intersectorDialog(
+    _ name: String,
+    operation: @MainActor () async throws -> String
+) async rethrows -> some IntentResult & ProvidesDialog {
+    try await LookupDiagnostics.$requestID.withValue(UUID().uuidString) {
+        LookupDiagnostics.event("Siri intent", detail: "\(name) entered")
+        defer { LookupDiagnostics.event("Siri intent", detail: "\(name) exited") }
+        let text = try await operation()
+        LookupDiagnostics.event("Siri intent", detail: "\(name) returning dialog")
+        return intersectorResult(text)
+    }
+}
+
 struct IntersectorShortcutResult: AppEntity {
 	typealias ID = String
 
@@ -140,7 +154,7 @@ struct NearestIntersectionIntent: AppIntent {
 
 	@MainActor
 	func perform() async throws -> some IntentResult & ProvidesDialog {
-		intersectorResult(try await response(using: .shared, prefs: AppPrefs.saved()))
+		try await intersectorDialog("nearest") { try await response(using: .shared, prefs: AppPrefs.saved()) }
 	}
 
 	@MainActor
@@ -156,7 +170,7 @@ struct UpcomingIntersectionIntent: AppIntent {
 
 	@MainActor
 	func perform() async throws -> some IntentResult & ProvidesDialog {
-		intersectorResult(try await response(using: .shared, prefs: AppPrefs.saved()))
+		try await intersectorDialog("upcoming") { try await response(using: .shared, prefs: AppPrefs.saved()) }
 	}
 
 	@MainActor

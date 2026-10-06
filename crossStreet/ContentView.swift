@@ -172,21 +172,6 @@ private let mapWaitingText = "Waiting for map data. Nearest and Upcoming will be
 private let readyText = "Intersector Ready."
 
 @MainActor
-private enum IntersectorAudioSession {
-	static func prepareForFeedback() {
-		do {
-			let session = AVAudioSession.sharedInstance()
-			try session.setCategory(
-				.playback,
-				mode: .default,
-				options: [.duckOthers]
-			)
-			try session.setActive(true)
-		} catch {}
-	}
-}
-
-@MainActor
 private enum LoadingThrobber {
 	private static var player: AVAudioPlayer?
 	private static var hapticTask: Task<Void, Never>?
@@ -194,15 +179,15 @@ private enum LoadingThrobber {
 
 	static func start(hapticsEnabled: Bool) {
 		do {
-			IntersectorAudioSession.prepareForFeedback()
 			if player == nil {
 				player = try AVAudioPlayer(data: cueData())
-				player?.volume = 0.55
+				// Individual note gains are encoded in the audio samples.
+				player?.volume = 0.5
 				player?.numberOfLoops = -1
 				player?.prepareToPlay()
 			}
 			player?.currentTime = 0
-			player?.play()
+			if let player { IntersectorAudioSession.shared.play(player) }
 		} catch {}
 		startHapticsIfNeeded(hapticsEnabled)
 	}
@@ -216,7 +201,7 @@ private enum LoadingThrobber {
 		endingPlayer.setVolume(0, fadeDuration: 0.20)
 		Task { @MainActor in
 			try? await Task.sleep(for: .milliseconds(200))
-			endingPlayer.stop()
+			IntersectorAudioSession.shared.stop(endingPlayer)
 		}
 	}
 
@@ -250,21 +235,21 @@ private enum LoadingThrobber {
 				attack: 0.025,
 				decay: 0.20,
 				sustain: 0.05,
-				frequency: 660
+				frequency: 660, gain: 0.45
 			) + pulseValue(
 				time: time,
 				start: 0.48,
 				attack: 0.03,
 				decay: 0.24,
 				sustain: 0.07,
-				frequency: 330
+				frequency: 330, gain: 0.36
 			) + pulseValue(
 				time: time,
 				start: 0.86,
 				attack: 0.03,
 				decay: 0.36,
 				sustain: 0,
-				frequency: 494
+				frequency: 494, gain: 0.25
 			)
 			samples.append(pad + pulses)
 		}
@@ -276,7 +261,7 @@ private enum LoadingThrobber {
 				(delay: 0.31, gain: 0.11)
 			]
 		)
-		data.append(echoedSamples.fullVolumePCM())
+		data.append(echoedSamples.pcm(normalize: false))
 
 		return data
 	}
@@ -336,7 +321,8 @@ private enum LoadingThrobber {
 		attack: Double,
 		decay: Double,
 		sustain: Double,
-		frequency: Double
+		frequency: Double,
+		gain: Double
 	) -> Double {
 		let duration = attack + decay + sustain
 		guard time >= start, time <= start + duration else {
@@ -353,7 +339,7 @@ private enum LoadingThrobber {
 			envelope = max(0, 1 - decayProgress)
 		}
 		let angle = 2 * Double.pi * frequency * localTime
-		return sin(angle) * envelope * 0.78
+		return sin(angle) * envelope * gain
 	}
 }
 
@@ -372,11 +358,12 @@ private enum ReadyEarcon {
 
 	static func play(hapticsEnabled: Bool) {
 		do {
-			IntersectorAudioSession.prepareForFeedback()
+			let previousPlayer = player
 			player = try AVAudioPlayer(data: cueData())
-			player?.volume = 0.55
+			// Individual note gains are encoded in the audio samples.
+			player?.volume = 0.5
 			player?.prepareToPlay()
-			player?.play()
+			if let player { IntersectorAudioSession.shared.play(player, replacing: previousPlayer) }
 		} catch {}
 		playHapticsIfNeeded(hapticsEnabled)
 	}
@@ -406,9 +393,9 @@ private enum ReadyEarcon {
 		for index in 0..<frameCount {
 			let time = Double(index) / Double(sampleRate)
 			let pad = readyPadValue(time: time) * 0.13
-			let pulses = readyPulse(time: time, start: noteStarts[0], frequency: 494, gain: 0.58)
-				+ readyPulse(time: time, start: noteStarts[1], frequency: 660, gain: 0.68)
-				+ readyPulse(time: time, start: noteStarts[2], frequency: 988, gain: 0.76)
+			let pulses = readyPulse(time: time, start: noteStarts[0], frequency: 494, gain: 0.25)
+				+ readyPulse(time: time, start: noteStarts[1], frequency: 660, gain: 0.36)
+				+ readyPulse(time: time, start: noteStarts[2], frequency: 988, gain: 0.45)
 			samples.append(pad + pulses)
 		}
 
@@ -419,7 +406,7 @@ private enum ReadyEarcon {
 				(delay: 0.34, gain: 0.10)
 			]
 		)
-		data.append(echoedSamples.fullVolumePCM())
+		data.append(echoedSamples.pcm(normalize: false))
 		return data
 	}
 
@@ -495,11 +482,12 @@ enum LiveModeEarcon {
 
 	static func play(isActive: Bool, hapticsEnabled: Bool) {
 		do {
-			IntersectorAudioSession.prepareForFeedback()
+			let previousPlayer = player
 			player = try AVAudioPlayer(data: cueData(isActive: isActive))
-			player?.volume = 0.55
+			// Individual note gains are encoded in the audio samples.
+			player?.volume = 0.5
 			player?.prepareToPlay()
-			player?.play()
+			if let player { IntersectorAudioSession.shared.play(player, replacing: previousPlayer) }
 		} catch {}
 		playHapticsIfNeeded(isActive: isActive, hapticsEnabled: hapticsEnabled)
 	}
@@ -511,7 +499,7 @@ enum LiveModeEarcon {
 	private static func cueData(isActive: Bool) -> Data {
 		let sampleRate = 22_050
 		// Let the quiet release finish without delaying the spoken status.
-		let duration = 1.0
+		let duration = isActive ? 1.06 : 1.0
 		let frameCount = Int(Double(sampleRate) * duration)
 		let dataSize = frameCount * MemoryLayout<Int16>.size
 		var data = Data()
@@ -529,23 +517,28 @@ enum LiveModeEarcon {
 		data.append(UInt32(dataSize).littleEndianData)
 
 		let cueFrequencies = frequencies(isActive: isActive)
+		let gains = isActive ? [0.20, 0.32, 0.45] : [0.45, 0.32, 0.20]
 		var samples: [Double] = []
 		samples.reserveCapacity(frameCount)
 		for index in 0..<frameCount {
 			let time = Double(index) / Double(sampleRate)
-			let value = zip(noteStarts, cueFrequencies).reduce(0.0) { partialResult, note in
-				partialResult + noteValue(time: time, start: note.0, frequency: note.1)
+			let value = noteStarts.indices.reduce(0.0) { partialResult, noteIndex in
+				partialResult + noteValue(
+					time: time, start: noteStarts[noteIndex],
+					frequency: cueFrequencies[noteIndex], gain: gains[noteIndex],
+					softenEnding: isActive && noteIndex == noteStarts.count - 1
+				)
 			}
 			samples.append(value)
 		}
-		data.append(samples.fullVolumePCM())
+		data.append(samples.pcm(normalize: false))
 		return data
 	}
 
-	private static func noteValue(time: Double, start: Double, frequency: Double) -> Double {
+	private static func noteValue(time: Double, start: Double, frequency: Double, gain: Double, softenEnding: Bool) -> Double {
 		let attack = 0.025
 		let sustain = 0.10
-		let decay = 0.40
+		let decay = softenEnding ? 0.46 : 0.40
 		let duration = attack + sustain + decay
 		guard time >= start, time <= start + duration else {
 			return 0
@@ -560,7 +553,7 @@ enum LiveModeEarcon {
 			let decayProgress = (localTime - attack - sustain) / decay
 			envelope = (1 + cos(Double.pi * decayProgress)) / 2
 		}
-		return sin(2 * Double.pi * frequency * localTime) * envelope * 0.62
+		return sin(2 * Double.pi * frequency * localTime) * envelope * gain
 	}
 
 	private static func playHapticsIfNeeded(isActive: Bool, hapticsEnabled: Bool) {
@@ -586,9 +579,9 @@ enum LiveModeEarcon {
 }
 
 private extension Array where Element == Double {
-	/// Normalize the complete cue uniformly so its fades and note balance remain intact.
-	func fullVolumePCM() -> Data {
-		let peak = reduce(0.0) { Swift.max($0, abs($1)) }
+	/// Preserve explicit note levels, or normalize the complete cue uniformly.
+	func pcm(normalize: Bool = true) -> Data {
+		let peak = normalize ? reduce(0.0) { Swift.max($0, abs($1)) } : 1.0
 		let scale = peak > 0 ? Double(Int16.max) / peak : 0
 		var data = Data(capacity: count * MemoryLayout<Int16>.size)
 		for value in self {
@@ -858,7 +851,6 @@ struct ContentView: View {
 			GeometryReader { geometry in
 				ScrollView {
 					VStack(spacing: 0) {
-						headerView
 						statusView
 						Group {
 							if showRankedControls {
@@ -912,7 +904,15 @@ struct ContentView: View {
 			}
 			.background(Color.crossBg)
 			.navigationBarTitleDisplayMode(.inline)
-			.toolbar(.hidden, for: .navigationBar)
+			.navigationTitle("Intersector")
+			.toolbarBackground(Color.crossBg, for: .navigationBar)
+			.toolbarBackground(.visible, for: .navigationBar)
+			.toolbar {
+				ToolbarItemGroup(placement: .topBarTrailing) {
+					if liveModeEnabled { liveToggle }
+					settingsButton
+				}
+			}
 			.sheet(isPresented: $isShowingSettings) {
 				settingsView
 			}
@@ -955,93 +955,16 @@ struct ContentView: View {
 		}
 	}
 
-	private var headerView: some View {
-		ViewThatFits(in: .horizontal) {
-			HStack(alignment: .center, spacing: 0) {
-				appTitle
-					.fixedSize(horizontal: true, vertical: false)
-				Spacer(minLength: 0)
-				headerControls
-			}
-			VStack(alignment: .leading, spacing: 0) {
-				appTitle
-					.frame(maxWidth: .infinity, alignment: .leading)
-				headerControls
-					.frame(maxWidth: .infinity, alignment: .trailing)
-			}
-		}
-		.frame(maxWidth: .infinity, alignment: .leading)
-		.background(Color.crossBg)
-		.tint(Color.crossAccent)
-	}
-
-	private var headerControls: some View {
-		ViewThatFits(in: .horizontal) {
-			HStack(spacing: 0) {
-				if liveModeEnabled {
-					liveToggle
-				}
-				settingsButton
-			}
-			VStack(alignment: .trailing, spacing: 0) {
-				if liveModeEnabled {
-					liveToggle
-				}
-				settingsButton
-			}
-		}
-		.fixedSize(horizontal: true, vertical: false)
-	}
-
 	private var liveToggle: some View {
 		Toggle("Live", isOn: liveModeBinding)
 			.accessibilityAction(named: Text("Walking Mode")) { selectLiveMode(.walking) }
 			.accessibilityAction(named: Text("Driving Mode")) { selectLiveMode(.driving) }
 			.toggleStyle(.button)
 			.tint(Color.crossScanActive)
-			.font(.body)
-			.fontWeight(.semibold)
-			.multilineTextAlignment(.center)
-			.lineLimit(nil)
-			.fixedSize(horizontal: false, vertical: true)
-			.padding(.horizontal, 12)
-			.padding(.vertical, 6)
-			.frame(minWidth: 72, minHeight: 56, alignment: .center)
-			.contentShape(Rectangle())
-	}
-
-	private var appTitle: some View {
-		Text("Intersector")
-			.font(.largeTitle)
-			.fontWeight(.bold)
-			.foregroundStyle(Color.crossText)
-			.lineLimit(nil)
-			.fixedSize(horizontal: false, vertical: true)
-			.padding(.leading, 16)
-			.padding(.trailing, 8)
-			.padding(.vertical, 6)
-			.frame(minHeight: 56, alignment: .leading)
-			.contentShape(Rectangle())
-			.accessibilityAddTraits(.isHeader)
 	}
 
 	private var settingsButton: some View {
-		Button {
-			isShowingSettings = true
-		} label: {
-			Text("Settings")
-				.font(.body)
-				.fontWeight(.semibold)
-				.multilineTextAlignment(.center)
-				.lineLimit(nil)
-				.fixedSize(horizontal: false, vertical: true)
-				.padding(.horizontal, 14)
-				.padding(.vertical, 6)
-				.frame(minWidth: 96, minHeight: 56, alignment: .center)
-				.contentShape(Rectangle())
-		}
-		.buttonStyle(.plain)
-		.foregroundStyle(Color.crossAccent)
+		Button("Settings") { isShowingSettings = true }
 	}
 
 	private var statusView: some View {
@@ -1443,16 +1366,7 @@ struct ContentView: View {
 		return report.text(with: prefs)
 	}
 
-	private var spokenIntersectionCountDescription: String {
-		switch prefs.spokenIntersectionCount {
-		case .one:
-			"Speaks one intersection."
-		case .two:
-			"Nearest speaks the two closest intersections. Upcoming speaks the first two intersections ahead."
-		case .three:
-			"Nearest speaks the three closest intersections. Upcoming speaks the first three intersections ahead."
-		}
-	}
+
 
 	private var rankedControlsBinding: Binding<Bool> {
 		Binding {
@@ -1588,7 +1502,6 @@ struct ContentView: View {
 						.pickerStyle(.segmented)
 					}
 				}
-				settingsHelperText("Choose Walking when you are on foot. Choose Driving when you are in a car or bus so intersections are announced sooner.")
 				settingsControlRow {
 					VStack(alignment: .leading, spacing: 8) {
 						Text("Stop When Stationary: \(Int(liveStationaryMinutes.rounded())) minutes")
@@ -1602,7 +1515,6 @@ struct ContentView: View {
 						)
 					}
 				}
-				settingsHelperText("Stops Live Mode after you stop moving for the selected time, including while Intersector is in the background or the phone is locked.")
 				settingsHeader("System Speech")
 				settingsControlRow {
 					LiveVoicePicker(voiceIdentifier: $liveVoiceIdentifier)
@@ -1650,7 +1562,6 @@ struct ContentView: View {
 	private var settingsIntroSection: some View {
 		Group {
 			settingsTitleRow
-			settingsHelperText("Intersection directions and distances are estimates based on your location, device heading, and available map data. Accuracy can vary with GPS and compass conditions.")
 		}
 	}
 
@@ -1722,7 +1633,6 @@ struct ContentView: View {
 					.pickerStyle(.segmented)
 				}
 			}
-			settingsHelperText("Default keeps Current Info and the current announcement side by side. Centered puts each in its own centered row.")
 			settingsControlRow {
 				Toggle("Show 2nd and 3rd Controls", isOn: rankedControlsBinding)
 					.accessibilityHint("Toggles the visibility of the menu chevrons")
@@ -1785,11 +1695,9 @@ struct ContentView: View {
 			settingsControlRow {
 				Toggle("Intersection Details", isOn: intersectionDetailsBinding)
 			}
-			settingsHelperText("Adds mapped details such as traffic signals and pedestrian islands when that information is available.")
 			settingsControlRow {
 				spokenIntersectionsControl
 			}
-			settingsHelperText(spokenIntersectionCountDescription)
 			sampleAnnouncementSection
 		}
 	}
@@ -1828,7 +1736,6 @@ struct ContentView: View {
 			settingsControlRow {
 				Toggle("Manhattan Snob Mode", isOn: manhattanSnobModeBinding)
 			}
-			settingsHelperText("Uses Uptown, Downtown, East Side, and West Side when cardinal directions are spoken.")
 		}
 	}
 
@@ -1856,7 +1763,6 @@ struct ContentView: View {
 			settingsControlRow {
 				Toggle("Include walking paths", isOn: walkingPathsBinding)
 			}
-			settingsHelperText("Includes named mapped paths in Upcoming and other intersection results. Unnamed paths cannot provide a named intersection. Keep this off to focus results on the street grid.")
 		}
 	}
 
@@ -1935,12 +1841,27 @@ struct ContentView: View {
 
 					helpSection(
 						title: "Live Mode",
-						body: "The Live Mode switch in Settings shows or hides the Live control and its settings. Turning this switch off also stops Live Mode. Your travel and speech preferences are kept when you turn it back on. Turn on Live on the home screen to hear upcoming intersections automatically as you travel. Choose Walking when you are on foot. Choose Driving when you are in a car or bus so intersections are announced sooner. Live Mode continues when you use another app or lock the phone. Live Mode uses the voice, speech rate, and volume selected in Settings. An ascending flourish confirms that Live Mode is on, and a descending flourish confirms that it is off. On the Live control, choose the Walking Mode or Driving Mode accessibility action and double-tap to start Live in that mode. If Live is already on, the action changes the travel mode and announces the change. In Driving mode, Live automatically turns off when Intersector detects that you have entered a highway. Intersector announces the shutdown and identifies the highway when that information is available. Turn Live back on after exiting the highway to resume intersection announcements. Live Mode stops after you stop moving for the time selected in Settings. Live also stops if location updates remain unavailable. You can also turn it off from Intersector, Siri, or Shortcuts."
+						body: "The Live Mode switch in Settings shows or hides the Live control and its settings. Turning this switch off also stops Live Mode. Your travel and speech preferences are kept when you turn it back on. Turn on Live on the home screen to hear upcoming intersections automatically as you travel. Choose Walking when you are on foot. Choose Driving when you are in a car or bus so intersections are announced sooner. Live Mode continues when you use another app or lock the phone. Live Mode uses the voice, speech rate, and volume selected in Settings. An ascending flourish confirms that Live Mode is on, and a descending flourish confirms that it is off. On the Live control, choose the Walking Mode or Driving Mode accessibility action and double-tap to start Live in that mode. If Live is already on, the action changes the travel mode and announces the change. In Driving mode, Live automatically turns off when Intersector detects that you have entered a highway. Intersector announces the shutdown and identifies the highway when that information is available. Turn Live back on after exiting the highway to resume intersection announcements. Use Stop When Stationary to choose how long Live Mode waits after you stop moving before turning off, including while the app is in the background or the phone is locked. Live also stops if location updates remain unavailable. You can also turn it off from Intersector, Siri, or Shortcuts."
 					)
 
 					helpSection(
 						title: "2nd and 3rd Results",
 						body: "The chevron menus on Nearest and Upcoming expose 2nd and 3rd result actions. Nearest ranks by distance from you. Upcoming follows the direction your phone is facing and looks forward along your current street. You can hide the visible chevrons in Settings while keeping ranked actions available through VoiceOver, Siri, and Shortcuts."
+					)
+
+					helpSection(
+						title: "Display Settings",
+						body: "Use Current Info Layout to choose how the current announcement appears. Default places Current Info and the announcement side by side. Centered gives each its own centered row. Show 2nd and 3rd Controls shows or hides the chevron menus beside Nearest and Upcoming."
+					)
+
+					helpSection(
+						title: "Regional Wording",
+						body: "Turn on Manhattan Snob Mode to use Uptown, Downtown, East Side, and West Side when cardinal directions are spoken."
+					)
+
+					helpSection(
+						title: "System Speech",
+						body: "Choose a voice, Speech Rate, and Speech Volume for Live announcements. Use Test Speech to hear your selections."
 					)
 
 					announcementSettingsHelpSection
@@ -1962,7 +1883,7 @@ struct ContentView: View {
 
 					helpSection(
 						title: "Accuracy",
-						body: "Intersector depends on GPS, compass heading, and available OpenStreetMap data. Tall buildings, weak location signals, magnetic interference, missing map details, or unusual street layouts can affect results. Treat Intersector as orientation support, not turn-by-turn navigation."
+						body: "Intersection directions and distances are estimates. Intersector depends on GPS, compass heading, and available OpenStreetMap data. Tall buildings, weak location signals, magnetic interference, missing map details, or unusual street layouts can affect results. Treat Intersector as orientation support, not turn-by-turn navigation."
 					)
 				}
 				.padding(24)
@@ -2088,20 +2009,7 @@ struct ContentView: View {
 			.accessibilityAddTraits(.isHeader)
 	}
 
-	private func settingsHelperText(_ text: String) -> some View {
-		Text(text)
-			.font(.footnote)
-			.foregroundStyle(Color.crossText)
-			.lineLimit(nil)
-			.fixedSize(horizontal: false, vertical: true)
-			.padding(.horizontal, 16)
-			.padding(.vertical, 8)
-			.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-			.background(Color.crossSettingsHelper)
-			.contentShape(Rectangle())
-			.accessibilityElement(children: .ignore)
-			.accessibilityLabel(text)
-	}
+
 
 	private func settingsControlRow<Content: View>(
 		@ViewBuilder content: () -> Content
@@ -2473,7 +2381,7 @@ struct ContentView: View {
 			VoiceOverAnnouncer.reportUpdated(startupLoadingText)
 			LoadingThrobber.start(hapticsEnabled: requestPrefs.haptics)
 			do {
-				try await LookupAttempt.run {
+				try await LookupAttempt.run(stage: "startup") {
 					try await service.prepareInitialMapData(prefs: requestPrefs) {
 						if startupAttemptID == attemptID { isStartupLoading = false }
 					}

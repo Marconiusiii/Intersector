@@ -9,6 +9,7 @@ struct SlowMapRecoveryTests {
     @Test(arguments: [ReportKind.nearest, .upcoming], ["phone", "Siri", "Get"])
     func validTenSecondResponseAfterLocationDelaySucceeds(kind: ReportKind, entry: String) async throws {
         var client = MapDataClient()
+        client.responseCache = OverpassRoadResponseCache()
         client.endpoint = URL(string: "https://slow-valid-\(UUID().uuidString).example")!
         client.fallbackEndpoints = [URL(string: "https://unused-one.example")!, URL(string: "https://unused-two.example")!]
         let log = SlowResponseLog()
@@ -31,7 +32,7 @@ struct SlowMapRecoveryTests {
         }
         #expect(text.contains("First Street"))
         #expect(started.duration(to: .now) >= .seconds(17))
-        #expect(await log.allowances == [12])
+        #expect(await log.allowances == [30])
     }
 }
 

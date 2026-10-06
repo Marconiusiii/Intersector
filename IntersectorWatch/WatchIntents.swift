@@ -113,8 +113,13 @@ struct WatchNearestIntersectionIntent: AppIntent {
 
 	@MainActor
 	func perform() async throws -> some IntentResult & ProvidesDialog {
-		let text = await IntersectorWatchReporter.reportText(for: .nearest)
-		return watchIntersectorResult(text)
+		return await LookupDiagnostics.$requestID.withValue(UUID().uuidString) {
+			LookupDiagnostics.event("Watch Siri intent", detail: "nearest entered")
+			defer { LookupDiagnostics.event("Watch Siri intent", detail: "nearest exited; cancelled=\(Task.isCancelled)") }
+			let text = await IntersectorWatchReporter.reportText(for: .nearest)
+			LookupDiagnostics.event("Watch Siri intent", detail: "nearest returning dialog")
+			return watchIntersectorResult(text)
+		}
 	}
 }
 
@@ -125,8 +130,13 @@ struct WatchUpcomingIntersectionIntent: AppIntent {
 
 	@MainActor
 	func perform() async throws -> some IntentResult & ProvidesDialog {
-		let text = await IntersectorWatchReporter.reportText(for: .upcoming)
-		return watchIntersectorResult(text)
+		return await LookupDiagnostics.$requestID.withValue(UUID().uuidString) {
+			LookupDiagnostics.event("Watch Siri intent", detail: "upcoming entered")
+			defer { LookupDiagnostics.event("Watch Siri intent", detail: "upcoming exited; cancelled=\(Task.isCancelled)") }
+			let text = await IntersectorWatchReporter.reportText(for: .upcoming)
+			LookupDiagnostics.event("Watch Siri intent", detail: "upcoming returning dialog")
+			return watchIntersectorResult(text)
+		}
 	}
 }
 

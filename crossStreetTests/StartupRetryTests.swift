@@ -50,6 +50,7 @@ struct StartupRetryTests {
 
 	@Test func mapClientPassesRefreshRequirementToBothCachePaths() async throws {
 		var client = MapDataClient()
+        client.responseCache = OverpassRoadResponseCache()
 		client.endpoint = URL(string: "https://siri-refresh-\(UUID().uuidString).example")!
 		client.fallbackEndpoints = []
 		let log = ServerBudgetLog()
@@ -73,6 +74,7 @@ struct StartupRetryTests {
 
 	@Test func incompleteSuccessfulHTTPResponseUsesFallbackInsteadOfCachingEmptyData() async throws {
 		var client = MapDataClient()
+        client.responseCache = OverpassRoadResponseCache()
 		let primary = URL(string: "https://incomplete-\(UUID().uuidString).example")!
 		client.endpoint = primary
 		client.fallbackEndpoints = [URL(string: "https://complete-\(UUID().uuidString).example")!]
@@ -208,6 +210,7 @@ struct StartupRetryTests {
 
 	@Test func offlineFailureDoesNotPutHealthyServerInCooldown() async throws {
 		var client = MapDataClient()
+        client.responseCache = OverpassRoadResponseCache()
 		client.endpoint = URL(string: "https://offline-retry-\(UUID().uuidString).example")!
 		client.fallbackEndpoints = []
 		client.requestHandler = { _ in throw URLError(.notConnectedToInternet) }
@@ -225,13 +228,14 @@ struct StartupRetryTests {
 
 	@Test func serverAllowanceIsNotDividedBetweenFallbacks() throws {
 		let now = ContinuousClock.now
-		#expect(try LookupDeadline.serverAllowance(until: now.advanced(by: .seconds(60)), now: now) == 12)
-		#expect(try LookupDeadline.serverAllowance(until: now.advanced(by: .seconds(52)), now: now) == 12)
+		#expect(try LookupDeadline.serverAllowance(until: now.advanced(by: .seconds(60)), now: now) == 30)
+		#expect(try LookupDeadline.serverAllowance(until: now.advanced(by: .seconds(52)), now: now) == 30)
 		#expect(try LookupDeadline.serverAllowance(until: now.advanced(by: .seconds(8)), now: now) == 8)
 	}
 
 	@Test func localTimeoutDoesNotBlacklistEndpointForExplicitRetry() async throws {
 		var client = MapDataClient()
+        client.responseCache = OverpassRoadResponseCache()
 		client.endpoint = URL(string: "https://local-timeout-\(UUID().uuidString).example")!
 		client.fallbackEndpoints = []
 		client.requestHandler = { _ in throw URLError(.timedOut) }
@@ -251,6 +255,7 @@ struct StartupRetryTests {
 		let hosts = (0..<3).map { URL(string: "https://full-allowance-\(UUID().uuidString)-\($0).example")! }
 		let log = ServerBudgetLog()
 		var client = MapDataClient()
+        client.responseCache = OverpassRoadResponseCache()
 		client.endpoint = hosts[0]
 		client.fallbackEndpoints = Array(hosts.dropFirst())
 		client.requestHandler = { request in
@@ -263,12 +268,13 @@ struct StartupRetryTests {
 		let coordinate = origin
 		_ = try await LookupAttempt.run { try await configured.freshMapData(near: coordinate, radiusMeters: 225) }
 		#expect(await log.urls == hosts)
-		#expect(await log.allowances == [12, 12, 12])
+		#expect(await log.allowances == [30, 30, 30])
 		#expect(await log.maximumActive == 1)
 	}
 
 	@Test func expiredBudgetDoesNotPutUntriedServerInCooldown() async throws {
 		var client = MapDataClient()
+        client.responseCache = OverpassRoadResponseCache()
 		client.endpoint = URL(string: "https://untried-\(UUID().uuidString).example")!
 		client.fallbackEndpoints = []
 		let log = ServerBudgetLog()

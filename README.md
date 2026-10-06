@@ -13,6 +13,8 @@ Intersector is an accessibility-first iOS app for quickly identifying nearby int
 - Use optional haptic scan feedback while orienting the phone.
 - Adjust neighborhood context, verbosity, and haptic preferences in Settings.
 
+Recently downloaded nearby road data can be reused for up to 15 minutes, including after the app restarts. New areas and expired coverage require an available map service.
+
 ## Siri Shortcuts
 
 Intersector provides App Shortcuts for:

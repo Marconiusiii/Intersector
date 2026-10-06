@@ -21,6 +21,7 @@ with tempfile.TemporaryDirectory(prefix='intersector-watch-map-') as directory:
     subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', '-default-isolation', 'MainActor',
         '-parse-as-library', '-module-cache-path', str(Path(directory) / 'modules'),
         str(root / 'crossStreet/LookupAttempt.swift'),
+        str(root / 'crossStreet/OverpassRequestPolicy.swift'),
         str(service),
         str(Path(__file__).parent / 'MapChecks.swift'), '-o', str(executable)], check=True)
     subprocess.run([str(executable), *sys.argv[1:]], check=True, timeout=60)

@@ -6,6 +6,7 @@ import CoreLocation
     nonisolated static let empty = Data("{\"elements\":[]}".utf8)
     @MainActor static func client() -> WatchMapDataClient {
         var client = WatchMapDataClient()
+        client.responseCache = OverpassRoadResponseCache()
         client.endpoint = URL(string: "https://watch-test-\(UUID().uuidString).example")!
         client.fallbackEndpoints = []
         return client
@@ -57,7 +58,7 @@ import CoreLocation
         let slowLog = WatchRequestLog()
         slow.requestHandler = { request in
             await slowLog.record()
-            precondition(request.timeoutInterval == 12)
+            precondition(request.timeoutInterval == 30)
             if request.url != last { throw URLError(.timedOut) }
             return response(request)
         }
@@ -68,14 +69,14 @@ import CoreLocation
         let slowCount = await slowLog.count
         precondition(slowCount == 3, "Each fallback must get its full allowance")
 
-        // A successful 10-second map request must survive eight seconds of location acquisition.
+        // A queued 13-second response exceeds the former cutoff after eight seconds acquiring location.
         var delayed = client()
         delayed.fallbackEndpoints = [URL(string: "https://unused-a.example")!, URL(string: "https://unused-b.example")!]
         let delayedLog = WatchRequestLog()
         delayed.requestHandler = { request in
             await delayedLog.record()
-            precondition(request.timeoutInterval == 12)
-            try await Task.sleep(for: .seconds(10))
+            precondition(request.timeoutInterval == 30)
+            try await Task.sleep(for: .seconds(13))
             return response(request, data: roadFixture)
         }
         let delayedClient = delayed
@@ -104,7 +105,29 @@ import CoreLocation
         catch WatchReportError.serversCoolingDown {}
         let limitedCount = await limitedLog.count
         precondition(limitedCount == 1, "Cooldown must prevent repeated server calls")
-        print("Watch map checks passed: offline retry, request reuse, incomplete response fallback, full server allowance, slow valid response after location delay, timeout retry, cooldown")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("roads.json")
+        let area = OverpassMapArea(latitude: origin.latitude, longitude: origin.longitude, radius: 225, options: "false|false|false")
+        await OverpassRoadResponseCache(fileURL: file).store(roadFixture, for: area, requestedAt: Date())
+        var restored = client()
+        restored.responseCache = OverpassRoadResponseCache(fileURL: file)
+        restored.requestHandler = { _ in fatalError("Persisted cold Watch coverage must not download again") }
+        let coldMap = try await restored.mapData(near: origin, radiusMeters: 225, options: WatchMapDetailOptions())
+        precondition(!coldMap.intersections.isEmpty)
+
+        var headers = client()
+        headers.requestHandler = { request in
+            let query = String(data: request.httpBody!, encoding: .utf8)!.dropFirst(5).removingPercentEncoding!
+            precondition(query.contains("[timeout:10][maxsize:33554432]"))
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 429, httpVersion: nil, headerFields: ["Retry-After": "120"])!)
+        }
+        do { _ = try await headers.mapData(near: origin, radiusMeters: 225, options: WatchMapDetailOptions()); fatalError("Expected rate limit") }
+        catch WatchReportError.serverError(429) {}
+        let retryDate = await headers.endpointHealth.retryDate(for: headers.endpoint)
+        precondition(retryDate.map { $0.timeIntervalSinceNow > 110 } == true)
+
+        print("Watch map checks passed: offline retry, request reuse, incomplete response fallback, full server allowance, slow valid response after location delay, timeout retry, cooldown, disk restoration, explicit resource limits, Retry-After")
     }
 }
 private actor WatchRequestLog {

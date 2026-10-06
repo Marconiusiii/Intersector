@@ -16,9 +16,11 @@ struct MapDataClient: MapDataFetching {
 	]
 	var session: URLSession = .shared
 	var minimumCacheDate: Date?
+	var responseCache: OverpassRoadResponseCache?
+	private var successfulResponses: OverpassRoadResponseCache? { responseCache ?? (requestHandler == nil ? .shared : nil) }
 	var requestHandler: (@Sendable (URLRequest) async throws -> MapHTTPResponse)?
-	private static let cache = MapDataCache()
-	private static let endpointHealth = MapEndpointHealth()
+	var mapCache = MapDataCache.shared
+	var endpointHealth = OverpassEndpointHealth.shared
 
 	func intersections(
 		near coordinate: CLLocationCoordinate2D,
@@ -33,7 +35,7 @@ struct MapDataClient: MapDataFetching {
 		radiusMeters: CLLocationDistance,
 		options: MapDetailOptions = MapDetailOptions()
 	) async throws -> MapDataSet {
-		try await Self.cache.data(
+		try await mapCache.data(
 			near: coordinate,
 			radiusMeters: radiusMeters,
 			options: options,
@@ -48,7 +50,7 @@ struct MapDataClient: MapDataFetching {
 		radiusMeters: CLLocationDistance,
 		options: MapDetailOptions = MapDetailOptions()
 	) async throws -> MapDataSet {
-		try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: options)
+		try await fetchMapData(near: coordinate, radiusMeters: radiusMeters, options: options, allowsStoredResponse: false)
 	}
 
 	func immediateMapData(
@@ -60,7 +62,7 @@ struct MapDataClient: MapDataFetching {
 		coreOptions.includeWalkingPaths = false
 		let immediateCoreOptions = coreOptions
 
-		return try await Self.cache.data(
+		return try await mapCache.data(
 			near: coordinate,
 			radiusMeters: radiusMeters,
 			options: immediateCoreOptions,
@@ -91,41 +93,58 @@ struct MapDataClient: MapDataFetching {
 	private func fetchMapData(
 		near coordinate: CLLocationCoordinate2D,
 		radiusMeters: CLLocationDistance,
-		options: MapDetailOptions
+		options: MapDetailOptions,
+		allowsStoredResponse: Bool = true
 	) async throws -> MapDataSet {
 		try await fetchMapData(
 			near: coordinate,
 			options: options,
-			query: roadQuery(
-				near: coordinate,
-				radiusMeters: radiusMeters,
-				options: options
-			)
+			query: roadQuery(near: coordinate, radiusMeters: radiusMeters, options: options),
+			area: OverpassMapArea(latitude: coordinate.latitude, longitude: coordinate.longitude, radius: radiusMeters, options: "\(options.includeCrossings)|\(options.includeWalkingPaths)|\(options.includeHighways)"),
+			allowsStoredResponse: allowsStoredResponse
 		)
 	}
 
 	private func fetchMapData(
 		near coordinate: CLLocationCoordinate2D,
 		options: MapDetailOptions,
-		query: String
+		query: String,
+		area: OverpassMapArea? = nil,
+		allowsStoredResponse: Bool = true
 	) async throws -> MapDataSet {
-		let endpoints = await Self.endpointHealth.orderedEndpoints(
+		try Task.checkCancellation()
+		if allowsStoredResponse, let area, let cached = await successfulResponses?.response(for: area, minimumRequestedAt: minimumCacheDate) {
+			do {
+                var result = try decodedMap(cached.data, options: options)
+                result.cacheStoredAt = cached.storedAt
+                result.cacheRequestedAt = cached.requestedAt
+                result.cacheArea = cached.area
+                return result
+            }
+			catch { await successfulResponses?.discard(for: area) }
+		}
+		let requestedAt = Date()
+		let endpoints = await endpointHealth.orderedEndpoints(
 			primary: endpoint,
 			fallbacks: fallbackEndpoints
 		)
-		guard !endpoints.isEmpty else { throw MapDataError.serversCoolingDown }
+		guard !endpoints.isEmpty else {
+			LookupDiagnostics.event("map servers", detail: "all endpoints in cooldown")
+			throw MapDataError.serversCoolingDown
+		}
 		var lastError: Error = MapDataError.invalidResponse
 		let deadline = LookupDeadline.current ?? ContinuousClock.now.advanced(by: LookupDeadline.requestTimeout)
 		for endpoint in endpoints {
 			try Task.checkCancellation()
 			// An exhausted caller budget must not mark an untried server unhealthy.
 			let allowance = try LookupDeadline.serverAllowance(until: deadline)
+			LookupDiagnostics.event("map request", detail: "host=\(endpoint.host ?? "unknown"); allowance=\(allowance)")
 			do {
 				let data = try await LookupAttempt.run(timeout: .seconds(allowance), stage: "map download \(endpoint.host ?? "unknown")") {
-					try await fetchMapData(from: endpoint, options: options, query: query, timeout: allowance)
+					try await fetchMapData(from: endpoint, options: options, query: query, timeout: allowance, area: area, requestedAt: requestedAt)
 				}
 				try Task.checkCancellation()
-				await Self.endpointHealth.markSuccess(endpoint)
+				await endpointHealth.markSuccess(endpoint)
 				return data
 			} catch {
 				try Task.checkCancellation()
@@ -136,7 +155,7 @@ struct MapDataClient: MapDataFetching {
 					throw error
 				}
 				if case MapDataError.serverError(429) = error {
-					await Self.endpointHealth.markTemporaryFailure(endpoint)
+					await endpointHealth.markTemporaryFailure(endpoint)
 					throw error
 				}
 				guard isTemporary(error) else {
@@ -145,7 +164,7 @@ struct MapDataClient: MapDataFetching {
 				// A local timeout is not a server rejection. Keep it eligible for
 				// the next explicit request, while still trying this request's fallback.
 				if (error as? URLError)?.code != .timedOut {
-					await Self.endpointHealth.markTemporaryFailure(endpoint)
+					await endpointHealth.markTemporaryFailure(endpoint)
 				}
 			}
 		}
@@ -156,7 +175,9 @@ struct MapDataClient: MapDataFetching {
 		from endpoint: URL,
 		options: MapDetailOptions,
 		query: String,
-		timeout: TimeInterval
+		timeout: TimeInterval,
+		area: OverpassMapArea?,
+		requestedAt: Date
 	) async throws -> MapDataSet {
 		var request = URLRequest(url: endpoint)
 		request.httpMethod = "POST"
@@ -175,18 +196,35 @@ struct MapDataClient: MapDataFetching {
 		let data = httpResult.data
 		let urlResponse = httpResult.response
 		guard let httpResponse = urlResponse as? HTTPURLResponse else {
+			LookupDiagnostics.event("map response", detail: "non-HTTP response")
 			throw MapDataError.invalidResponse
 		}
+		LookupDiagnostics.event("map response", detail: "host=\(endpoint.host ?? "unknown"); status=\(httpResponse.statusCode); bytes=\(data.count)")
+		await endpointHealth.recordResponse(httpResponse)
 		guard (200..<300).contains(httpResponse.statusCode) else {
-			throw MapDataError.serverError(httpResponse.statusCode)
+			throw MapDataError.serverError(httpResponse.statusCode == 406 ? 429 : httpResponse.statusCode)
 		}
+		var result = try decodedMap(data, options: options)
+        result.cacheStoredAt = Date()
+        result.cacheRequestedAt = requestedAt
+        result.cacheArea = area
+        try Task.checkCancellation()
+        if let area { await successfulResponses?.store(data, for: area, requestedAt: requestedAt) }
+        return result
+    }
+
+    private func decodedMap(_ data: Data, options: MapDetailOptions) throws -> MapDataSet {
 		let response: OverpassResponse
 		do {
 			response = try JSONDecoder().decode(OverpassResponse.self, from: data)
 		} catch {
+			LookupDiagnostics.event("map response", detail: "invalid JSON payload")
 			throw MapDataError.invalidMapData
 		}
-		guard response.remark?.isEmpty != false else { throw MapDataError.invalidMapData }
+		guard response.remark?.isEmpty != false else {
+			LookupDiagnostics.event("map response", detail: "server reported incomplete data")
+			throw MapDataError.invalidMapData
+		}
 		try Task.checkCancellation()
 		let started = ContinuousClock.now
 		defer { LookupDiagnostics.event("map processing", detail: "\(started.duration(to: .now)); \(response.elements.count) elements") }
@@ -261,7 +299,7 @@ struct MapDataClient: MapDataFetching {
 		  .crossingParentWays;
 		""" : ""
 		let body = """
-		[out:json][timeout:10];
+		\(OverpassRequestPolicy.querySettings);
 		(
 		  way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"~"^(\(highwayPattern))$"]["name"];
 		\(highwayQuery)
@@ -304,7 +342,7 @@ struct MapDataClient: MapDataFetching {
 		  .crossingParentWays;
 		""" : ""
 		let body = """
-		[out:json][timeout:10];
+		\(OverpassRequestPolicy.querySettings);
 		way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"~"^(\(highwayPattern))$"]["name"="\(escapedRoadName)"]->.currentRoad;
 		node(w.currentRoad)->.currentRoadNodes;
 		way(bn.currentRoadNodes)["highway"~"^(\(highwayPattern))$"]["name"]->.connectedRoads;
@@ -334,40 +372,7 @@ struct MapHTTPResponse: @unchecked Sendable {
 	var response: URLResponse
 }
 
-actor MapEndpointHealth {
-	private var preferredEndpoint: URL?
-	private var unhealthyUntil: [URL: Date] = [:]
-	private let cooldown: TimeInterval = 60
-
-	func orderedEndpoints(primary: URL, fallbacks: [URL]) -> [URL] {
-		let endpoints = ([primary] + fallbacks).removingDuplicates()
-		let now = Date()
-		let healthyEndpoints = endpoints.filter { endpoint in
-			guard let retryAfter = unhealthyUntil[endpoint] else {
-				return true
-			}
-			return retryAfter <= now
-		}
-		let availableEndpoints = healthyEndpoints
-
-		guard let preferredEndpoint, availableEndpoints.contains(preferredEndpoint) else {
-			return availableEndpoints
-		}
-		return [preferredEndpoint] + availableEndpoints.filter { $0 != preferredEndpoint }
-	}
-
-	func markSuccess(_ endpoint: URL) {
-		preferredEndpoint = endpoint
-		unhealthyUntil[endpoint] = nil
-	}
-
-	func markTemporaryFailure(_ endpoint: URL) {
-		unhealthyUntil[endpoint] = Date().addingTimeInterval(cooldown)
-		if preferredEndpoint == endpoint {
-			preferredEndpoint = nil
-		}
-	}
-}
+typealias MapEndpointHealth = OverpassEndpointHealth
 
 private extension Array where Element: Hashable {
 	nonisolated func removingDuplicates() -> [Element] {
@@ -410,6 +415,7 @@ enum MapDataError: LocalizedError {
 }
 
 actor MapDataCache {
+	static let shared = MapDataCache()
 	private struct Entry {
 		var center: CLLocationCoordinate2D
 		var radiusMeters: CLLocationDistance
@@ -448,10 +454,12 @@ actor MapDataCache {
 		let earliestRequest = minimumRequestedAt ?? .distantPast
 		if let entry = entries.first(where: { entry in
 			entry.requestedAt >= earliestRequest && canReuse(entry, for: coordinate, radiusMeters: radiusMeters, options: options) }) {
+			LookupDiagnostics.event("map cache", detail: "fresh hit")
 			return entry.data
 		}
 		if let entry = entries.first(where: { entry in
 			entry.requestedAt >= earliestRequest && canReuseStale(entry, for: coordinate, radiusMeters: radiusMeters, options: options) }) {
+			LookupDiagnostics.event("map cache", detail: "stale hit")
 			return entry.data
 		}
 
@@ -466,9 +474,11 @@ actor MapDataCache {
 					return
 				}
 				if requests[requestID] != nil {
+					LookupDiagnostics.event("map cache", detail: "joined in-flight request")
 					requests[requestID]?.waiters[waiterID] = waiter
 					return
 				}
+				LookupDiagnostics.event("map cache", detail: "miss; starting download")
 				let task = Task {
 					let result: Result<MapDataSet, Error>
 					do {
@@ -503,8 +513,9 @@ actor MapDataCache {
 		// An abandoned request cannot overwrite the cache or finish a newer attempt.
 		guard let request = requests.removeValue(forKey: id) else { return }
 		if case .success(let data) = result {
-			store(Entry(center: request.center, radiusMeters: request.radiusMeters,
-				options: request.options, storedAt: Date(), requestedAt: request.startedAt, data: data))
+			let sourceCenter = data.cacheArea.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) } ?? request.center
+			store(Entry(center: sourceCenter, radiusMeters: data.cacheArea?.radius ?? request.radiusMeters,
+				options: request.options, storedAt: data.cacheStoredAt ?? Date(), requestedAt: data.cacheRequestedAt ?? request.startedAt, data: data))
 		}
 		for waiter in request.waiters.values { waiter.resume(with: result) }
 	}

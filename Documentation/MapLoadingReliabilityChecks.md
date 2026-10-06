@@ -34,3 +34,22 @@ Install the same test build on the iPhone and Watch. Leave Apple Intelligence an
 - A nearby public intersection, if you are comfortable sharing it. A home address is not needed.
 
 A passing build or automated test does not replace these device checks.
+
+## Startup and Settings check
+
+1. Close Intersector, then open it normally with VoiceOver on. Before touching the screen, note which item receives focus. The expected item is the Intersector heading.
+2. Let startup finish. Note the exact error if it fails and roughly how long it took. Follow its retry instruction once.
+3. Open Settings. Check that the explanations beneath controls have been removed and that controls still report their labels and values.
+4. Open Help from Settings. Check Display Settings, Regional Wording, Live Mode, System Speech, Announcement Settings, Map Detail, and Accuracy for the explanations.
+
+For a developer run from Xcode, copy the Lookup console messages from one failed startup and its retry. They include startup location, cache decisions, server status, and error codes. They exclude coordinates, street names, response bodies, and spoken results. No screenshot or recording is needed.
+
+## Cold Siri and cache checks
+
+1. Install this build and ask Siri for Upcoming before opening Intersector. Record the response and approximate wait.
+2. Ask for Nearest twice, then Upcoming again. Record each response, including failures.
+3. After a successful answer, end the app process and ask again from the same place within 15 minutes. Then repeat through the app with Wi-Fi and cellular data off to check reuse of matching map coverage. Test Siri separately with connectivity, since Siri itself may need a connection.
+4. Restore connectivity. Change map-detail options or move outside the downloaded area and check that a new request is made.
+5. Repeat from the locked phone after it has been unlocked once since restart. Repeat directly on Watch.
+
+A developer can collect the system log for subsystem `com.marconius.crossStreet`, category `Lookup`, in both Debug and Release builds. Intent entry and dialog return, location stages, cache decisions, server status, deadlines, and cancellation distinguish a client failure from Siri ending execution. The logs omit coordinates, street names, response bodies, and spoken answers. A “returning dialog” event means the app prepared the result; it does not prove Siri spoke it.

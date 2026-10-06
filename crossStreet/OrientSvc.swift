@@ -177,11 +177,14 @@ struct OrientSvc {
 	}
 
 	func prepareInitialMapData(prefs: AppPrefs = AppPrefs(), locationReady: () -> Void = {}) async throws {
-		let context = try await locationProvider.currentContext(requiresFreshHeading: false)
+		let context = try await LookupAttempt.run(stage: "startup location") {
+			try await self.locationProvider.currentContext(requiresFreshHeading: false)
+		}
 		try Task.checkCancellation()
 		locationReady()
 		// Prepare one nearby area; action-specific expansion happens on demand.
 		let initialPrefs = await prefsForFirstLookup(kind: .nearest, rank: 1, prefs: prefs)
+		LookupDiagnostics.event("startup map", detail: "radius=225; crossings=\(initialPrefs.mapDetails.includeCrossings); walkingPaths=\(initialPrefs.mapDetails.includeWalkingPaths)")
 		_ = try await mapDataClient.immediateMapData(
 			near: context.coordinate, radiusMeters: 225, options: initialPrefs.mapDetails
 		)

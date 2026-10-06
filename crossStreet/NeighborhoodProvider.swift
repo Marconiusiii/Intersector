@@ -15,6 +15,8 @@ struct NeighborhoodProvider: NeighborhoodProviding {
 		URL(string: "https://maps.mail.ru/osm/tools/overpass/api/interpreter")!
 	]
 	var session: URLSession = .shared
+	var endpointHealth = OverpassEndpointHealth.shared
+	var requestHandler: (@Sendable (URLRequest) async throws -> MapHTTPResponse)?
 	private static let cache = NeighborhoodCache()
 
 	func neighborhoods(
@@ -36,20 +38,24 @@ struct NeighborhoodProvider: NeighborhoodProviding {
 		near coordinate: CLLocationCoordinate2D,
 		radiusMeters: CLLocationDistance
 	) async throws -> [NeighborhoodCandidate] {
-		let endpoints = uniqueEndpoints([endpoint] + fallbackEndpoints)
+		let endpoints = await endpointHealth.orderedEndpoints(primary: endpoint, fallbacks: fallbackEndpoints)
+		guard !endpoints.isEmpty else { throw MapDataError.serversCoolingDown }
 		var lastError: Error?
 
 		for endpoint in endpoints {
 			try Task.checkCancellation()
 			do {
-				return try await fetchNeighborhoods(
-					from: endpoint,
-					near: coordinate,
-					radiusMeters: radiusMeters
-				)
+				let result = try await fetchNeighborhoods(from: endpoint, near: coordinate, radiusMeters: radiusMeters)
+				await endpointHealth.markSuccess(endpoint)
+				return result
 			} catch {
 				try Task.checkCancellation()
 				lastError = error
+				if let code = (error as? URLError)?.code, [.notConnectedToInternet, .networkConnectionLost].contains(code) { throw error }
+				if case MapDataError.serverError(429) = error { throw error }
+				if isTemporary(error), (error as? URLError)?.code != .timedOut {
+					await endpointHealth.markTemporaryFailure(endpoint)
+				}
 				guard isTemporary(error), endpoint != endpoints.last else {
 					throw error
 				}
@@ -59,11 +65,6 @@ struct NeighborhoodProvider: NeighborhoodProviding {
 		throw lastError ?? MapDataError.invalidResponse
 	}
 
-	private func uniqueEndpoints(_ endpoints: [URL]) -> [URL] {
-		var seen = Set<URL>()
-		return endpoints.filter { seen.insert($0).inserted }
-	}
-
 	private func fetchNeighborhoods(
 		from endpoint: URL,
 		near coordinate: CLLocationCoordinate2D,
@@ -71,7 +72,7 @@ struct NeighborhoodProvider: NeighborhoodProviding {
 	) async throws -> [NeighborhoodCandidate] {
 		var request = URLRequest(url: endpoint)
 		request.httpMethod = "POST"
-		request.timeoutInterval = 12
+		request.timeoutInterval = try LookupDeadline.serverAllowance(until: LookupDeadline.current ?? .now.advanced(by: LookupDeadline.requestTimeout))
 		request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
 		request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 		request.httpBody = query(
@@ -79,12 +80,18 @@ struct NeighborhoodProvider: NeighborhoodProviding {
 			radiusMeters: radiusMeters
 		).data(using: .utf8)
 
-		let (data, urlResponse) = try await session.data(for: request)
+		let data: Data
+		let urlResponse: URLResponse
+		if let requestHandler {
+			let result = try await requestHandler(request)
+			data = result.data; urlResponse = result.response
+		} else { (data, urlResponse) = try await session.data(for: request) }
 		guard let httpResponse = urlResponse as? HTTPURLResponse else {
 			throw MapDataError.invalidResponse
 		}
+		await endpointHealth.recordResponse(httpResponse)
 		guard (200..<300).contains(httpResponse.statusCode) else {
-			throw MapDataError.serverError(httpResponse.statusCode)
+			throw MapDataError.serverError(httpResponse.statusCode == 406 ? 429 : httpResponse.statusCode)
 		}
 
 		let response: OverpassPlaceResponse
@@ -94,6 +101,7 @@ struct NeighborhoodProvider: NeighborhoodProviding {
 			throw MapDataError.invalidMapData
 		}
 
+		guard response.remark?.isEmpty != false else { throw MapDataError.invalidMapData }
 		return NeighborhoodBuilder().candidates(from: response)
 	}
 
@@ -106,7 +114,7 @@ struct NeighborhoodProvider: NeighborhoodProviding {
 		if let mapError = error as? MapDataError {
 			switch mapError {
 			case .serverError(let statusCode):
-				return [429, 500, 502, 503, 504].contains(statusCode)
+				return [500, 502, 503, 504].contains(statusCode)
 			case .invalidResponse, .invalidMapData, .serversCoolingDown:
 				return false
 			}
@@ -130,7 +138,7 @@ struct NeighborhoodProvider: NeighborhoodProviding {
 	) -> String {
 		let radius = Int(radiusMeters.rounded())
 		let body = """
-		[out:json][timeout:10];
+		\(OverpassRequestPolicy.querySettings);
 		(
 		  node(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["place"~"^(neighbourhood|quarter|suburb|locality)$"]["name"];
 		  way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["place"~"^(neighbourhood|quarter|suburb|locality)$"]["name"];
@@ -438,6 +446,7 @@ struct NeighborhoodContext: Equatable {
 }
 
 struct OverpassPlaceResponse: Decodable {
+	var remark: String? = nil
 	var elements: [OverpassPlaceElement]
 }
 

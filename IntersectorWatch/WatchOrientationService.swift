@@ -1980,7 +1980,9 @@ struct WatchMapDataClient {
 	]
 	var session: URLSession = .shared
 	var requestHandler: (@Sendable (URLRequest) async throws -> (Data, URLResponse))?
-	private static let endpointHealth = WatchMapEndpointHealth()
+	var responseCache: OverpassRoadResponseCache?
+	private var successfulResponses: OverpassRoadResponseCache? { responseCache ?? (requestHandler == nil ? .shared : nil) }
+	var endpointHealth = OverpassEndpointHealth.shared
 	private let requestData = WatchRequestMapData()
 
 	func mapData(
@@ -2026,18 +2028,26 @@ struct WatchMapDataClient {
 	) async throws -> WatchMapDataSet {
 		try await fetchMapData(
 			options: options,
-			query: roadQuery(near: coordinate, radiusMeters: radiusMeters, options: options)
+			query: roadQuery(near: coordinate, radiusMeters: radiusMeters, options: options),
+			area: OverpassMapArea(latitude: coordinate.latitude, longitude: coordinate.longitude, radius: radiusMeters, options: "\(options.includeCrossings)|\(options.includeWalkingPaths)|false")
 		)
 	}
 
 	private func fetchMapData(
 		options: WatchMapDetailOptions,
-		query: String
+		query: String,
+		area: OverpassMapArea? = nil
 	) async throws -> WatchMapDataSet {
+		try Task.checkCancellation()
+		if let area, let cached = await successfulResponses?.value(for: area) {
+			do { return try decodedMap(cached, options: options) }
+			catch { await successfulResponses?.discard(for: area) }
+		}
+		let requestedAt = Date()
 		try Task.checkCancellation()
 		let key = "\(options)-\(query)"
 		if let data = await requestData.value(for: key) { return data }
-		let endpoints = await Self.endpointHealth.orderedEndpoints(
+		let endpoints = await endpointHealth.orderedEndpoints(
 			primary: endpoint,
 			fallbacks: fallbackEndpoints
 		)
@@ -2049,10 +2059,10 @@ struct WatchMapDataClient {
 			let allowance = try LookupDeadline.serverAllowance(until: deadline)
 			do {
 				let data = try await LookupAttempt.run(timeout: .seconds(allowance), stage: "map download \(endpoint.host ?? "unknown")") {
-					try await mapData(from: endpoint, options: options, query: query, timeout: allowance)
+					try await mapData(from: endpoint, options: options, query: query, timeout: allowance, area: area, requestedAt: requestedAt)
 				}
 				try Task.checkCancellation()
-				await Self.endpointHealth.markSuccess(endpoint)
+				await endpointHealth.markSuccess(endpoint)
 				await requestData.store(data, for: key)
 				return data
 			} catch {
@@ -2060,14 +2070,14 @@ struct WatchMapDataClient {
 				lastError = error
 				if let error = error as? URLError, [.notConnectedToInternet, .networkConnectionLost].contains(error.code) { throw error }
 				if case WatchReportError.serverError(429) = error {
-					await Self.endpointHealth.markTemporaryFailure(endpoint)
+					await endpointHealth.markTemporaryFailure(endpoint)
 					throw error
 				}
 				guard isTemporary(error) else { throw error }
 				// A local timeout is not a server rejection. Keep it eligible for
 				// the next explicit request, while still trying this request's fallback.
 				if (error as? URLError)?.code != .timedOut {
-					await Self.endpointHealth.markTemporaryFailure(endpoint)
+					await endpointHealth.markTemporaryFailure(endpoint)
 				}
 			}
 		}
@@ -2078,7 +2088,9 @@ struct WatchMapDataClient {
 		from endpoint: URL,
 		options: WatchMapDetailOptions,
 		query: String,
-		timeout: TimeInterval
+		timeout: TimeInterval,
+		area: OverpassMapArea?,
+		requestedAt: Date
 	) async throws -> WatchMapDataSet {
 		var request = URLRequest(url: endpoint)
 		request.httpMethod = "POST"
@@ -2094,9 +2106,18 @@ struct WatchMapDataClient {
 		guard let httpResponse = urlResponse as? HTTPURLResponse else {
 			throw WatchReportError.invalidResponse
 		}
+		LookupDiagnostics.event("map response", detail: "host=\(endpoint.host ?? "unknown"); status=\(httpResponse.statusCode); bytes=\(data.count)")
+		await endpointHealth.recordResponse(httpResponse)
 		guard (200..<300).contains(httpResponse.statusCode) else {
-			throw WatchReportError.serverError(httpResponse.statusCode)
+			throw WatchReportError.serverError(httpResponse.statusCode == 406 ? 429 : httpResponse.statusCode)
 		}
+        let result = try decodedMap(data, options: options)
+        try Task.checkCancellation()
+        if let area { await successfulResponses?.store(data, for: area, requestedAt: requestedAt) }
+        return result
+    }
+
+    private func decodedMap(_ data: Data, options: WatchMapDetailOptions) throws -> WatchMapDataSet {
 		do {
 			let response = try JSONDecoder().decode(WatchOverpassResponse.self, from: data)
 			guard response.remark?.isEmpty != false else { throw WatchReportError.invalidMapData }
@@ -2158,7 +2179,7 @@ struct WatchMapDataClient {
 			  .crossingParentWays;
 			""" : ""
 		let body = """
-		[out:json][timeout:10];
+		\(OverpassRequestPolicy.querySettings);
 		(
 		  way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"~"^(\(highwayPattern))$"]["name"];
 		\(crossingQueries)
@@ -2200,7 +2221,7 @@ struct WatchMapDataClient {
 			  .crossingParentWays;
 			""" : ""
 			let body = """
-			[out:json][timeout:10];
+			\(OverpassRequestPolicy.querySettings);
 			way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["highway"~"^(\(highwayPattern))$"]["name"="\(escapedRoadName)"]->.currentRoad;
 			node(w.currentRoad)->.currentRoadNodes;
 			way(bn.currentRoadNodes)["highway"~"^(\(highwayPattern))$"]["name"]->.connectedRoads;
@@ -2802,24 +2823,33 @@ struct WatchIntersectionFinder {
 }
 
 struct WatchNeighborhoodProvider {
-	private let endpoint = URL(string: "https://overpass-api.de/api/interpreter")!
-	private let fallbackEndpoints = [
+	var endpoint = URL(string: "https://overpass-api.de/api/interpreter")!
+	var fallbackEndpoints = [
 		URL(string: "https://overpass.private.coffee/api/interpreter")!,
 		URL(string: "https://maps.mail.ru/osm/tools/overpass/api/interpreter")!
 	]
-	private let session: URLSession = .shared
+	var session: URLSession = .shared
+	var endpointHealth = OverpassEndpointHealth.shared
 
 	func neighborhoods(
 		near coordinate: CLLocationCoordinate2D,
 		radiusMeters: CLLocationDistance
 	) async throws -> [WatchNeighborhoodCandidate] {
-		let endpoints = ([endpoint] + fallbackEndpoints).removingDuplicates()
+		let endpoints = await endpointHealth.orderedEndpoints(primary: endpoint, fallbacks: fallbackEndpoints)
+		guard !endpoints.isEmpty else { throw WatchReportError.serversCoolingDown }
 		for endpoint in endpoints {
 			try Task.checkCancellation()
 			do {
-				return try await neighborhoods(from: endpoint, near: coordinate, radiusMeters: radiusMeters)
+				let result = try await neighborhoods(from: endpoint, near: coordinate, radiusMeters: radiusMeters)
+				await endpointHealth.markSuccess(endpoint)
+				return result
 			} catch {
 				try Task.checkCancellation()
+				if case WatchReportError.serverError(429) = error { throw error }
+				let code = (error as? URLError)?.code
+				if code == .notConnectedToInternet || code == .networkConnectionLost { throw error }
+				if case WatchReportError.serverError(let status) = error, ![500, 502, 503, 504].contains(status) { throw error }
+				if case WatchReportError.serverError = error { await endpointHealth.markTemporaryFailure(endpoint) }
 				guard endpoint != endpoints.last else {
 					throw error
 				}
@@ -2835,7 +2865,7 @@ struct WatchNeighborhoodProvider {
 	) async throws -> [WatchNeighborhoodCandidate] {
 		var request = URLRequest(url: endpoint)
 		request.httpMethod = "POST"
-		request.timeoutInterval = 12
+		request.timeoutInterval = try LookupDeadline.serverAllowance(until: LookupDeadline.current ?? .now.advanced(by: LookupDeadline.requestTimeout))
 		request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
 		request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 		request.httpBody = query(near: coordinate, radiusMeters: radiusMeters).data(using: .utf8)
@@ -2844,10 +2874,13 @@ struct WatchNeighborhoodProvider {
 		guard let httpResponse = urlResponse as? HTTPURLResponse else {
 			throw WatchReportError.invalidResponse
 		}
+		LookupDiagnostics.event("map response", detail: "host=\(endpoint.host ?? "unknown"); status=\(httpResponse.statusCode); bytes=\(data.count)")
+		await endpointHealth.recordResponse(httpResponse)
 		guard (200..<300).contains(httpResponse.statusCode) else {
-			throw WatchReportError.serverError(httpResponse.statusCode)
+			throw WatchReportError.serverError(httpResponse.statusCode == 406 ? 429 : httpResponse.statusCode)
 		}
 		let response = try JSONDecoder().decode(WatchOverpassPlaceResponse.self, from: data)
+		guard response.remark?.isEmpty != false else { throw WatchReportError.invalidMapData }
 		return WatchNeighborhoodBuilder().candidates(from: response)
 	}
 
@@ -2862,7 +2895,7 @@ struct WatchNeighborhoodProvider {
 	) -> String {
 		let radius = Int(radiusMeters.rounded())
 		let body = """
-		[out:json][timeout:10];
+		\(OverpassRequestPolicy.querySettings);
 		(
 		  node(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["place"~"^(neighbourhood|quarter|suburb|locality)$"]["name"];
 		  way(around:\(radius),\(coordinate.latitude),\(coordinate.longitude))["place"~"^(neighbourhood|quarter|suburb|locality)$"]["name"];
@@ -3025,6 +3058,7 @@ struct WatchNeighborhoodContext: Equatable {
 }
 
 struct WatchOverpassPlaceResponse: Decodable {
+	var remark: String? = nil
 	var elements: [WatchOverpassPlaceElement]
 }
 
@@ -3159,40 +3193,7 @@ enum WatchGeo {
 	}
 }
 
-actor WatchMapEndpointHealth {
-	private var preferredEndpoint: URL?
-	private var unhealthyUntil: [URL: Date] = [:]
-	private let cooldown: TimeInterval = 60
-
-	func orderedEndpoints(primary: URL, fallbacks: [URL]) -> [URL] {
-		let endpoints = ([primary] + fallbacks).removingDuplicates()
-		let now = Date()
-		let healthyEndpoints = endpoints.filter { endpoint in
-			guard let retryAfter = unhealthyUntil[endpoint] else {
-				return true
-			}
-			return retryAfter <= now
-		}
-		let availableEndpoints = healthyEndpoints
-
-		guard let preferredEndpoint, availableEndpoints.contains(preferredEndpoint) else {
-			return availableEndpoints
-		}
-		return [preferredEndpoint] + availableEndpoints.filter { $0 != preferredEndpoint }
-	}
-
-	func markSuccess(_ endpoint: URL) {
-		preferredEndpoint = endpoint
-		unhealthyUntil[endpoint] = nil
-	}
-
-	func markTemporaryFailure(_ endpoint: URL) {
-		unhealthyUntil[endpoint] = Date().addingTimeInterval(cooldown)
-		if preferredEndpoint == endpoint {
-			preferredEndpoint = nil
-		}
-	}
-}
+typealias WatchMapEndpointHealth = OverpassEndpointHealth
 
 private extension Array where Element: Hashable {
 	nonisolated func removingDuplicates() -> [Element] {

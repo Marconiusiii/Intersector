@@ -310,6 +310,7 @@ final class SystemSpeechController: NSObject, LiveSpeaking, @preconcurrency AVSp
 
 	private let synthesizer = AVSpeechSynthesizer()
 	private var utteranceTracker = SpeechUtteranceTracker()
+	private var audioSessionToken: UUID?
 
 	private override init() {
 		super.init()
@@ -356,24 +357,15 @@ final class SystemSpeechController: NSObject, LiveSpeaking, @preconcurrency AVSp
 	}
 
 	private func prepareAudioSession() {
-		do {
-			let session = AVAudioSession.sharedInstance()
-			try session.setCategory(
-				.playback,
-				mode: .voicePrompt,
-				options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers]
-			)
-			try session.setActive(true)
-		} catch {}
+		if audioSessionToken == nil {
+			audioSessionToken = IntersectorAudioSession.shared.acquire()
+		}
 	}
 
 	private func deactivateAudioSession() {
-		do {
-			try AVAudioSession.sharedInstance().setActive(
-				false,
-				options: .notifyOthersOnDeactivation
-			)
-		} catch {}
+		guard let token = audioSessionToken else { return }
+		audioSessionToken = nil
+		IntersectorAudioSession.shared.release(token)
 	}
 
 	static func speechRate(forPercent percent: Int) -> Float {

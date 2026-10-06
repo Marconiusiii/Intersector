@@ -22,6 +22,9 @@ These are the most important files:
 - `ContentView.swift`
   Builds the main screen, settings sheet, action buttons, and current status text.
 
+- `IntersectorAudioSession.swift`
+  Gives sound effects and app speech one shared playback configuration. Each playback keeps the session active until it finishes, so ending speech does not interrupt a sound that is still playing.
+
 - `OnboardingView.swift`
   Shows the first-run onboarding flow and requests location permission.
 
@@ -132,7 +135,7 @@ Scan Mode uses a stronger border because it starts and stops a live mode. When i
 
 The main screen uses a vertical `ScrollView` for all text sizes.
 
-The title header uses `ViewThatFits`. Intersector and Settings remain side by side while their full-size text fits. When a narrow display, Display Zoom, or larger text leaves insufficient width, Settings moves below the title. The Settings and Help header uses the same fit-based fallback. This does not change the Current Info layout. Current Info follows the user's Default or Centered setting at standard text sizes and only automatically stacks at the Accessibility Dynamic Type sizes.
+The home screen uses the native Intersector navigation title with Live and Settings in the navigation toolbar. There is one title rather than alternate custom header branches. Initial VoiceOver focus is left to native navigation behavior and requires device testing. The Settings and Help header still uses its fit-based fallback. This does not change the Current Info layout. Current Info follows the user's Default or Centered setting at standard text sizes and only automatically stacks at the Accessibility Dynamic Type sizes.
 
 Each major row has a scaled minimum height. The minimum height gives the row enough tappable space at normal text sizes, while still allowing the row to grow when Dynamic Type is larger.
 
@@ -600,11 +603,15 @@ This avoids unnecessary network calls and reduces how often a temporary map serv
 
 `MapDataClient` tries `overpass-api.de` first, followed by `overpass.private.coffee` and `maps.mail.ru`. Requests identify Intersector with a `User-Agent`, use a practical network timeout, and remember temporarily unhealthy endpoints so the next request can prefer a working server.
 
-Each server receives up to 12 seconds; the allowance is no longer divided among fallback servers. A cancellation-aware timer enforces that allowance as well as the URL request timeout. The overall request has a 60-second safety limit, including location acquisition and all map requests. A new user attempt gets a fresh deadline. Only the remaining overall limit can shorten a server attempt.
+Each server receives up to 30 seconds: up to 15 seconds of documented Overpass queueing, 10 seconds of declared query execution, and a five-second transport margin. The allowance is not divided among fallback servers. A cancellation-aware timer enforces that allowance as well as the URL request timeout. The overall request has a 60-second safety limit, including location acquisition and all map requests. A new user attempt gets a fresh deadline. Only the remaining overall limit can shorten a server attempt.
 
-If an endpoint times out or reports a temporary server error, the client can try another eligible endpoint. A rate-limit response ends that attempt rather than immediately moving the same query to another server. Explicit server failures have a 60-second cooldown. A local timeout alone does not exclude an endpoint from the next user request. If every endpoint is cooling down, the app explains that the user should wait before retrying.
+If an endpoint times out or reports a temporary server error, the client can try another eligible endpoint. A rate-limit response ends that attempt rather than immediately moving the same query to another server. Road and neighborhood clients share server health. Explicit server failures have a 60-second cooldown. HTTP 429 and 406 stop fallback rotation; a valid Retry-After header can extend the cooldown beyond 60 seconds. A local timeout alone does not exclude an endpoint from the next user request. If every endpoint is cooling down, the app explains that the user should wait before retrying.
 
 An offline or lost connection ends the attempt without marking servers unhealthy, allowing a new attempt after connectivity returns. Incomplete or unreadable map responses can use a bounded fallback and are not cached as successful empty maps.
+
+Queries declare `[timeout:10][maxsize:33554432]`. The 32 MiB memory cap was validated with bounded road, crossing, walking-path, focused-road, and neighborhood queries at a fixed public coordinate; it is not a measurement of peak server memory or a guarantee for every area.
+
+Successful basic road responses also have a local disk cache shared by requests in each app. It keeps at most four areas for 15 minutes, up to 8 MiB per response and 32 MiB for the archive. Cache files use the system caches directory, atomic replacement, and protection until first device unlock. Coverage and map options must match the existing reuse rules. Restoring a response preserves its original download time and area center when it enters the phone memory cache. Explicit fresh requests and retry freshness requirements bypass older data. Corrupt, expired, oversized, or inaccessible archives fall back to downloading. Failed and incomplete downloads are not saved.
 
 ## Startup and manual retries
 
@@ -805,9 +812,9 @@ Completed report announcements use high priority. Longer-loading status announce
 
 ## Settings
 
-Settings are built inside a SwiftUI `Form` in `ContentView.swift`.
+Settings use native SwiftUI controls inside a vertical `ScrollView` in `ContentView.swift`.
 
-The first item explains that intersection directions and distances are estimates based on location, device heading, and available map data. Keeping this information in Settings avoids repeating confidence wording in every visible and spoken report.
+Settings shows controls, values, section headings, and the sample announcement. Explanations of settings and accuracy are in Help rather than beneath the controls.
 
 The settings use native SwiftUI controls:
 
@@ -836,13 +843,13 @@ struct AppPrefs {
 
 Map detail controls whether extra OpenStreetMap details are included in the lookup. Crossings can add mapped crossing points on a named road. Walking Paths can include named paths such as footways when they intersect with streets or other named paths.
 
-Walking Paths remains off by default. When enabled, first Upcoming as well as ranked Upcoming can follow a named mapped path and report its junction with a named street or another named path. Unnamed paths remain excluded because the app cannot provide an accurate intersection name for them. The Settings explanation makes clear that leaving the option off keeps results focused on the street grid.
+Walking Paths remains off by default. When enabled, first Upcoming as well as ranked Upcoming can follow a named mapped path and report its junction with a named street or another named path. Unnamed paths remain excluded because the app cannot provide an accurate intersection name for them. The Map Detail Help topic explains that leaving the option off keeps results focused on the street grid.
 
 Announcement content uses three toggles: Distance, Direction, and Neighborhood. The intersection name is always included. Turning all three toggles off gives compact intersection-name-only output. When several results share the same street, compact output names that street in the first intersection and then lists the remaining cross streets, such as `Amsterdam Avenue and West 93rd Street, West 94th Street`. When the results do not share a street, each intersection remains complete, such as `Foothill Boulevard and Frazier Avenue, Stanley Avenue and Talbot Avenue`.
 
 The Announcements section progressively reveals dependent controls. Current Info Layout, Measurement Unit, Direction Style, Neighborhood Context, and Spoken Intersections are native menu-style pickers rather than segmented controls, so their choices are not divided into narrow fixed-width segments at larger text sizes. When Distance is on, Measurement Unit appears so the user can choose feet or meters. When Direction is on, Direction Style offers Relative, Cardinal, and Clock Face. Relative describes the intersection from the phone heading, such as `ahead and right`. Cardinal uses the geographic bearing from the user to the intersection, such as `northwest`. Clock Face uses wording such as `at 2 o'clock` and treats the direction the phone is pointing as 12 o'clock. The saved raw value `words` continues to select Relative so existing preferences remain compatible. Manhattan Snob Mode changes Cardinal and My Direction wording into New York-style wording. North and northeast become `Uptown`, east and southeast become `East Side`, south and southwest become `Downtown`, and west and northwest become `West Side`. A Cardinal intersection report can therefore say `about 120 feet toward Uptown`, while Relative and Clock Face reports remain unchanged. Neighborhood is disabled on a fresh installation. When it is enabled, Neighborhood Context offers Nearby only and Nearby and toward. A sample string below the toggles updates as these settings change.
 
-Spoken Intersections is a menu picker with the visible and spoken choices `1 intersection`, `2 intersections`, and `3 intersections`. The selected number controls how many results the app requests. Nearest orders multiple results by straight-line distance. Upcoming uses the phone heading to choose a travel direction and orders intersections along the connected path of the current road. The explanatory text for values 2 and 3 states exactly how many results Nearest and Upcoming will speak.
+Spoken Intersections is a menu picker with the visible and spoken choices `1 intersection`, `2 intersections`, and `3 intersections`. The selected number controls how many results the app requests. Nearest orders multiple results by straight-line distance. Upcoming uses the phone heading to choose a travel direction and orders intersections along the connected path of the current road. The Announcement Settings Help topic explains how many results Nearest and Upcoming will speak.
 
 The `Show 2nd and 3rd Controls` toggle controls whether the main screen shows chevron menus for ranked Nearest and Upcoming results. Turning it off removes those visible menus, but Siri, Shortcuts, and VoiceOver custom actions still provide ranked access.
 
@@ -850,7 +857,7 @@ Settings uses a vertical `ScrollView` with expanding native controls and visible
 
 This keeps display strings near the setting values they describe.
 
-The Settings view also uses `@AccessibilityFocusState` for its setting controls. When a user changes a picker selection, the binding saves the new value and marks that same native picker as the accessibility focus target. Native menu dismissal returns to its triggering picker when the user closes it without changing a value. Together, the native menu behavior and stable picker identity keep VoiceOver from jumping to an unrelated control when options close.
+Settings pickers use native controls without programmatic focus changes. The separate Acknowledgements sheet retains its existing focus behavior.
 
 The feedback button, privacy policy, acknowledgements, and app information are grouped under `About Intersector`.
 

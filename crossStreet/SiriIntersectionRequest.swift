@@ -24,17 +24,20 @@ final class SiriIntersectionRequest {
 			return try await perform(kind: kind) { service in try await service.spokenText(kind, prefs: prefs) }
 		} catch {
 			try Task.checkCancellation()
+			LookupDiagnostics.event("Siri response", detail: "failure dialog; \(LookupDiagnostics.failureCode(error))")
 			return Self.failureMessage(error, kind: kind)
 		}
 	}
 
 	func report(for kind: ReportKind, rank: Int = 1, prefs: AppPrefs) async throws -> OrientReport {
-		try await perform(kind: kind) { service in try await service.report(kind, rank: rank, prefs: prefs) }
+		try await perform(kind: kind, rank: rank) { service in try await service.report(kind, rank: rank, prefs: prefs) }
 	}
 
-	private func perform<Value: Sendable>(kind: ReportKind, operation: @escaping @MainActor @Sendable (OrientSvc) async throws -> Value) async throws -> Value {
+	private func perform<Value: Sendable>(kind: ReportKind, rank: Int = 1, operation: @escaping @MainActor @Sendable (OrientSvc) async throws -> Value) async throws -> Value {
 		let attempt = UUID()
 		attempts[kind] = attempt
+		LookupDiagnostics.event("Siri request", id: attempt.uuidString, detail: "kind=\(kind); rank=\(rank); started")
+		defer { LookupDiagnostics.event("Siri request", id: attempt.uuidString, detail: "kind=\(kind); exited; cancelled=\(Task.isCancelled)") }
 		let service = makeService(refreshNext.contains(kind) ? Date() : nil)
 		do {
 			let value = try await LookupAttempt.run(timeout: timeout, stage: "Siri intersection") {
