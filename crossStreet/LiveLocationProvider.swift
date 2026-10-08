@@ -116,21 +116,24 @@ extension LiveLocationProvider: CLLocationManagerDelegate {
 	}
 
 	func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-		for location in locations where
-			location.horizontalAccuracy >= 0 &&
-			location.horizontalAccuracy <= 100 &&
-			abs(location.timestamp.timeIntervalSinceNow) <= 20
-		{
-			updateContinuation?.yield(
-				DeviceContext(
-					coordinate: location.coordinate,
-					headingDegrees: nil,
-					courseDegrees: location.course >= 0 ? location.course : nil,
-					courseAccuracy: location.courseAccuracy >= 0 ? location.courseAccuracy : nil,
-					speedMetersPerSecond: location.speed >= 0 ? location.speed : nil,
-					horizontalAccuracy: location.horizontalAccuracy
-				)
+		for location in locations {
+			let context = DeviceContext(
+				coordinate: location.coordinate,
+				headingDegrees: nil,
+				courseDegrees: location.course >= 0 ? location.course : nil,
+				courseAccuracy: location.courseAccuracy >= 0 ? location.courseAccuracy : nil,
+				speedMetersPerSecond: location.speed >= 0 ? location.speed : nil,
+				horizontalAccuracy: location.horizontalAccuracy,
+				measuredAt: location.timestamp,
+				speedAccuracyMetersPerSecond: location.speedAccuracy
 			)
+			if requestedMode == .walking {
+				guard WalkingLiveTracker.accepts(context, at: .now) else { continue }
+			} else {
+				guard location.horizontalAccuracy >= 0, location.horizontalAccuracy <= 100,
+					abs(location.timestamp.timeIntervalSinceNow) <= 20 else { continue }
+			}
+			updateContinuation?.yield(context)
 		}
 	}
 

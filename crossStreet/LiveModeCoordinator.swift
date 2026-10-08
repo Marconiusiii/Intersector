@@ -29,6 +29,7 @@ final class LiveModeCoordinator: ObservableObject {
 	private var stationaryTask: Task<Void, Never>?
 	private var matcher = LiveRoadMatcher()
 	private var announcementGate = LiveAnnouncementGate()
+	private var walkingTracker = WalkingLiveTracker()
 	private var movementMonitor = LiveMovementMonitor()
 	private var cachedMapData: MapDataSet?
 	private var cachedMapCenter: CLLocationCoordinate2D?
@@ -88,6 +89,7 @@ final class LiveModeCoordinator: ObservableObject {
 		self.stationaryMinutes = stationaryMinutes
 		matcher.reset()
 		announcementGate.reset()
+		walkingTracker = WalkingLiveTracker()
 		movementMonitor.reset(at: now())
 		cachedMapData = nil
 		cachedMapCenter = nil
@@ -169,6 +171,7 @@ final class LiveModeCoordinator: ObservableObject {
 		matcher.reset()
 		highwayDetector.reset()
 		announcementGate.reset()
+		walkingTracker = WalkingLiveTracker()
 		let message = "Live Mode switched to \(mode.label)."
 		statusText = message
 		speechController.speak(message, settings: activeSpeechSettings, delay: 0)
@@ -182,6 +185,7 @@ final class LiveModeCoordinator: ObservableObject {
 
 	private func receive(_ context: DeviceContext) {
 		let now = now()
+		if activeMode == .walking, !walkingTracker.recordLocation(context, at: now) { return }
 		lastLocationAt = now
 		movementMonitor.record(context, at: now)
 		if stopIfStationary() { return }
@@ -204,21 +208,36 @@ final class LiveModeCoordinator: ObservableObject {
 			guard !Task.isCancelled, isActive, processingID == operation else { return }
 			// Prefer the newest position after a slow fetch; never report a passed location.
 			guard pendingContext == nil, now().timeIntervalSince(receivedAt) <= 10 else { return }
+			if activeMode == .walking, !WalkingLiveTracker.accepts(context, at: now()) { return }
 			if activeMode == .driving,
 			   let highway = highwayDetector.highwayEntered(in: mapData, context: context, now: now()) {
 				stop(message: LiveHighwayDetector.shutdownMessage(for: highway))
 				return
 			}
 			guard let match = matcher.match(context, in: mapData, mode: activeMode) else { return }
+			var selectedIntersections: [IntersectionCandidate]?
+			if activeMode == .walking {
+				guard let selected = walkingTracker.intersectionsToAnnounce(
+					from: match.context, in: mapData, on: match.roadName,
+					count: activePrefs.spokenIntersectionCount.rawValue, at: now()
+				), !speechController.isSpeaking else { return }
+				selectedIntersections = selected
+			}
 			let result = try await reportService.liveUpcomingResult(
-				from: match.context, mapData: mapData, prefs: activePrefs, preferredRoadName: match.roadName
+				from: match.context, mapData: mapData, prefs: activePrefs, preferredRoadName: match.roadName,
+				selectedIntersections: selectedIntersections
 			)
 			guard !Task.isCancelled, isActive, processingID == operation,
 				  pendingContext == nil, now().timeIntervalSince(receivedAt) <= 10 else { return }
-			guard announcementGate.shouldAnnounce(
-				intersectionID: result.primaryIntersectionID,
-				distanceMeters: result.distanceMeters, mode: activeMode, now: now()
-			) else { return }
+			if activeMode == .walking {
+				guard WalkingLiveTracker.accepts(context, at: now()), !speechController.isSpeaking else { return }
+				walkingTracker.didAnnounce(result.reportedIntersections, in: mapData, on: match.roadName, at: now())
+			} else {
+				guard announcementGate.shouldAnnounce(
+					intersectionID: result.primaryIntersectionID,
+					distanceMeters: result.distanceMeters, mode: activeMode, now: now()
+				) else { return }
+			}
 			statusText = result.text
 			speechController.speak(result.text, settings: activeSpeechSettings, delay: 0)
 		} catch {

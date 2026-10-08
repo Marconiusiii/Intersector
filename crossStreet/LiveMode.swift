@@ -38,7 +38,7 @@ enum LiveTravelMode: String, CaseIterable, Identifiable, Sendable {
 	var announcementDistanceMeters: CLLocationDistance {
 		switch self {
 		case .walking:
-			90
+			20
 		case .driving:
 			350
 		}
@@ -55,6 +55,7 @@ struct LiveUpcomingResult: Equatable {
 	var primaryIntersectionID: String
 	var distanceMeters: CLLocationDistance
 	var text: String
+	var reportedIntersections: [IntersectionCandidate] = []
 }
 
 struct LiveRoadMatch: Equatable {
@@ -280,8 +281,13 @@ struct LiveHighwayDetector {
 
 @MainActor
 protocol LiveSpeaking {
+	var isSpeaking: Bool { get }
 	func speak(_ text: String, settings: LiveSpeechSettings, delay: TimeInterval)
 	func stop()
+}
+
+extension LiveSpeaking {
+	var isSpeaking: Bool { false }
 }
 
 struct SpeechUtteranceTracker {
@@ -311,6 +317,7 @@ final class SystemSpeechController: NSObject, LiveSpeaking, @preconcurrency AVSp
 	private let synthesizer = AVSpeechSynthesizer()
 	private var utteranceTracker = SpeechUtteranceTracker()
 	private var audioSessionToken: UUID?
+	var isSpeaking: Bool { synthesizer.isSpeaking || synthesizer.isPaused }
 
 	private override init() {
 		super.init()

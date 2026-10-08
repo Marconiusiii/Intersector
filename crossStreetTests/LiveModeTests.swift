@@ -218,16 +218,16 @@ struct LiveModeTests {
 		#expect(walkingMatch?.roadName == "Garden Path")
 	}
 
-	@Test func announcementGateUsesModeDistanceAndSuppressesRepeats() {
+	@Test func drivingAnnouncementGateRetainsItsDistanceAndSuppressesRepeats() {
 		var gate = LiveAnnouncementGate()
 		let now = Date(timeIntervalSince1970: 1_000)
 
-		let tooFar = gate.shouldAnnounce(intersectionID: "first", distanceMeters: 100, mode: .walking, now: now)
-		let firstApproach = gate.shouldAnnounce(intersectionID: "first", distanceMeters: 80, mode: .walking, now: now)
+		let tooFar = gate.shouldAnnounce(intersectionID: "first", distanceMeters: 360, mode: .driving, now: now)
+		let firstApproach = gate.shouldAnnounce(intersectionID: "first", distanceMeters: 340, mode: .driving, now: now)
 		let repeatedApproach = gate.shouldAnnounce(
 			intersectionID: "first",
 			distanceMeters: 40,
-			mode: .walking,
+			mode: .driving,
 			now: now.addingTimeInterval(30)
 		)
 		let drivingApproach = gate.shouldAnnounce(intersectionID: "second", distanceMeters: 300, mode: .driving, now: now)
@@ -457,7 +457,9 @@ struct LiveDrivingReliabilityTests {
 		#expect(location.mode == .walking)
 		for index in 0..<4 {
 			clock.date = clock.date.addingTimeInterval(2)
-			location.continuation?.yield(context(Double(index) * 0.0002))
+			var walkingContext = context(Double(index) * 0.0002)
+			walkingContext.measuredAt = clock.date
+			location.continuation?.yield(walkingContext)
 			await settle()
 		}
 		live.switchMode(to: .driving)
@@ -560,7 +562,9 @@ struct LiveDrivingReliabilityTests {
 		let live = coordinator(location, map, speech, clock)
 		live.start(mode: .walking, prefs: AppPrefs(), speechSettings: settings, stationaryMinutes: 10)
 		await settle()
-		location.continuation?.yield(context())
+		var walkingContext = context()
+		walkingContext.measuredAt = clock.date
+		location.continuation?.yield(walkingContext)
 		await settle()
 		map.failure = URLError(.timedOut)
 		live.switchMode(to: .driving)

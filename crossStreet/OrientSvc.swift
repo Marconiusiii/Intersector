@@ -378,9 +378,10 @@ struct OrientSvc {
 		from context: DeviceContext,
 		mapData: MapDataSet,
 		prefs: AppPrefs,
-		preferredRoadName: String
+		preferredRoadName: String,
+		selectedIntersections: [IntersectionCandidate]? = nil
 	) async throws -> LiveUpcomingResult {
-		let ranked = mapData.upcomingRoadSequence(
+		let ranked = selectedIntersections ?? mapData.upcomingRoadSequence(
 			from: context,
 			preferredRoadName: preferredRoadName
 		) ?? []
@@ -389,6 +390,7 @@ struct OrientSvc {
 		}
 		let neighborhoodContext = await neighborhoodContext(for: prefs, from: context)
 		var reports: [OrientReport] = []
+		var reportedIntersections: [IntersectionCandidate] = []
 		for match in ranked {
 			let report = makeReport(
 				.upcoming,
@@ -400,6 +402,7 @@ struct OrientSvc {
 			)
 			if !reports.containsSpokenIntersection(matching: report) {
 				reports.append(report)
+				reportedIntersections.append(match)
 			}
 			if reports.count == prefs.spokenIntersectionCount.rawValue {
 				break
@@ -411,7 +414,8 @@ struct OrientSvc {
 		return LiveUpcomingResult(
 			primaryIntersectionID: primary.id,
 			distanceMeters: Geo.distanceMeters(from: context.coordinate, to: primary.coordinate),
-			text: IntersectionReportList(reports: reports).text(with: prefs)
+			text: IntersectionReportList(reports: reports).text(with: prefs),
+			reportedIntersections: reportedIntersections
 		)
 	}
 

@@ -311,6 +311,8 @@ struct DeviceContext: Equatable {
 	var courseAccuracy: CLLocationDirection? = nil
 	var speedMetersPerSecond: CLLocationSpeed? = nil
 	var horizontalAccuracy: CLLocationAccuracy? = nil
+	var measuredAt: Date? = nil
+	var speedAccuracyMetersPerSecond: CLLocationSpeedAccuracy? = nil
 
 	var dependableTravelDirection: CLLocationDirection? {
 		if
@@ -433,6 +435,11 @@ private struct RoadStartSegment {
 	var tangentY: Double
 }
 
+struct UpcomingRoadPosition {
+	var intersection: IntersectionCandidate
+	var metersAhead: CLLocationDistance
+}
+
 struct MapDataSet: Equatable {
 	var intersections: [IntersectionCandidate]
 	var roads: [MapRoad]
@@ -489,6 +496,13 @@ struct MapDataSet: Equatable {
 		from context: DeviceContext,
 		preferredRoadName: String? = nil
 	) -> [IntersectionCandidate]? {
+		positionsAlongUpcomingRoad(from: context, preferredRoadName: preferredRoadName)?.map(\.intersection)
+	}
+
+	func positionsAlongUpcomingRoad(
+		from context: DeviceContext,
+		preferredRoadName: String? = nil
+	) -> [UpcomingRoadPosition]? {
 		guard
 			let heading = context.headingDegrees,
 			let road = currentRoad(from: context, preferredRoadName: preferredRoadName)
@@ -552,7 +566,9 @@ struct MapDataSet: Equatable {
 					< Geo.distanceMeters(from: context.coordinate, to: rhs.candidate.coordinate)
 			}
 
-		return positioned.isEmpty ? nil : positioned.map(\.candidate)
+		return positioned.isEmpty ? nil : positioned.map {
+			UpcomingRoadPosition(intersection: $0.candidate, metersAhead: $0.progress)
+		}
 	}
 
 	func streetPosition(
