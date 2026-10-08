@@ -553,7 +553,7 @@ The final candidate has:
 - the road names
 - the coordinate
 
-When crossings are enabled, a crossing node on one named road can also become a candidate. The app names that candidate with copy like `Crossing on Oak Street`. Crossing nodes within 30 meters of a true street intersection are suppressed so they do not create nearly identical ranked results.
+When crossings are enabled, a crossing must share an OpenStreetMap node with a named public street. Nearby points or paths do not establish a road connection. A crossing point and crossing paths sharing that node produce one candidate at the road connection, with node details taking precedence over path details. Explicit `crossing=no` tags are rejected; an unmarked crossing is still valid. Both representations use the same street-intersection and corner-cluster suppression rules. The app names retained candidates with copy like `Crossing on Oak Street`. See `CrossingRegressionChecks.md` for the Riverside Drive replay and phone/Watch checks.
 
 ## MapDataSet
 

@@ -697,10 +697,6 @@ private extension OverpassElement {
 }
 
 private extension MapRoad {
-	func contains(_ coordinate: CLLocationCoordinate2D) -> Bool {
-		minimumDistance(to: coordinate) <= 12
-	}
-
 	var isPublicStreet: Bool {
 		IntersectionBuilder.publicStreetHighways.contains(highway)
 	}
@@ -803,57 +799,9 @@ struct IntersectionBuilder {
 		}
 
 		if options.includeCrossings {
-			let streetIntersections = intersections
-			let crossingNodeCoordinates = crossingNodeCoordinates(from: response.elements)
-			let crossingCandidates = response.elements.compactMap { element -> IntersectionCandidate? in
-				guard
-					element.type == "node",
-					isCrossing(element.tags),
-					!isRoadJunctionCrossing(element.id, namesByNode: publicRoadNamesByNode),
-					!crossingNodeIsClaimedOnlyByNonPublicWay(element.id, in: response.elements),
-					let coordinate = nodes[element.id],
-					let road = crossingRoad(
-						for: element.id,
-						at: coordinate,
-						namesByNode: namesByNode,
-						roads: roads
-					)
-				else {
-					return nil
-				}
-
-				guard !shouldSuppressCrossing(
-					at: coordinate,
-					on: road,
-					streetIntersections: streetIntersections,
-					crossingNodeCoordinates: crossingNodeCoordinates
-				) else {
-					return nil
-				}
-				let anchor = nearestIntersection(
-					to: coordinate,
-					on: road.name,
-					in: streetIntersections
-				)
-				let title = crossingTitle(on: road.name, near: anchor)
-				let candidate = IntersectionCandidate(
-					id: "crossing-\(element.id)",
-					names: [title],
-					coordinate: coordinate,
-					associatedRoadNames: [road.name],
-					intersectionDetails: intersectionDetails(from: element.tags)
-				)
-				return candidate
-			}
-			intersections.append(contentsOf: crossingCandidates)
-			let crossingWayCandidates = crossingWayCandidates(
-				from: response,
-				nodes: nodes,
-				roads: roads,
-				streetIntersections: streetIntersections
-			)
-			let existingIDs = Set(intersections.map(\.id))
-			intersections.append(contentsOf: crossingWayCandidates.filter { !existingIDs.contains($0.id) })
+			intersections.append(contentsOf: crossingCandidates(
+				from: response, roads: roads, streetIntersections: intersections
+			))
 		}
 
 		return MapDataSet(intersections: intersections, roads: roads)
@@ -868,90 +816,69 @@ struct IntersectionBuilder {
 			return coreData
 		}
 
-		var intersections = coreData.intersections
-		let streetIntersections = intersections.filter { !$0.id.hasPrefix("crossing-") }
-		let crossingNodeCoordinates = crossingNodeCoordinates(from: crossingResponse.elements)
-		let crossingCandidates = crossingResponse.elements.compactMap { element -> IntersectionCandidate? in
-			guard
-				element.type == "node",
-				isCrossing(element.tags),
-				!crossingNodeIsClaimedOnlyByNonPublicWay(element.id, in: crossingResponse.elements),
-				let coordinate = element.coordinate,
-				let road = coreData.roads.first(where: { $0.isPublicStreet && $0.contains(coordinate) })
-			else {
-				return nil
-			}
+		let streetIntersections = coreData.intersections.filter { !$0.id.hasPrefix("crossing-") }
+		let candidates = crossingCandidates(
+			from: crossingResponse, roads: coreData.roads, streetIntersections: streetIntersections
+		)
+		let existingIDs = Set(coreData.intersections.map(\.id))
+		return MapDataSet(
+			intersections: coreData.intersections + candidates.filter { !existingIDs.contains($0.id) },
+			roads: coreData.roads
+		)
+	}
 
-			guard !shouldSuppressCrossing(
-				at: coordinate,
-				on: road,
-				streetIntersections: streetIntersections,
-				crossingNodeCoordinates: crossingNodeCoordinates
-			) else {
-				return nil
+	// A crossing belongs to a road only at a shared OSM node. Distance alone
+	// cannot establish connectivity between parallel or grade-separated ways.
+	private func crossingCandidates(
+		from response: OverpassResponse,
+		roads: [MapRoad],
+		streetIntersections: [IntersectionCandidate]
+	) -> [IntersectionCandidate] {
+		let nodes = Dictionary(uniqueKeysWithValues: response.elements.filter { $0.type == "node" }.map { ($0.id, $0) })
+		let publicRoads = roads.filter(\.isPublicStreet)
+		var roadsByNode: [Int64: [MapRoad]] = [:]
+		for road in publicRoads {
+			for nodeID in road.nodeIDs {
+				roadsByNode[nodeID, default: []].append(road)
 			}
-			let anchor = nearestIntersection(
-				to: coordinate,
-				on: road.name,
-				in: streetIntersections
-			)
-			let title = crossingTitle(on: road.name, near: anchor)
+		}
+		var evidence: [Int64: [String: String]] = [:]
+		for node in nodes.values where isCrossing(node.tags) {
+			evidence[node.id] = node.tags ?? [:]
+		}
+		// Point and path representations share the connection node's identity.
+		// Keep node details authoritative when a path supplies additional tags.
+		for way in response.elements where way.type == "way" && isCrossingWay(way.tags) && hasStrongCrossingEvidence(way.tags) {
+			for nodeID in way.nodes ?? [] where roadsByNode[nodeID] != nil {
+				guard let node = nodes[nodeID], node.tags?["crossing"]?.lowercased() != "no" else { continue }
+				let tags = (way.tags ?? [:]).merging(node.tags ?? [:]) { _, nodeValue in nodeValue }
+				evidence[nodeID] = tags.merging(evidence[nodeID] ?? [:]) { _, existingValue in existingValue }
+			}
+		}
+		let crossingCoordinates = evidence.keys.compactMap { nodeID -> CLLocationCoordinate2D? in
+			guard let connected = roadsByNode[nodeID], Set(connected.map(\.name)).count == 1 else { return nil }
+			return nodes[nodeID]?.coordinate
+		}
+		return evidence.keys.sorted().compactMap { nodeID in
+			guard
+				let connected = roadsByNode[nodeID],
+				Set(connected.map(\.name)).count == 1,
+				let road = connected.first,
+				let coordinate = nodes[nodeID]?.coordinate,
+				!shouldSuppressCrossing(
+					at: coordinate, on: road, streetIntersections: streetIntersections,
+					crossingNodeCoordinates: crossingCoordinates
+				)
+			else { return nil }
+			let anchor = nearestIntersection(to: coordinate, on: road.name, in: streetIntersections)
 			return IntersectionCandidate(
-				id: "crossing-\(element.id)",
-				names: [title],
+				id: "crossing-\(nodeID)",
+				names: [crossingTitle(on: road.name, near: anchor)],
 				coordinate: coordinate,
 				associatedRoadNames: [road.name],
-				intersectionDetails: intersectionDetails(from: element.tags)
+				intersectionDetails: intersectionDetails(from: evidence[nodeID])
 			)
 		}
-
-		let existingIDs = Set(intersections.map(\.id))
-		intersections.append(contentsOf: crossingCandidates.filter { !existingIDs.contains($0.id) })
-		let crossingWayCandidates = crossingWayCandidates(
-			from: crossingResponse,
-			nodes: Dictionary(
-				uniqueKeysWithValues: crossingResponse.elements.compactMap { element -> (Int64, CLLocationCoordinate2D)? in
-					guard element.type == "node", let coordinate = element.coordinate else {
-						return nil
-					}
-					return (element.id, coordinate)
-				}
-			),
-			roads: coreData.roads,
-			streetIntersections: streetIntersections
-		)
-		let updatedIDs = Set(intersections.map(\.id))
-		intersections.append(contentsOf: crossingWayCandidates.filter { !updatedIDs.contains($0.id) })
-		return MapDataSet(intersections: intersections, roads: coreData.roads)
-	}
-
-	private func crossingNodeCoordinates(from elements: [OverpassElement]) -> [CLLocationCoordinate2D] {
-		elements.compactMap { element in
-			guard element.type == "node", isCrossing(element.tags) else {
-				return nil
-			}
-			return element.coordinate
-		}
-	}
-
-	private func crossingNodeIsClaimedOnlyByNonPublicWay(
-		_ nodeID: Int64,
-		in elements: [OverpassElement]
-	) -> Bool {
-		let containingHighways = elements.compactMap { element -> String? in
-			guard
-				element.type == "way",
-				element.nodes?.contains(nodeID) == true,
-				let highway = element.tags?["highway"]
-			else {
-				return nil
-			}
-			return highway
-		}
-		guard !containingHighways.isEmpty else {
-			return false
-		}
-		return !containingHighways.contains { Self.publicStreetHighways.contains($0) }
 	}
 
 	private func shouldSuppressCrossing(
@@ -978,96 +905,6 @@ struct IntersectionBuilder {
 			Geo.distanceMeters(from: $0, to: coordinate) <= Self.cornerCrosswalkClusterRadiusMeters
 		}.count
 		return nearbyCrossingCount >= Self.cornerCrosswalkClusterCount
-	}
-
-	private func isRoadJunctionCrossing(
-		_ nodeID: Int64,
-		namesByNode: [Int64: Set<String>]
-	) -> Bool {
-		(namesByNode[nodeID]?.count ?? 0) >= 2
-	}
-
-	private func crossingRoad(
-		for nodeID: Int64,
-		at coordinate: CLLocationCoordinate2D,
-		namesByNode: [Int64: Set<String>],
-		roads: [MapRoad]
-	) -> MapRoad? {
-		if
-			let roadNames = namesByNode[nodeID]?.sorted(),
-			roadNames.count == 1,
-			let roadName = roadNames.first,
-			let road = roads.first(where: { $0.name == roadName && $0.isPublicStreet })
-		{
-			return road
-		}
-		return roads
-			.filter { $0.isPublicStreet && $0.contains(coordinate) }
-			.min { $0.minimumDistance(to: coordinate) < $1.minimumDistance(to: coordinate) }
-	}
-
-	private func crossingWayCandidates(
-		from response: OverpassResponse,
-		nodes: [Int64: CLLocationCoordinate2D],
-		roads: [MapRoad],
-		streetIntersections: [IntersectionCandidate]
-	) -> [IntersectionCandidate] {
-		response.elements.compactMap { element -> IntersectionCandidate? in
-			guard
-				element.type == "way",
-				isCrossingWay(element.tags),
-				hasStrongCrossingEvidence(element.tags),
-				let wayNodes = element.nodes,
-				!wayNodes.isEmpty
-			else {
-				return nil
-			}
-			let coordinates = wayNodes.compactMap { nodes[$0] }
-			guard let coordinate = midpoint(of: coordinates) else {
-				return nil
-			}
-			let matchingRoads = roads
-				.filter { $0.isPublicStreet && crossingWay(wayNodes: wayNodes, coordinates: coordinates, crosses: $0) }
-			guard let road = matchingRoads.min(by: {
-				$0.minimumDistance(to: coordinate) < $1.minimumDistance(to: coordinate)
-			}) else {
-				return nil
-			}
-			let duplicatesStreetIntersection = streetIntersections.contains {
-				Geo.distanceMeters(from: $0.coordinate, to: coordinate) < Self.streetIntersectionDuplicateRadiusMeters
-			}
-			guard !duplicatesStreetIntersection else {
-				return nil
-			}
-			let anchor = nearestIntersection(to: coordinate, on: road.name, in: streetIntersections)
-			return IntersectionCandidate(
-				id: "crossing-way-\(element.id)",
-				names: [crossingTitle(on: road.name, near: anchor)],
-				coordinate: coordinate,
-				associatedRoadNames: [road.name],
-				intersectionDetails: intersectionDetails(from: element.tags)
-			)
-		}
-	}
-
-	private func crossingWay(
-		wayNodes: [Int64],
-		coordinates: [CLLocationCoordinate2D],
-		crosses road: MapRoad
-	) -> Bool {
-		if !Set(wayNodes).isDisjoint(with: road.nodeIDs) {
-			return true
-		}
-		return coordinates.contains { road.contains($0) }
-	}
-
-	private func midpoint(of coordinates: [CLLocationCoordinate2D]) -> CLLocationCoordinate2D? {
-		guard !coordinates.isEmpty else {
-			return nil
-		}
-		let latitude = coordinates.map(\.latitude).reduce(0, +) / Double(coordinates.count)
-		let longitude = coordinates.map(\.longitude).reduce(0, +) / Double(coordinates.count)
-		return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
 	}
 
 	private func crossingTitle(
@@ -1127,7 +964,7 @@ struct IntersectionBuilder {
 	}
 
 	private func hasStrongCrossingEvidence(_ tags: [String: String]?) -> Bool {
-		guard let tags else {
+		guard let tags, tags["crossing"]?.lowercased() != "no" else {
 			return false
 		}
 		let crossing = tags["crossing"]?.lowercased()
@@ -1139,7 +976,8 @@ struct IntersectionBuilder {
 	}
 
 	private func isCrossing(_ tags: [String: String]?) -> Bool {
-		tags?["highway"] == "crossing" || tags?["crossing"] != nil || tags?["crossing_ref"] != nil
+		guard tags?["crossing"]?.lowercased() != "no" else { return false }
+		return tags?["highway"] == "crossing" || tags?["crossing"] != nil
 	}
 
 	private func intersectionDetails(from tags: [String: String]?) -> IntersectionDetails? {

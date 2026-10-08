@@ -2601,7 +2601,7 @@ struct IntersectorTests {
 		#expect(enrichedData.intersections.map(\.title) == ["Foothill Boulevard and Talbot Avenue"])
 	}
 
-	@Test func intersectionBuilderAnchorsNearbyCrossingsThatAreNotRoadNodes() async throws {
+	@Test func intersectionBuilderRejectsNearbyCrossingsThatAreNotRoadNodes() async throws {
 		let coreResponse = OverpassResponse(
 			elements: [
 				OverpassElement(type: "node", id: 1, lat: 37.0, lon: -122.0, nodes: nil, tags: nil),
@@ -2623,7 +2623,7 @@ struct IntersectorTests {
 			coreData: coreData
 		)
 
-		#expect(enrichedData.intersections.map(\.title) == ["Crossing on Oak Street"])
+		#expect(enrichedData.intersections.isEmpty)
 	}
 
 	@Test func intersectionBuilderSuppressesCrossingBesideStreetIntersection() async throws {
