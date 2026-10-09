@@ -36,3 +36,33 @@ private final class CrossingFixtureBundle: NSObject {}
         }
     }
 }
+
+@MainActor struct IntersectionDetailTests {
+    @Test(arguments: IntersectionDetailFixture.cases.indices)
+    func mappedDetails(caseIndex: Int) throws {
+        let fixture = IntersectionDetailFixture.cases[caseIndex]
+        for reversePaths in [false, true] {
+            let response = try JSONDecoder().decode(OverpassResponse.self, from: fixture.responseData(reversePaths: reversePaths))
+            let builder = IntersectionBuilder()
+            let options = MapDetailOptions(includeCrossings: true)
+            let core = builder.mapData(from: response)
+            let direct = builder.mapData(from: response, options: options)
+            let enriched = builder.mapData(from: response, options: options, coreData: core)
+            let repeated = builder.mapData(from: response, options: options, coreData: enriched)
+            for map in [direct, enriched, repeated] {
+                #expect(map.intersections.count == 1, "\(fixture.name): no extra results")
+                let candidate = try #require(map.intersections.first { $0.id == fixture.candidateID }, "\(fixture.name): result")
+                #expect(candidate.intersectionDetails?.spokenPhrases ?? [] == fixture.phrases, "\(fixture.name): phrases")
+                let report = OrientReport(kind: .nearest, cross: candidate.title, dist: "100 feet", relDir: "ahead", relDegrees: 0,
+                                          street: nil, head: nil, area: nil, toward: nil, conf: .high,
+                                          intersectionDetails: candidate.intersectionDetails)
+                var prefs = AppPrefs()
+                let plain = "Nearest: \(candidate.title), about 100 feet ahead"
+                #expect(report.text(with: prefs) == plain + ".", "\(fixture.name): setting off")
+                prefs.announcementOptions.includeIntersectionDetails = true
+                let suffix = fixture.phrases.isEmpty ? "" : ", " + fixture.phrases.joined(separator: ", ")
+                #expect(report.text(with: prefs) == plain + suffix + ".", "\(fixture.name): setting on")
+            }
+        }
+    }
+}

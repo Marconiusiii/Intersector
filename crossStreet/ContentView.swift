@@ -1360,7 +1360,9 @@ struct ContentView: View {
 			conf: .high,
 			intersectionDetails: IntersectionDetails(
 				isSignalized: true,
-				hasPedestrianIsland: true
+				hasPedestrianIsland: true,
+				hasAudiblePedestrianSignal: true,
+				isStreetIntersection: !includeCrossings
 			)
 		)
 		return report.text(with: prefs)
@@ -1936,7 +1938,7 @@ struct ContentView: View {
 
 			Text("Neighborhood adds a neighborhood or local area name when one is available. Nearby only announces the area closest to your current location. Nearby and toward can also announce a different area in the direction your phone is pointing.")
 
-			Text("Intersection Details adds useful mapped information such as traffic signals and pedestrian islands. If a detail has not been added to the map, Intersector cannot announce it.")
+			Text("Turn on Intersection Details to include mapped traffic signals, audible pedestrian signals, and pedestrian islands. Audible pedestrian signals replace the general signal description. Map details do not report the current signal or whether equipment is working.")
 
 			Text("Spoken Intersections chooses whether Nearest and Upcoming speak one, two, or three results. Nearest reports the closest intersections. Upcoming reports the next intersections along the road ahead.")
 		}

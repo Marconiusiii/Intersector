@@ -22,7 +22,9 @@ No `crossing=no` records were present in this downloaded sample. The negative-ta
 
 The same 18 fixtures run against the production phone and Watch builders, with Walking Paths on and off, through direct loading, enrichment, and repeated enrichment. They check crossing identities, counts, road association, coordinates, and signal details. Cases include explicit negative tags, valid unmarked crossings, point/path duplicates, split paths, displaced path averages, nearby orphan points, parallel paths, grade-separated geometry without a shared road node, ordinary junctions, multiple-road crossings, and the real Riverside response.
 
-Run the phone `CrossingRegressionTests` suite with Xcode. Run Watch checks from the repository root with:
+An additional 24 shared detail fixtures check audible walk signals versus locator-only tones, contradictory point/path tags, islands, and exact-node intersection enrichment. Both parsers run each case through direct loading, enrichment, and repeated enrichment, with path order reversed. Full announcement checks cover Intersection Details on and off and verify that audible pedestrian signals replace the generic signal phrase. Nearby suppressed crossings do not supply details to an intersection by proximity.
+
+Run the phone `CrossingRegressionTests` and `IntersectionDetailTests` suites with Xcode. Run Watch checks from the repository root with:
 
 ```sh
 python3 Tools/WatchUpcomingChecks/run-crossing-checks.py

@@ -1085,11 +1085,15 @@ struct WatchIntersectionCandidate: Identifiable, Equatable {
 struct WatchIntersectionDetails: Equatable, Hashable {
 	var isSignalized = false
 	var hasPedestrianIsland = false
+	var hasAudiblePedestrianSignal = false
+	var isStreetIntersection = false
 
 	var spokenPhrases: [String] {
 		var phrases: [String] = []
-		if isSignalized {
-			phrases.append("signalized crossing")
+		if hasAudiblePedestrianSignal {
+			phrases.append("audible pedestrian signal")
+		} else if isSignalized {
+			phrases.append(isStreetIntersection ? "signalized intersection" : "signalized crossing")
 		}
 		if hasPedestrianIsland {
 			phrases.append("pedestrian island")
@@ -2370,6 +2374,9 @@ struct WatchIntersectionBuilder {
 			)
 		}
 
+		let evidence = options.includeCrossings
+			? crossingEvidence(from: response, roadNodeIDs: Set(publicRoadNamesByNode.keys))
+			: [:]
 		var intersections = namesByNode.compactMap { entry -> WatchIntersectionCandidate? in
 			let (nodeID, names) = entry
 			guard names.count >= 2, let coordinate = nodes[nodeID] else {
@@ -2383,7 +2390,10 @@ struct WatchIntersectionBuilder {
 			return WatchIntersectionCandidate(
 				id: String(nodeID),
 				names: names.sorted(),
-				coordinate: coordinate
+				coordinate: coordinate,
+				intersectionDetails: intersectionDetails(
+					from: evidence[nodeID] ?? [nodeTags ?? [:]], isStreetIntersection: true
+				)
 			)
 		}
 		if options.includeCrossings {
@@ -2404,13 +2414,33 @@ struct WatchIntersectionBuilder {
 			return coreData
 		}
 
-		let streetIntersections = coreData.intersections.filter { !$0.id.hasPrefix("crossing-") }
+		let nodes = Dictionary(uniqueKeysWithValues: crossingResponse.elements
+			.filter { $0.type == "node" }.map { ($0.id, $0) })
+		let evidence = crossingEvidence(
+			from: crossingResponse,
+			roadNodeIDs: Set(coreData.roads.filter(\.isPublicStreet).flatMap(\.nodeIDs))
+		)
+		// Only the identical OSM node can enrich an existing intersection.
+		// Nearby corner crossings do not establish which intersection leg has a feature.
+		let updatedIntersections = coreData.intersections.map { original in
+			var candidate = original
+			let isCrossingResult = candidate.id.hasPrefix("crossing-")
+			let nodeIDText = isCrossingResult ? String(candidate.id.dropFirst("crossing-".count)) : candidate.id
+			if let nodeID = Int64(nodeIDText), let node = nodes[nodeID] {
+				candidate.intersectionDetails = intersectionDetails(
+					from: evidence[nodeID] ?? [node.tags ?? [:]],
+					isStreetIntersection: !isCrossingResult
+				)
+			}
+			return candidate
+		}
+		let streetIntersections = updatedIntersections.filter { !$0.id.hasPrefix("crossing-") }
 		let candidates = crossingCandidates(
 			from: crossingResponse, roads: coreData.roads, streetIntersections: streetIntersections
 		)
 		let existingIDs = Set(coreData.intersections.map(\.id))
 		return WatchMapDataSet(
-			intersections: coreData.intersections + candidates.filter { !existingIDs.contains($0.id) },
+			intersections: updatedIntersections + candidates.filter { !existingIDs.contains($0.id) },
 			roads: coreData.roads
 		)
 	}
@@ -2430,19 +2460,7 @@ struct WatchIntersectionBuilder {
 				roadsByNode[nodeID, default: []].append(road)
 			}
 		}
-		var evidence: [Int64: [String: String]] = [:]
-		for node in nodes.values where isCrossing(node.tags) {
-			evidence[node.id] = node.tags ?? [:]
-		}
-		// Point and path representations share the connection node's identity.
-		// Keep node details authoritative when a path supplies additional tags.
-		for way in response.elements where way.type == "way" && isCrossingWay(way.tags) && hasStrongCrossingEvidence(way.tags) {
-			for nodeID in way.nodes ?? [] where roadsByNode[nodeID] != nil {
-				guard let node = nodes[nodeID], node.tags?["crossing"]?.lowercased() != "no" else { continue }
-				let tags = (way.tags ?? [:]).merging(node.tags ?? [:]) { _, nodeValue in nodeValue }
-				evidence[nodeID] = tags.merging(evidence[nodeID] ?? [:]) { _, existingValue in existingValue }
-			}
-		}
+		let evidence = crossingEvidence(from: response, roadNodeIDs: Set(roadsByNode.keys))
 		let crossingCoordinates = evidence.keys.compactMap { nodeID -> CLLocationCoordinate2D? in
 			guard let connected = roadsByNode[nodeID], Set(connected.map(\.name)).count == 1 else { return nil }
 			return nodes[nodeID]?.coordinate
@@ -2464,9 +2482,35 @@ struct WatchIntersectionBuilder {
 				names: [crossingTitle(on: road.name, near: anchor)],
 				coordinate: coordinate,
 				associatedRoadNames: [road.name],
-				intersectionDetails: intersectionDetails(from: evidence[nodeID])
+				intersectionDetails: intersectionDetails(from: evidence[nodeID] ?? [])
 			)
 		}
+	}
+
+	private func crossingEvidence(
+		from response: WatchOverpassResponse,
+		roadNodeIDs: Set<Int64>
+	) -> [Int64: [[String: String]]] {
+		let nodes = Dictionary(uniqueKeysWithValues: response.elements
+			.filter { $0.type == "node" }.map { ($0.id, $0) })
+		var evidence: [Int64: [[String: String]]] = [:]
+		for node in nodes.values where isCrossing(node.tags) {
+			evidence[node.id] = [node.tags ?? [:]]
+		}
+		let paths = response.elements.filter { $0.type == "way" && isCrossingWay($0.tags) }
+		for way in paths where hasStrongCrossingEvidence(way.tags) {
+			for nodeID in way.nodes ?? [] where roadNodeIDs.contains(nodeID) {
+				guard let node = nodes[nodeID], node.tags?["crossing"]?.lowercased() != "no" else { continue }
+				if evidence[nodeID] == nil { evidence[nodeID] = [node.tags ?? [:]] }
+			}
+		}
+		// Retain all sources, including negative paths, independent of response order.
+		for way in paths {
+			for nodeID in way.nodes ?? [] where roadNodeIDs.contains(nodeID) && evidence[nodeID] != nil {
+				evidence[nodeID, default: []].append(way.tags ?? [:])
+			}
+		}
+		return evidence
 	}
 
 	private func shouldSuppressCrossing(
@@ -2550,6 +2594,7 @@ struct WatchIntersectionBuilder {
 		return crossing == "traffic_signals" ||
 			crossing == "marked" ||
 			isPositive(tags["crossing:signals"]) ||
+			["yes", "walk"].contains(tags["traffic_signals:sound"]?.lowercased()) ||
 			["zebra", "ladder", "yes"].contains(markings)
 	}
 
@@ -2558,14 +2603,32 @@ struct WatchIntersectionBuilder {
 		return tags?["highway"] == "crossing" || tags?["crossing"] != nil
 	}
 
-	private func intersectionDetails(from tags: [String: String]?) -> WatchIntersectionDetails? {
-		guard let tags else {
-			return nil
+	private func intersectionDetails(
+		from sources: [[String: String]],
+		isStreetIntersection: Bool = false
+	) -> WatchIntersectionDetails? {
+		let tags = sources.map { $0.mapValues { $0.lowercased() } }
+		guard !tags.contains(where: { $0["crossing"] == "no" }) else { return nil }
+		let soundValues = tags.compactMap { $0["traffic_signals:sound"] }
+		let hasCrossing = tags.contains { isCrossing($0) || isCrossingWay($0) }
+		let signalValues = tags.compactMap { $0["crossing:signals"] }
+		let signalConflict = signalValues.contains { !isPositive($0) } ||
+			tags.contains { $0["crossing"] == "uncontrolled" }
+		let hasAudibleSignal = hasCrossing && !signalConflict && !soundValues.isEmpty &&
+			soundValues.allSatisfy { $0 == "yes" || $0 == "walk" }
+		let hasSignal = !signalConflict && (hasAudibleSignal || tags.contains {
+			$0["crossing"] == "traffic_signals" || isPositive($0["crossing:signals"]) ||
+			(isStreetIntersection && $0["highway"] == "traffic_signals" && $0["traffic_signals"] == nil)
+		})
+		let islandValues = tags.compactMap { $0["crossing:island"] }
+		let hasIsland = islandValues.allSatisfy { isPositive($0) } && tags.contains {
+			$0["crossing"] == "island" || isPositive($0["crossing:island"])
 		}
-		let crossing = tags["crossing"]?.lowercased()
 		let details = WatchIntersectionDetails(
-			isSignalized: crossing == "traffic_signals" || isPositive(tags["crossing:signals"]),
-			hasPedestrianIsland: crossing == "island" || isPositive(tags["crossing:island"])
+			isSignalized: hasSignal,
+			hasPedestrianIsland: hasIsland,
+			hasAudiblePedestrianSignal: hasAudibleSignal,
+			isStreetIntersection: isStreetIntersection
 		)
 		return details.isEmpty ? nil : details
 	}
