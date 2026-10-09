@@ -527,7 +527,7 @@ struct WatchOrientationService {
 			let otherNames = mapData.crossStreetNames(
 				for: match,
 				on: roadName,
-				heading: context.dependableTravelDirection
+				heading: context.headingDegrees
 			)
 			return otherNames.isEmpty ? nil : otherNames.joined(separator: " and ")
 		}
@@ -1477,12 +1477,21 @@ struct WatchMapDataSet: Equatable {
 			return []
 		}
 		let candidates = splitIntersectionCandidates(for: match, on: roadName)
-		let orderedCandidates = orderedSplitCandidates(candidates, roadName: roadName, heading: heading)
-		return orderedCandidates.reduce(into: []) { names, candidate in
-			for name in candidate.names where name != roadName && !names.contains(name) {
-				names.append(name)
+		// Sort names individually: opposite branches can share one OSM node.
+		var branches: [(name: String, candidate: WatchIntersectionCandidate)] = []
+		for candidate in candidates {
+			for name in candidate.names where name != roadName && !branches.contains(where: { $0.name == name }) {
+				branches.append((name, candidate))
 			}
 		}
+		guard let heading, heading.isFinite, heading >= 0 else {
+			return branches.map(\.name)
+		}
+		return branches.enumerated().sorted { lhs, rhs in
+			let left = sideScore(for: lhs.element.name, at: lhs.element.candidate, heading: heading)
+			let right = sideScore(for: rhs.element.name, at: rhs.element.candidate, heading: heading)
+			return left == right ? lhs.offset < rhs.offset : left > right
+		}.map { $0.element.name }
 	}
 
 	private func splitIntersectionCandidates(
@@ -1522,58 +1531,21 @@ struct WatchMapDataSet: Equatable {
 		return abs(candidatePosition) <= 30
 	}
 
-	private func orderedSplitCandidates(
-		_ candidates: [WatchIntersectionCandidate],
-		roadName: String,
-		heading: CLLocationDirection?
-	) -> [WatchIntersectionCandidate] {
-		guard let heading else {
-			return candidates.sorted {
-				WatchGeo.distanceMeters(from: candidates[0].coordinate, to: $0.coordinate)
-					< WatchGeo.distanceMeters(from: candidates[0].coordinate, to: $1.coordinate)
-			}
-		}
-		return candidates.enumerated().sorted { lhs, rhs in
-			let lhsSide = sideScore(for: lhs.element, roadName: roadName, heading: heading)
-			let rhsSide = sideScore(for: rhs.element, roadName: roadName, heading: heading)
-			if lhsSide != rhsSide {
-				return lhsSide > rhsSide
-			}
-			return lhs.offset < rhs.offset
-		}.map(\.element)
-	}
-
 	private func sideScore(
-		for candidate: WatchIntersectionCandidate,
-		roadName: String,
+		for roadName: String,
+		at candidate: WatchIntersectionCandidate,
 		heading: CLLocationDirection
 	) -> Double {
-		let vectors = candidate.names
-			.filter { $0 != roadName }
-			.compactMap { crossStreetVector(for: $0, from: candidate.coordinate) }
-		guard let vector = vectors.first else {
+		let nodeID = Int64(candidate.id)
+		let connectedRoads = roads.filter { road in
+			road.name == roadName && (nodeID.map { road.nodeIDs.contains($0) }
+				?? road.coordinates.contains { WatchGeo.distanceMeters(from: candidate.coordinate, to: $0) < 1 })
+		}
+		guard let vector = connectedRoads.compactMap({ $0.vectorAway(from: candidate.coordinate) }).first else {
 			return 0
 		}
 		let radians = heading * Double.pi / 180
-		let headingX = sin(radians)
-		let headingY = cos(radians)
-		return headingX * vector.y - headingY * vector.x
-	}
-
-	private func crossStreetVector(
-		for roadName: String,
-		from coordinate: CLLocationCoordinate2D
-	) -> (x: Double, y: Double)? {
-		roads
-			.filter { $0.name == roadName }
-			.compactMap { road -> (distance: CLLocationDistance, vector: (x: Double, y: Double))? in
-				guard let vector = road.vectorAway(from: coordinate) else {
-					return nil
-				}
-				return (road.minimumDistance(to: coordinate), vector)
-			}
-			.min { $0.distance < $1.distance }?
-			.vector
+		return (sin(radians) * vector.y - cos(radians) * vector.x) / hypot(vector.x, vector.y)
 	}
 }
 
@@ -1620,8 +1592,14 @@ extension WatchMapRoad {
 	}
 
 	func vectorAway(from coordinate: CLLocationCoordinate2D) -> (x: Double, y: Double)? {
-		coordinates
-			.map { Self.localVector(from: coordinate, to: $0) }
+		let vectors = coordinates.map { Self.localVector(from: coordinate, to: $0) }
+		guard let junction = vectors.indices.min(by: {
+			hypot(vectors[$0].x, vectors[$0].y) < hypot(vectors[$1].x, vectors[$1].y)
+		}), hypot(vectors[junction].x, vectors[junction].y) < 1 else { return nil }
+		// Follow the connected segment, not a later point where a curved road returns nearby.
+		return [junction - 1, junction + 1]
+			.filter { vectors.indices.contains($0) }
+			.map { vectors[$0] }
 			.filter { hypot($0.x, $0.y) > 1 }
 			.min { hypot($0.x, $0.y) < hypot($1.x, $1.y) }
 	}

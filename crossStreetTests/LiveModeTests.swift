@@ -88,7 +88,8 @@ struct LiveModeTests {
 		#expect(LiveModeShortcutCommand.stop.resultDialog == "Opening Intersector to stop Live Mode.")
 	}
 
-	@Test func liveUpcomingUsesTheExistingUpcomingFormatter() async throws {
+	@Test(arguments: [false, true], [SpokenIntersectionCount.one, .two])
+	func liveUpcomingOmitsOnlyTheUpcomingQualifier(namesOnly: Bool, count: SpokenIntersectionCount) async throws {
 		let origin = CLLocationCoordinate2D(latitude: 37, longitude: -122)
 		let mapData = northboundMapData(origin: origin)
 		let context = DeviceContext(
@@ -106,10 +107,10 @@ struct LiveModeTests {
 		)
 		var prefs = AppPrefs()
 		prefs.areaMode = .off
-		prefs.spokenIntersectionCount = .two
+		prefs.spokenIntersectionCount = count
 		prefs.announcementOptions = AnnouncementOptions(
-			includeDistance: true,
-			includeDirection: true,
+			includeDistance: !namesOnly,
+			includeDirection: !namesOnly,
 			includeNeighborhood: false
 		)
 
@@ -118,10 +119,12 @@ struct LiveModeTests {
 			from: context,
 			mapData: mapData,
 			prefs: prefs,
-			preferredRoadName: "Oak Street"
+			preferredRoadName: "Oak Street",
+			phoneHeading: context.headingDegrees
 		)
 
-		#expect(liveResult.text == manualText)
+		#expect(manualText.hasPrefix("Upcoming: "))
+		#expect(liveResult.text == String(manualText.dropFirst("Upcoming: ".count)))
 		#expect(liveResult.primaryIntersectionID == "first")
 	}
 
@@ -391,6 +394,30 @@ struct LiveDrivingReliabilityTests {
 	private func settle() async {
 		for _ in 0..<30 { await Task.yield() }
 		try? await Task.sleep(for: .milliseconds(10))
+	}
+
+	@Test(arguments: [LiveTravelMode.walking, .driving])
+	func liveSpeechUsesPhoneHeadingInsteadOfCourse(mode: LiveTravelMode) async {
+		let fixture = SplitIntersectionFixture(separateNodes: false)
+		let location = LiveTestLocation(), map = LiveTestMap(), speech = LiveTestSpeech(), clock = LiveTestClock()
+		map.data = MapDataSet(intersections: fixture.junctions.map {
+			IntersectionCandidate(id: $0.id, names: $0.names, coordinate: $0.coordinate)
+		}, roads: fixture.roads.enumerated().map { index, road in
+			MapRoad(id: String(index), name: road.name, nodeIDs: road.nodes, coordinates: road.coordinates)
+		})
+		let live = coordinator(location, map, speech, clock)
+		var prefs = AppPrefs()
+		prefs.areaMode = .off
+		prefs.announcementOptions = AnnouncementOptions(includeDistance: false, includeDirection: false, includeNeighborhood: false)
+		live.start(mode: mode, prefs: prefs, speechSettings: settings, stationaryMinutes: 5)
+		defer { live.stop() }
+		await settle()
+		location.continuation?.yield(DeviceContext(coordinate: fixture.roads[0].coordinates[0], headingDegrees: 270,
+			courseDegrees: 90, courseAccuracy: 5, speedMetersPerSecond: 1.4, horizontalAccuracy: 5,
+			measuredAt: clock.date, speedAccuracyMetersPerSecond: 0.2))
+		await settle()
+		#expect(speech.messages == [LiveModeCoordinator.activationMessage(for: mode),
+			"Foothill Boulevard and Talbot Avenue and Stanley Avenue."])
 	}
 
 	@Test func highwayNeedsSustainedMainRoadMatchAndRejectsRamps() {

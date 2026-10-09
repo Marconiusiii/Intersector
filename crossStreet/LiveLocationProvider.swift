@@ -17,6 +17,7 @@ protocol LiveLocationProviding: AnyObject {
 final class LiveLocationProvider: NSObject, LiveLocationProviding {
 	private let manager = CLLocationManager()
 	private var sessionID = UUID()
+	private var latestHeading: CLHeading?
 	private var requestedMode = LiveTravelMode.walking
 	private var authorizationContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
 	private var updateContinuation: AsyncThrowingStream<DeviceContext, Error>.Continuation?
@@ -50,6 +51,7 @@ final class LiveLocationProvider: NSObject, LiveLocationProviding {
 			}
 			self.backgroundActivitySession = CLBackgroundActivitySession()
 			self.manager.startUpdatingLocation()
+			if CLLocationManager.headingAvailable() { self.manager.startUpdatingHeading() }
 		}
 	}
 
@@ -73,6 +75,8 @@ final class LiveLocationProvider: NSObject, LiveLocationProviding {
 		updateContinuation = nil
 		continuation?.finish()
 		manager.stopUpdatingLocation()
+		manager.stopUpdatingHeading()
+		latestHeading = nil
 		manager.allowsBackgroundLocationUpdates = false
 		backgroundActivitySession?.invalidate()
 		backgroundActivitySession = nil
@@ -119,7 +123,10 @@ extension LiveLocationProvider: CLLocationManagerDelegate {
 		for location in locations {
 			let context = DeviceContext(
 				coordinate: location.coordinate,
-				headingDegrees: nil,
+				headingDegrees: latestHeading.flatMap { heading in
+					guard abs(heading.timestamp.timeIntervalSinceNow) <= 10 else { return nil }
+					return heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
+				},
 				courseDegrees: location.course >= 0 ? location.course : nil,
 				courseAccuracy: location.courseAccuracy >= 0 ? location.courseAccuracy : nil,
 				speedMetersPerSecond: location.speed >= 0 ? location.speed : nil,
@@ -135,6 +142,10 @@ extension LiveLocationProvider: CLLocationManagerDelegate {
 			}
 			updateContinuation?.yield(context)
 		}
+	}
+
+	func locationManager(_ manager: CLLocationManager, didUpdateHeading heading: CLHeading) {
+		latestHeading = heading.headingAccuracy >= 0 ? heading : nil
 	}
 
 	static func isRecoverable(_ error: Error) -> Bool {

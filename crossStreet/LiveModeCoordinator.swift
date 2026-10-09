@@ -225,6 +225,7 @@ final class LiveModeCoordinator: ObservableObject {
 			}
 			let result = try await reportService.liveUpcomingResult(
 				from: match.context, mapData: mapData, prefs: activePrefs, preferredRoadName: match.roadName,
+				phoneHeading: context.headingDegrees,
 				selectedIntersections: selectedIntersections
 			)
 			guard !Task.isCancelled, isActive, processingID == operation,

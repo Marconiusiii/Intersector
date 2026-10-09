@@ -24,5 +24,6 @@ with tempfile.TemporaryDirectory(prefix='intersector-watch-map-') as directory:
         str(root / 'crossStreet/OverpassRequestPolicy.swift'),
         str(service),
         str(root / 'crossStreetTests/CrossingFixture.swift'),
+        str(root / 'crossStreetTests/SplitIntersectionFixture.swift'),
         str(Path(__file__).parent / 'CrossingChecks.swift'), '-o', str(executable)], check=True)
     subprocess.run([str(executable), str(root / 'crossStreetTests/Fixtures/CrossingRegression.json')], check=True, timeout=60)

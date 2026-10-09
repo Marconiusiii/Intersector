@@ -379,6 +379,7 @@ struct OrientSvc {
 		mapData: MapDataSet,
 		prefs: AppPrefs,
 		preferredRoadName: String,
+		phoneHeading: CLLocationDirection?,
 		selectedIntersections: [IntersectionCandidate]? = nil
 	) async throws -> LiveUpcomingResult {
 		let ranked = selectedIntersections ?? mapData.upcomingRoadSequence(
@@ -398,7 +399,8 @@ struct OrientSvc {
 				context: context,
 				mapData: mapData,
 				prefs: prefs,
-				neighborhoodContext: neighborhoodContext
+				neighborhoodContext: neighborhoodContext,
+				streetHeading: phoneHeading
 			)
 			if !reports.containsSpokenIntersection(matching: report) {
 				reports.append(report)
@@ -414,7 +416,7 @@ struct OrientSvc {
 		return LiveUpcomingResult(
 			primaryIntersectionID: primary.id,
 			distanceMeters: Geo.distanceMeters(from: context.coordinate, to: primary.coordinate),
-			text: IntersectionReportList(reports: reports).text(with: prefs),
+			text: IntersectionReportList(reports: reports).text(with: prefs, includeLead: false),
 			reportedIntersections: reportedIntersections
 		)
 	}
@@ -508,7 +510,8 @@ struct OrientSvc {
 				context: context,
 				mapData: mapData,
 				prefs: prefs,
-				neighborhoodContext: neighborhoodContext
+				neighborhoodContext: neighborhoodContext,
+				streetHeading: context.headingDegrees
 			)
 			if !reports.containsSpokenIntersection(matching: report) {
 				reports.append(report)
@@ -540,7 +543,8 @@ struct OrientSvc {
 				context: context,
 				mapData: mapData,
 				prefs: prefs,
-				neighborhoodContext: neighborhoodContext
+				neighborhoodContext: neighborhoodContext,
+				streetHeading: context.headingDegrees
 			)
 			if !reports.containsSpokenIntersection(matching: report) {
 				reports.append(report)
@@ -586,7 +590,8 @@ struct OrientSvc {
 			context: context,
 			mapData: mapData,
 			prefs: prefs,
-			neighborhoodContext: neighborhoodContext
+			neighborhoodContext: neighborhoodContext,
+			streetHeading: context.headingDegrees
 		)
 	}
 
@@ -596,7 +601,8 @@ struct OrientSvc {
 		context: DeviceContext,
 		mapData: MapDataSet,
 		prefs: AppPrefs,
-		neighborhoodContext: NeighborhoodContext
+		neighborhoodContext: NeighborhoodContext,
+		streetHeading: CLLocationDirection?
 	) -> OrientReport {
 		let distance = Geo.distanceMeters(from: context.coordinate, to: match.coordinate)
 		let bearing = Geo.bearingDegrees(from: context.coordinate, to: match.coordinate)
@@ -617,7 +623,7 @@ struct OrientSvc {
 			let otherNames = mapData.crossStreetNames(
 				for: match,
 				on: roadName,
-				heading: context.dependableTravelDirection
+				heading: streetHeading
 			)
 			return otherNames.isEmpty ? nil : otherNames.joined(separator: " and ")
 		}
@@ -838,7 +844,8 @@ struct OrientSvc {
 				context: context,
 				mapData: mapData,
 				prefs: prefs,
-				neighborhoodContext: neighborhoodContext
+				neighborhoodContext: neighborhoodContext,
+				streetHeading: context.headingDegrees
 			)
 			if !reports.containsSpokenIntersection(matching: report) {
 				reports.append(report)

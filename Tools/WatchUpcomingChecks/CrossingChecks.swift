@@ -3,6 +3,22 @@ import CoreLocation
 
 @main struct CrossingChecks {
     @MainActor static func main() throws {
+        for separateNodes in [false, true] {
+            let fixture = SplitIntersectionFixture(separateNodes: separateNodes)
+            let map = WatchMapDataSet(intersections: fixture.junctions.map {
+                WatchIntersectionCandidate(id: $0.id, names: $0.names, coordinate: $0.coordinate)
+            }, roads: fixture.roads.enumerated().map { index, road in
+                WatchMapRoad(id: String(index), name: road.name, nodeIDs: road.nodes, coordinates: road.coordinates)
+            })
+            for heading in [90.0, 270.0] {
+                let expected = heading == 90 ? [SplitIntersectionFixture.left, SplitIntersectionFixture.right]
+                    : [SplitIntersectionFixture.right, SplitIntersectionFixture.left]
+                for candidate in map.intersections {
+                    precondition(map.crossStreetNames(for: candidate, on: SplitIntersectionFixture.main, heading: heading) == expected)
+                }
+                print("PASS: split ordering separateNodes=\(separateNodes), heading=\(heading)")
+            }
+        }
         let fixtures = try JSONDecoder().decode(CrossingFixtures<WatchOverpassResponse>.self, from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1])))
         let builder = WatchIntersectionBuilder()
         for fixture in fixtures.cases {
