@@ -1085,14 +1085,11 @@ struct WatchIntersectionCandidate: Identifiable, Equatable {
 struct WatchIntersectionDetails: Equatable, Hashable {
 	var isSignalized = false
 	var hasPedestrianIsland = false
-	var hasAudiblePedestrianSignal = false
 	var isStreetIntersection = false
 
 	var spokenPhrases: [String] {
 		var phrases: [String] = []
-		if hasAudiblePedestrianSignal {
-			phrases.append("audible pedestrian signal")
-		} else if isSignalized {
+		if isSignalized {
 			phrases.append(isStreetIntersection ? "signalized intersection" : "signalized crossing")
 		}
 		if hasPedestrianIsland {
@@ -2594,7 +2591,6 @@ struct WatchIntersectionBuilder {
 		return crossing == "traffic_signals" ||
 			crossing == "marked" ||
 			isPositive(tags["crossing:signals"]) ||
-			["yes", "walk"].contains(tags["traffic_signals:sound"]?.lowercased()) ||
 			["zebra", "ladder", "yes"].contains(markings)
 	}
 
@@ -2609,17 +2605,13 @@ struct WatchIntersectionBuilder {
 	) -> WatchIntersectionDetails? {
 		let tags = sources.map { $0.mapValues { $0.lowercased() } }
 		guard !tags.contains(where: { $0["crossing"] == "no" }) else { return nil }
-		let soundValues = tags.compactMap { $0["traffic_signals:sound"] }
-		let hasCrossing = tags.contains { isCrossing($0) || isCrossingWay($0) }
 		let signalValues = tags.compactMap { $0["crossing:signals"] }
 		let signalConflict = signalValues.contains { !isPositive($0) } ||
 			tags.contains { $0["crossing"] == "uncontrolled" }
-		let hasAudibleSignal = hasCrossing && !signalConflict && !soundValues.isEmpty &&
-			soundValues.allSatisfy { $0 == "yes" || $0 == "walk" }
-		let hasSignal = !signalConflict && (hasAudibleSignal || tags.contains {
+		let hasSignal = !signalConflict && tags.contains {
 			$0["crossing"] == "traffic_signals" || isPositive($0["crossing:signals"]) ||
 			(isStreetIntersection && $0["highway"] == "traffic_signals" && $0["traffic_signals"] == nil)
-		})
+		}
 		let islandValues = tags.compactMap { $0["crossing:island"] }
 		let hasIsland = islandValues.allSatisfy { isPositive($0) } && tags.contains {
 			$0["crossing"] == "island" || isPositive($0["crossing:island"])
@@ -2627,7 +2619,6 @@ struct WatchIntersectionBuilder {
 		let details = WatchIntersectionDetails(
 			isSignalized: hasSignal,
 			hasPedestrianIsland: hasIsland,
-			hasAudiblePedestrianSignal: hasAudibleSignal,
 			isStreetIntersection: isStreetIntersection
 		)
 		return details.isEmpty ? nil : details

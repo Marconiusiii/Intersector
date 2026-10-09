@@ -357,14 +357,11 @@ struct IntersectionCandidate: Equatable, Identifiable {
 struct IntersectionDetails: Equatable, Hashable, Sendable {
 	var isSignalized = false
 	var hasPedestrianIsland = false
-	var hasAudiblePedestrianSignal = false
 	var isStreetIntersection = false
 
 	var spokenPhrases: [String] {
 		var phrases: [String] = []
-		if hasAudiblePedestrianSignal {
-			phrases.append("audible pedestrian signal")
-		} else if isSignalized {
+		if isSignalized {
 			phrases.append(isStreetIntersection ? "signalized intersection" : "signalized crossing")
 		}
 		if hasPedestrianIsland {

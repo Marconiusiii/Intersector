@@ -73,6 +73,33 @@ struct SiriIntersectionRequestTests {
 		#expect(count == 2)
 	}
 
+	@Test(arguments: [ReportKind.nearest, .upcoming], [false, true])
+	func intersectionDetailsReachSiriAndRespectSavedSetting(kind: ReportKind, enabled: Bool) async throws {
+		var data = goodData
+		for index in data.intersections.indices {
+			data.intersections[index].intersectionDetails = IntersectionDetails(
+				isSignalized: true, hasPedestrianIsland: true, isStreetIntersection: true
+			)
+		}
+		let mappedData = data
+		let request = SiriIntersectionRequest { _ in service(client: SiriControlledMap(data: mappedData)) }
+		let suiteName = "SiriIntersectionDetails.\(UUID().uuidString)"
+		let defaults = try #require(UserDefaults(suiteName: suiteName))
+		defer { defaults.removePersistentDomain(forName: suiteName) }
+		defaults.set(enabled, forKey: "includeIntersectionDetails")
+		let prefs = AppPrefs.saved(from: defaults)
+		let text = try await response(kind, using: request, prefs: prefs)
+		#expect(text.contains("signalized intersection") == enabled)
+		#expect(text.contains("pedestrian island") == enabled)
+		#expect(!text.contains("audible"))
+		for rank in [2, 3] {
+			let report = try await request.report(for: kind, rank: rank, prefs: prefs)
+			let rankedText = report.text(with: prefs, rank: rank)
+			#expect(rankedText.contains("signalized intersection") == enabled)
+			#expect(rankedText.contains("pedestrian island") == enabled)
+		}
+	}
+
 	@Test func slowNeighborhoodDoesNotDiscardIntersectionAtDeadline() async throws {
 		let svc = OrientSvc(locationProvider: FakeLocationProvider(context: DeviceContext(coordinate: origin, headingDegrees: 0)),
 			mapDataClient: StaticMapDataClient(data: goodData), neighborhoodProvider: SlowSiriNeighborhood())
@@ -116,11 +143,11 @@ struct SiriIntersectionRequestTests {
 		#expect(SiriIntersectionRequest.failureMessage(OrientError.headingUnavailable, kind: .upcoming) == "I couldn't tell which way you're facing. Hold your device steady and try again.")
 	}
 
-	private func response(_ kind: ReportKind, using request: SiriIntersectionRequest) async throws -> String {
+	private func response(_ kind: ReportKind, using request: SiriIntersectionRequest, prefs: AppPrefs = AppPrefs()) async throws -> String {
 		if kind == .nearest {
-			return try await NearestIntersectionIntent().response(using: request, prefs: AppPrefs())
+			return try await NearestIntersectionIntent().response(using: request, prefs: prefs)
 		}
-		return try await UpcomingIntersectionIntent().response(using: request, prefs: AppPrefs())
+		return try await UpcomingIntersectionIntent().response(using: request, prefs: prefs)
 	}
 
 	private func service(client: any MapDataFetching) -> OrientSvc {

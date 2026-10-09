@@ -22,7 +22,7 @@ No `crossing=no` records were present in this downloaded sample. The negative-ta
 
 The same 18 fixtures run against the production phone and Watch builders, with Walking Paths on and off, through direct loading, enrichment, and repeated enrichment. They check crossing identities, counts, road association, coordinates, and signal details. Cases include explicit negative tags, valid unmarked crossings, point/path duplicates, split paths, displaced path averages, nearby orphan points, parallel paths, grade-separated geometry without a shared road node, ordinary junctions, multiple-road crossings, and the real Riverside response.
 
-An additional 24 shared detail fixtures check audible walk signals versus locator-only tones, contradictory point/path tags, islands, and exact-node intersection enrichment. Both parsers run each case through direct loading, enrichment, and repeated enrichment, with path order reversed. Full announcement checks cover Intersection Details on and off and verify that audible pedestrian signals replace the generic signal phrase. Nearby suppressed crossings do not supply details to an intersection by proximity.
+An additional 16 shared detail fixtures check contradictory point/path tags, islands, and exact-node intersection enrichment. Both parsers run each case through direct loading, enrichment, and repeated enrichment, with path order reversed. Full announcement checks cover Intersection Details on and off. Sound tags are ignored. Nearby suppressed crossings do not supply details to an intersection by proximity.
 
 Run the phone `CrossingRegressionTests` and `IntersectionDetailTests` suites with Xcode. Run Watch checks from the repository root with:
 
@@ -34,4 +34,4 @@ The Watch runner compiles the production service with only sensor acquisition st
 
 ## Device checks
 
-With Crossings enabled, revisit the affected Riverside Drive route using Nearest, Upcoming, and Walking Live on the phone and Watch. Check that a crossing is identified once at the correct road connection, and that ordinary intersection announcements are not followed by an extra crossing for the same corner. Also verify that an actual midblock crossing is retained. Physical location, speech timing, and map accuracy still require this field check.
+With Crossings enabled, revisit the affected Riverside Drive route using Nearest, Upcoming, and Walking Live on the phone and Watch. Check that a crossing is identified once at the correct road connection, and that ordinary intersection announcements are not followed by an extra crossing for the same corner. Also verify that an actual midblock crossing is retained. Also test Siri Nearest and Upcoming with Intersection Details on and off on both devices. Physical location, Siri invocation, speech timing, and map accuracy still require this field check.

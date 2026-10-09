@@ -64,29 +64,21 @@ struct IntersectionDetailFixture {
     }
 
     static let cases: [Self] = [
-        .init(name: "audible yes replaces generic signal", nodeTags: ["highway": "crossing", "crossing": "traffic_signals", "traffic_signals:sound": "yes"], phrases: ["audible pedestrian signal"]),
-        .init(name: "walk sound establishes signal", nodeTags: ["highway": "crossing", "traffic_signals:sound": "walk"], phrases: ["audible pedestrian signal"]),
-        .init(name: "locator only retains generic signal", nodeTags: ["highway": "crossing", "crossing:signals": "yes", "traffic_signals:sound": "locate"], phrases: ["signalized crossing"]),
-        .init(name: "locator alone is not a walk signal", nodeTags: ["highway": "crossing", "traffic_signals:sound": "locate"], phrases: []),
-        .init(name: "explicit no sound", nodeTags: ["highway": "crossing", "crossing:signals": "yes", "traffic_signals:sound": "no"], phrases: ["signalized crossing"]),
+        .init(name: "signalized crossing", nodeTags: ["highway": "crossing", "crossing": "traffic_signals"], phrases: ["signalized crossing"]),
+        .init(name: "sound tags do not establish signal details", nodeTags: ["highway": "crossing", "traffic_signals:sound": "yes"], phrases: []),
+        .init(name: "sound tags do not replace signal details", nodeTags: ["highway": "crossing", "crossing:signals": "yes", "traffic_signals:sound": "walk"], phrases: ["signalized crossing"]),
         .init(name: "missing details stay silent", phrases: []),
-        .init(name: "unsupported sound stays silent", nodeTags: ["highway": "crossing", "traffic_signals:sound": "unknown"], phrases: []),
-        .init(name: "audible and island", nodeTags: ["highway": "crossing", "traffic_signals:sound": "yes", "crossing:island": "yes"], phrases: ["audible pedestrian signal", "pedestrian island"]),
-        .init(name: "legacy signal conflicts with explicit no", nodeTags: ["highway": "crossing", "crossing": "traffic_signals", "crossing:signals": "no", "traffic_signals:sound": "yes"], phrases: []),
+        .init(name: "signal and island", nodeTags: ["highway": "crossing", "crossing:signals": "yes", "crossing:island": "yes"], phrases: ["signalized crossing", "pedestrian island"]),
+        .init(name: "legacy signal conflicts with explicit no", nodeTags: ["highway": "crossing", "crossing": "traffic_signals", "crossing:signals": "no"], phrases: []),
         .init(name: "legacy island conflicts with explicit no", nodeTags: ["highway": "crossing", "crossing": "island", "crossing:island": "no"], phrases: []),
         .init(name: "separate island is not inferred", nodeTags: ["highway": "crossing", "crossing:island": "separate"], phrases: []),
-        .init(name: "node sound conflicts with path", nodeTags: ["highway": "crossing", "traffic_signals:sound": "no"], pathTags: [["crossing": "traffic_signals", "traffic_signals:sound": "yes"]], phrases: ["signalized crossing"]),
-        .init(name: "negative signal path remains evidence", nodeTags: ["highway": "crossing", "crossing:signals": "yes", "traffic_signals:sound": "yes"], pathTags: [["crossing:signals": "no"]], phrases: []),
-        .init(name: "path sound conflict is order independent", nodeTags: [:], pathTags: [["crossing": "traffic_signals", "traffic_signals:sound": "yes"], ["traffic_signals:sound": "no"]], phrases: ["signalized crossing"]),
-        .init(name: "path locator conflict is omitted", pathTags: [["crossing": "traffic_signals", "traffic_signals:sound": "yes"], ["traffic_signals:sound": "locate"]], phrases: ["signalized crossing"]),
+        .init(name: "negative signal path remains evidence", nodeTags: ["highway": "crossing", "crossing:signals": "yes"], pathTags: [["crossing:signals": "no"]], phrases: []),
+        .init(name: "path signal conflict is order independent", nodeTags: [:], pathTags: [["crossing": "traffic_signals"], ["crossing:signals": "no"]], phrases: []),
         .init(name: "path island conflict is omitted", nodeTags: ["highway": "crossing", "crossing:island": "yes"], pathTags: [["crossing:island": "no"]], phrases: []),
-        .init(name: "audible path with road connection", nodeTags: [:], pathTags: [["traffic_signals:sound": "walk"]], phrases: ["audible pedestrian signal"]),
         .init(name: "intersection signal at shared node", nodeTags: ["highway": "traffic_signals"], streetIntersection: true, phrases: ["signalized intersection"]),
-        .init(name: "intersection audible and island at shared node", nodeTags: ["highway": "crossing", "traffic_signals:sound": "yes", "crossing:island": "yes"], streetIntersection: true, phrases: ["audible pedestrian signal", "pedestrian island"]),
-        .init(name: "crossing path enriches exact intersection node", nodeTags: [:], pathTags: [["crossing": "traffic_signals", "traffic_signals:sound": "yes"]], streetIntersection: true, phrases: ["audible pedestrian signal"]),
-        .init(name: "nearby suppressed crossing does not enrich intersection", nodeTags: ["highway": "crossing", "traffic_signals:sound": "yes", "crossing:island": "yes"], nearbyOnly: true, phrases: []),
-        .init(name: "vehicle signal sound without crossing evidence omitted", nodeTags: ["highway": "traffic_signals", "traffic_signals:sound": "yes"], streetIntersection: true, phrases: ["signalized intersection"]),
-        .init(name: "blinking vehicle signal omitted", nodeTags: ["highway": "traffic_signals", "traffic_signals": "blinker"], streetIntersection: true, phrases: []),
-        .init(name: "uncontrolled conflicts with audible signal", nodeTags: ["highway": "crossing", "crossing": "uncontrolled", "traffic_signals:sound": "yes"], phrases: [])
+        .init(name: "intersection signal and island at shared node", nodeTags: ["highway": "crossing", "crossing:signals": "yes", "crossing:island": "yes"], streetIntersection: true, phrases: ["signalized intersection", "pedestrian island"]),
+        .init(name: "crossing path enriches exact intersection node", nodeTags: [:], pathTags: [["crossing": "traffic_signals"]], streetIntersection: true, phrases: ["signalized intersection"]),
+        .init(name: "nearby suppressed crossing does not enrich intersection", nodeTags: ["highway": "crossing", "crossing:signals": "yes", "crossing:island": "yes"], nearbyOnly: true, phrases: []),
+        .init(name: "blinking vehicle signal omitted", nodeTags: ["highway": "traffic_signals", "traffic_signals": "blinker"], streetIntersection: true, phrases: [])
     ]
 }

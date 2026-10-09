@@ -45,7 +45,7 @@ import CoreLocation
                         fatalError("\(fixture.name): result")
                     }
                     precondition((candidate.intersectionDetails?.spokenPhrases ?? []) == fixture.phrases, "\(fixture.name): phrases")
-                    let report = WatchOrientationReport(kind: .nearest, cross: candidate.title, dist: "100 feet", relDir: "ahead", relDegrees: 0,
+                    var report = WatchOrientationReport(kind: .nearest, cross: candidate.title, dist: "100 feet", relDir: "ahead", relDegrees: 0,
                                                         street: nil, crossStreet: nil, head: nil, area: nil, toward: nil,
                                                         intersectionDetails: candidate.intersectionDetails)
                     var prefs = WatchAppPrefs()
@@ -54,6 +54,20 @@ import CoreLocation
                     prefs.announcementOptions.includeIntersectionDetails = true
                     let suffix = fixture.phrases.isEmpty ? "" : ", " + fixture.phrases.joined(separator: ", ")
                     precondition(report.text(with: prefs) == plain + suffix + ".", "\(fixture.name): setting on")
+                    // Watch Siri uses this same report formatter for its returned dialog.
+                    for kind in [WatchReportKind.nearest, .upcoming] {
+                        report.kind = kind
+                        for enabled in [false, true] {
+                            prefs.announcementOptions.includeIntersectionDetails = enabled
+                            for rank in [1, 2, 3] {
+                                let text = report.text(with: prefs, rank: rank)
+                                for phrase in fixture.phrases {
+                                    precondition(text.contains(phrase) == enabled, "\(fixture.name): Siri report details")
+                                }
+                                precondition(!text.contains("audible"), "\(fixture.name): no APS announcement")
+                            }
+                        }
+                    }
                 }
             }
             print("PASS: \(fixture.name)")
