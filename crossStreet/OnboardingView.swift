@@ -108,6 +108,7 @@ private struct OnboardingPageView: View {
 					.padding(.vertical, 18)
 			}
 			.buttonStyle(.borderedProminent)
+			.tint(Color.crossBtn)
 			.disabled(isRequestingPermission)
 			.padding(.horizontal, 24)
 			.padding(.top, 12)

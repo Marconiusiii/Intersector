@@ -960,7 +960,7 @@ struct ContentView: View {
 			.accessibilityAction(named: Text("Walking Mode")) { selectLiveMode(.walking) }
 			.accessibilityAction(named: Text("Driving Mode")) { selectLiveMode(.driving) }
 			.toggleStyle(.button)
-			.tint(Color.crossScanActive)
+			.tint(Color.crossAccent)
 	}
 
 	private var settingsButton: some View {
@@ -994,7 +994,7 @@ struct ContentView: View {
 		}
 		.overlay {
 			Rectangle()
-				.strokeBorder(Color.crossAccent, lineWidth: 3)
+				.strokeBorder(Color.crossPanelAccent, lineWidth: 3)
 				.padding(.bottom, 2)
 				.opacity(isStatusEmphasized ? 1 : 0)
 				.allowsHitTesting(false)
@@ -1066,7 +1066,7 @@ struct ContentView: View {
 			if isVisualLoadingIndicatorVisible {
 				ProgressView()
 					.progressViewStyle(.circular)
-					.tint(Color.crossAccent)
+					.tint(Color.crossPanelAccent)
 					.controlSize(.large)
 					.scaleEffect(1.25)
 					.accessibilityHidden(true)
@@ -1489,6 +1489,7 @@ struct ContentView: View {
 			settingsHeader("Live Mode")
 			settingsControlRow {
 				Toggle("Live Mode", isOn: $liveModeEnabled)
+					.tint(Color.crossControlTint)
 			}
 			if liveModeEnabled {
 				settingsControlRow {
@@ -1514,6 +1515,7 @@ struct ContentView: View {
 							step: 1,
 							label: { Text("Stop When Stationary, \(Int(liveStationaryMinutes.rounded())) minutes") }
 						)
+						.tint(Color.crossControlTint)
 					}
 				}
 				settingsHeader("System Speech")
@@ -1531,6 +1533,7 @@ struct ContentView: View {
 							step: 5,
 							label: { Text("Speech Rate") }
 						)
+						.tint(Color.crossControlTint)
 					}
 				}
 				settingsControlRow {
@@ -1543,6 +1546,7 @@ struct ContentView: View {
 							in: 0...1,
 							label: { Text("Speech Volume") }
 						)
+						.tint(Color.crossControlTint)
 					}
 				}
 				settingsControlRow {
@@ -1636,6 +1640,7 @@ struct ContentView: View {
 			}
 			settingsControlRow {
 				Toggle("Show 2nd and 3rd Controls", isOn: rankedControlsBinding)
+					.tint(Color.crossControlTint)
 					.accessibilityHint("Toggles the visibility of the menu chevrons")
 			}
 		}
@@ -1646,6 +1651,7 @@ struct ContentView: View {
 			settingsHeader("Spoken Announcements")
 			settingsControlRow {
 				Toggle("Distance", isOn: announcementDistanceBinding)
+					.tint(Color.crossControlTint)
 			}
 			if includeAnnouncementDistance {
 				settingsControlRow {
@@ -1661,6 +1667,7 @@ struct ContentView: View {
 			}
 			settingsControlRow {
 				Toggle("Direction", isOn: announcementDirectionBinding)
+					.tint(Color.crossControlTint)
 			}
 			if includeAnnouncementDirection {
 				settingsControlRow {
@@ -1678,6 +1685,7 @@ struct ContentView: View {
 			}
 			settingsControlRow {
 				Toggle("Neighborhood", isOn: announcementNeighborhoodBinding)
+					.tint(Color.crossControlTint)
 			}
 			if includeAnnouncementNeighborhood {
 				settingsControlRow {
@@ -1695,6 +1703,7 @@ struct ContentView: View {
 			}
 			settingsControlRow {
 				Toggle("Intersection Details", isOn: intersectionDetailsBinding)
+					.tint(Color.crossControlTint)
 			}
 			settingsControlRow {
 				spokenIntersectionsControl
@@ -1736,6 +1745,7 @@ struct ContentView: View {
 			settingsHeader("Regional Wording")
 			settingsControlRow {
 				Toggle("Manhattan Snob Mode", isOn: manhattanSnobModeBinding)
+					.tint(Color.crossControlTint)
 			}
 		}
 	}
@@ -1760,9 +1770,11 @@ struct ContentView: View {
 			settingsHeader("Map Data")
 			settingsControlRow {
 				Toggle("Include crossings", isOn: crossingsBinding)
+					.tint(Color.crossControlTint)
 			}
 			settingsControlRow {
 				Toggle("Include walking paths", isOn: walkingPathsBinding)
+					.tint(Color.crossControlTint)
 			}
 		}
 	}
@@ -1772,6 +1784,7 @@ struct ContentView: View {
 			settingsHeader("Interaction")
 			settingsControlRow {
 				Toggle("Haptic scan feedback", isOn: hapticsBinding)
+					.tint(Color.crossControlTint)
 			}
 		}
 	}
@@ -1814,50 +1827,64 @@ struct ContentView: View {
 		NavigationStack {
 			ScrollView {
 				VStack(alignment: .leading, spacing: 20) {
-					Text("Intersector helps you identify nearby intersections, understand the direction your phone is facing, and get quick street context from the app, Siri, Shortcuts, or Apple Watch. It uses your location, device heading, and available OpenStreetMap data to describe what is around you in concise spoken and visible announcements.")
-						.font(.body)
-						.foregroundStyle(Color.crossText)
-						.lineLimit(nil)
-						.fixedSize(horizontal: false, vertical: true)
-
 					helpSection(
 						title: "Nearest Intersection",
-						body: "Use Nearest Intersection to find the intersection closest to your current location."
+						body: "Use Nearest to find the intersection closest to your current location."
 					)
 
 					helpSection(
 						title: "Upcoming Intersection",
-						body: "Use Upcoming Intersection to find what comes next along the road you are on in the direction your phone is facing. Every Upcoming action follows the mapped path of that road through bends. If Intersector cannot identify the road or direction confidently, it reports no result instead of choosing an intersection on a nearby street."
+						body: "Use Upcoming to find the next intersection along your current road in the direction your phone is facing."
 					)
 
 					helpSection(
 						title: "My Direction",
-						body: "Use My Direction to hear the cardinal direction your phone is facing. If Manhattan Snob Mode is on, Intersector can use Uptown, Downtown, East Side, and West Side wording when that style applies."
+						body: "Use Direction to hear the direction your phone is facing, such as north or southwest."
 					)
 
 					helpSection(
 						title: "Scan",
-						body: "Turn on Scan for a live orientation mode. Point the top of your phone around you to scan for nearby intersections and crossings. Haptics get stronger as your phone lines up with a result, and Intersector speaks the result when you are pointing directly toward it."
+						body: "Turn on Scan and point the top of your phone around you to identify nearby intersections and crossings. Vibration gets stronger as you point toward a result, and Intersector announces it when your phone lines up with it. Turn Scan off to finish."
+					)
+
+					helpSection(
+						title: "Haptic scan feedback",
+						body: "Turn vibration during Scan on or off."
 					)
 
 					helpSection(
 						title: "Live Mode",
-						body: "The Live Mode switch in Settings shows or hides the Live control and its settings. Turning this switch off also stops Live Mode. Your travel and speech preferences are kept when you turn it back on. Turn on Live on the home screen to hear upcoming intersections automatically as you travel. Choose Walking when you are on foot. Choose Driving when you are in a car or bus so intersections are announced sooner. Walking adjusts announcement timing to your pace and waits until you have moved beyond the current mapped junction before announcing the next one. Poor location accuracy can delay announcements. Walking remembers intersections included in a report to avoid repeating them as you approach. Live Mode continues when you use another app or lock the phone. Live Mode uses the voice, speech rate, and volume selected in Settings. An ascending flourish confirms that Live Mode is on, and a descending flourish confirms that it is off. On the Live control, choose the Walking Mode or Driving Mode accessibility action and double-tap to start Live in that mode. If Live is already on, the action changes the travel mode and announces the change. In Driving mode, Live automatically turns off when Intersector detects that you have entered a highway. Intersector announces the shutdown and identifies the highway when that information is available. Turn Live back on after exiting the highway to resume intersection announcements. Use Stop When Stationary to choose how long Live Mode waits after you stop moving before turning off, including while the app is in the background or the phone is locked. Live also stops if location updates remain unavailable. You can also turn it off from Intersector, Siri, or Shortcuts."
+						body: "Turn on Live to hear upcoming intersections as you travel, including while the phone is locked. Turn Live off to stop announcements. Live Mode in Settings shows or hides Live on the home screen."
+					)
+
+					helpSection(
+						title: "Travel Mode",
+						body: "Choose Walking for travel on foot or Driving for travel by car or bus. Driving announces intersections sooner. Driving turns Live off when you enter a highway; turn Live back on after leaving the highway."
+					)
+
+					helpSection(
+						title: "Stop When Stationary",
+						body: "Choose how long Live continues after you stop moving."
 					)
 
 					helpSection(
 						title: "2nd and 3rd Results",
-						body: "The chevron menus on Nearest and Upcoming expose 2nd and 3rd result actions. Nearest ranks by distance from you. Upcoming follows the direction your phone is facing and looks forward along your current street. You can hide the visible chevrons in Settings while keeping ranked actions available through VoiceOver, Siri, and Shortcuts."
+						body: "Use the menus beside Nearest and Upcoming to choose the second or third result. With VoiceOver, choose the second or third intersection from the button’s Actions menu."
 					)
 
 					helpSection(
-						title: "Display Settings",
-						body: "Use Current Info Layout to choose how the current announcement appears. Default places Current Info and the announcement side by side. Centered gives each its own centered row. Show 2nd and 3rd Controls shows or hides the chevron menus beside Nearest and Upcoming."
+						title: "Current Info Layout",
+						body: "Choose Default to place the heading beside the announcement, or Centered to place it above the announcement."
 					)
 
 					helpSection(
-						title: "Regional Wording",
-						body: "Turn on Manhattan Snob Mode to use Uptown, Downtown, East Side, and West Side when cardinal directions are spoken."
+						title: "Show 2nd and 3rd Controls",
+						body: "Show or hide the menus beside Nearest and Upcoming."
+					)
+
+					helpSection(
+						title: "Manhattan Snob Mode",
+						body: "Use Uptown, Downtown, East Side, and West Side for spoken compass directions."
 					)
 
 					helpSection(
@@ -1865,26 +1892,74 @@ struct ContentView: View {
 						body: "Choose a voice, Speech Rate, and Speech Volume for Live announcements. Use Test Speech to hear your selections."
 					)
 
-					announcementSettingsHelpSection
+					helpSection(
+						title: "Distance",
+						body: "Add the approximate distance to an intersection. Use Measurement Unit to choose feet or meters."
+					)
 
 					helpSection(
-						title: "Map Detail",
-						body: "Crossings can include mapped crossing points on named roads. Walking Paths lets Upcoming follow named mapped paths and find their junctions with streets or other named paths. Unnamed paths cannot provide a named intersection. Keep Walking Paths off if you want results focused on the regular street grid."
+						title: "Direction",
+						body: "Add the direction of an intersection. Choose Relative for ahead, left, and right; Cardinal for north, south, east, and west; or Clock Face for positions such as 10 o’clock."
+					)
+
+					helpSection(
+						title: "Neighborhood",
+						body: "Add the nearby area to announcements. Choose Toward to also include the area ahead."
+					)
+
+					helpSection(
+						title: "Intersection Details",
+						body: "Add mapped traffic signals and pedestrian islands to announcements."
+					)
+
+					helpSection(
+						title: "Spoken Intersections",
+						body: "Choose one, two, or three results per announcement."
+					)
+
+					helpSection(
+						title: "Sample Announcement",
+						body: "Read an example of an announcement using your selected settings."
+					)
+
+					helpSection(
+						title: "Include crossings",
+						body: "Add mapped crossings on named roads."
+					)
+
+					helpSection(
+						title: "Include walking paths",
+						body: "Add named paths and their intersections."
 					)
 
 					helpSection(
 						title: "Siri and Shortcuts",
-						body: "Intersector includes shortcut actions for Nearest Intersection, Upcoming Intersection, My Direction, Scan Mode, Start Live Mode, and Stop Live Mode. Starting Live Mode requires the Live Mode switch in Settings to be on and uses your saved Walking or Driving and speech settings. In the Shortcuts app, you can create your own phrases for Intersector actions."
+						body: "Use Siri or Shortcuts for Nearest Intersection, Upcoming Intersection, My Direction, Scan Mode, Start Live Mode, and Stop Live Mode. To start Live with Siri or Shortcuts, turn on Live Mode in Settings and choose your travel and speech settings. Use the Shortcuts app to create your own phrases."
 					)
 
 					helpSection(
 						title: "Apple Watch",
-						body: "The Apple Watch app supports quick intersection and direction reports. Settings sync from the iPhone app so your spoken announcement preferences stay consistent."
+						body: "Use Intersector on your watch for Nearest, Upcoming, Direction, and second and third results. Change announcement settings on your iPhone to use them on your watch."
+					)
+
+					helpSection(
+						title: "Send Intersector Feedback",
+						body: "Open an email to send feedback about Intersector."
+					)
+
+					helpSection(
+						title: "Privacy Policy",
+						body: "Read how Intersector uses your information."
+					)
+
+					helpSection(
+						title: "Acknowledgements",
+						body: "Read the credits and map licensing information."
 					)
 
 					helpSection(
 						title: "Accuracy",
-						body: "Intersection directions and distances are estimates. Intersector depends on GPS, compass heading, and available OpenStreetMap data. Tall buildings, weak location signals, magnetic interference, missing map details, or unusual street layouts can affect results. Treat Intersector as orientation support, not turn-by-turn navigation."
+						body: "Directions and distances are estimates. Location accuracy, compass accuracy, and map coverage affect results. Tall buildings, magnetic interference, and missing or outdated map information can affect the announcements."
 					)
 				}
 				.padding(24)
@@ -1918,33 +1993,6 @@ struct ContentView: View {
 				.lineLimit(nil)
 				.fixedSize(horizontal: false, vertical: true)
 		}
-	}
-
-	private var announcementSettingsHelpSection: some View {
-		VStack(alignment: .leading, spacing: 12) {
-			Text("Announcement Settings")
-				.font(.headline)
-				.foregroundStyle(Color.crossText)
-				.lineLimit(nil)
-				.fixedSize(horizontal: false, vertical: true)
-				.accessibilityAddTraits(.isHeader)
-
-			Text("Use the Announcements settings to choose what Intersector includes in spoken and visible results.")
-
-			Text("Distance says approximately how far away the intersection is. You can choose feet or meters.")
-
-			Text("Direction says where the intersection is in relation to the way your phone is pointing. Relative uses words such as ahead, left, and right. Cardinal uses directions such as north or southwest. Clock Face uses positions such as 10 o’clock.")
-
-			Text("Neighborhood adds a neighborhood or local area name when one is available. Nearby only announces the area closest to your current location. Nearby and toward can also announce a different area in the direction your phone is pointing.")
-
-			Text("Turn on Intersection Details to include mapped traffic signals and pedestrian islands. If a detail has not been added to the map, Intersector cannot announce it.")
-
-			Text("Spoken Intersections chooses whether Nearest and Upcoming speak one, two, or three results. Nearest reports the closest intersections. Upcoming reports the next intersections along the road ahead.")
-		}
-		.font(.body)
-		.foregroundStyle(Color.crossText)
-		.lineLimit(nil)
-		.fixedSize(horizontal: false, vertical: true)
 	}
 
 	private func directionStyleSegmentLabel(_ style: DirectionStyle) -> String {
@@ -2577,6 +2625,21 @@ extension Color {
 	static let crossScanActive = Color(red: 1.00, green: 0.55, blue: 0.12)
 	static let crossInv = Color(red: 0.98, green: 0.98, blue: 0.96)
 	static let crossAccent = Color(
+		UIColor { traits in
+			traits.userInterfaceStyle == .dark
+				? UIColor(red: 1.00, green: 0.80, blue: 0.18, alpha: 1)
+				: UIColor(red: 112.0 / 255, green: 85.0 / 255, blue: 0, alpha: 1)
+		}
+	)
+	// Native switches and sliders have white thumbs in both appearances.
+	static let crossControlTint = Color(
+		UIColor { traits in
+			traits.userInterfaceStyle == .dark
+				? UIColor(red: 0.72, green: 0.46, blue: 0, alpha: 1)
+				: UIColor(red: 112.0 / 255, green: 85.0 / 255, blue: 0, alpha: 1)
+		}
+	)
+	static let crossPanelAccent = Color(
 		UIColor { traits in
 			traits.userInterfaceStyle == .dark
 				? UIColor(red: 1.00, green: 0.80, blue: 0.18, alpha: 1)
