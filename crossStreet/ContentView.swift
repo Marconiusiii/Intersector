@@ -1827,6 +1827,12 @@ struct ContentView: View {
 		NavigationStack {
 			ScrollView {
 				VStack(alignment: .leading, spacing: 20) {
+					Text("Intersector helps you identify nearby intersections, find the direction your phone is facing, and get street information through the app, Siri, Shortcuts, or Apple Watch.")
+						.font(.body)
+						.foregroundStyle(Color.crossText)
+						.lineLimit(nil)
+						.fixedSize(horizontal: false, vertical: true)
+
 					helpSection(
 						title: "Nearest Intersection",
 						body: "Use Nearest to find the intersection closest to your current location."
