@@ -1835,137 +1835,113 @@ struct ContentView: View {
 
 					helpSection(
 						title: "Nearest Intersection",
-						body: "Use Nearest to find the intersection closest to your current location."
+						paragraphs: [
+							"Use Nearest to find the intersection closest to your current location."
+						]
 					)
 
 					helpSection(
 						title: "Upcoming Intersection",
-						body: "Use Upcoming to find the next intersection along your current road in the direction your phone is facing."
-					)
-
-					helpSection(
-						title: "My Direction",
-						body: "Use Direction to hear the direction your phone is facing, such as north or southwest."
-					)
-
-					helpSection(
-						title: "Scan",
-						body: "Turn on Scan and point the top of your phone around you to identify nearby intersections and crossings. Vibration gets stronger as you point toward a result, and Intersector announces it when your phone lines up with it. Turn Scan off to finish."
-					)
-
-					helpSection(
-						title: "Haptic scan feedback",
-						body: "Turn vibration during Scan on or off."
-					)
-
-					helpSection(
-						title: "Live Mode",
-						body: "Turn on Live to hear upcoming intersections as you travel, including while the phone is locked. Turn Live off to stop announcements. Live Mode in Settings shows or hides Live on the home screen."
-					)
-
-					helpSection(
-						title: "Travel Mode",
-						body: "Choose Walking for travel on foot or Driving for travel by car or bus. Driving announces intersections sooner. Driving turns Live off when you enter a highway; turn Live back on after leaving the highway."
-					)
-
-					helpSection(
-						title: "Stop When Stationary",
-						body: "Choose how long Live continues after you stop moving."
+						paragraphs: [
+							"Use Upcoming to find the next intersection along your current road in the direction your phone is facing."
+						]
 					)
 
 					helpSection(
 						title: "2nd and 3rd Results",
-						body: "Use the menus beside Nearest and Upcoming to choose the second or third result. With VoiceOver, choose the second or third intersection from the button’s Actions menu."
+						paragraphs: [
+							"Use the menus beside Nearest and Upcoming to choose the second or third result.",
+							"With VoiceOver, choose the second or third intersection from the button’s Actions menu.",
+							"Use Show 2nd and 3rd Controls in Settings to show or hide these menus."
+						]
+					)
+
+					helpSection(
+						title: "My Direction",
+						paragraphs: [
+							"Use Direction to hear the direction your phone is facing, such as north or southwest."
+						]
+					)
+
+					helpSection(
+						title: "Scan",
+						paragraphs: [
+							"Turn on Scan and point the top of your phone around you to identify nearby intersections and crossings. Intersector announces a result when your phone lines up with it.",
+							"Scan uses the location where you turned it on. Stay at that location while scanning.",
+							"Turn Scan off before moving to a new location. Once you arrive, turn it on again to scan from there.",
+							"Vibration gets stronger as you point toward a result. Use Haptic scan feedback in Settings to turn vibration on or off."
+						]
 					)
 
 					helpSection(
 						title: "Current Info Layout",
-						body: "Choose Default to place the heading beside the announcement, or Centered to place it above the announcement."
+						paragraphs: [
+							"Choose Default to place the heading beside the announcement, or Centered to place it above the announcement."
+						]
 					)
 
 					helpSection(
-						title: "Show 2nd and 3rd Controls",
-						body: "Show or hide the menus beside Nearest and Upcoming."
+						title: "Announcement Options",
+						paragraphs: [
+							"Distance adds the approximate distance to an intersection. Use Measurement Unit to choose feet or meters.",
+							"Direction adds the direction of an intersection. Choose Relative for ahead, left, and right; Cardinal for north, south, east, and west; or Clock Face for positions such as 10 o’clock.",
+							"Neighborhood adds the nearby area. Choose Toward to also include the area ahead.",
+							"Intersection Details adds mapped traffic signals and pedestrian islands.",
+							"Spoken Intersections chooses one, two, or three results per announcement."
+						]
 					)
 
 					helpSection(
 						title: "Manhattan Snob Mode",
-						body: "Use Uptown, Downtown, East Side, and West Side for spoken compass directions."
+						paragraphs: [
+							"Use Uptown, Downtown, East Side, and West Side for spoken compass directions."
+						]
 					)
 
 					helpSection(
-						title: "System Speech",
-						body: "Choose a voice, Speech Rate, and Speech Volume for Live announcements. Use Test Speech to hear your selections."
+						title: "Map Options",
+						paragraphs: [
+							"Include crossings adds mapped crossings on named roads.",
+							"Include walking paths adds named paths and their intersections."
+						]
 					)
 
 					helpSection(
-						title: "Distance",
-						body: "Add the approximate distance to an intersection. Use Measurement Unit to choose feet or meters."
-					)
-
-					helpSection(
-						title: "Direction",
-						body: "Add the direction of an intersection. Choose Relative for ahead, left, and right; Cardinal for north, south, east, and west; or Clock Face for positions such as 10 o’clock."
-					)
-
-					helpSection(
-						title: "Neighborhood",
-						body: "Add the nearby area to announcements. Choose Toward to also include the area ahead."
-					)
-
-					helpSection(
-						title: "Intersection Details",
-						body: "Add mapped traffic signals and pedestrian islands to announcements."
-					)
-
-					helpSection(
-						title: "Spoken Intersections",
-						body: "Choose one, two, or three results per announcement."
-					)
-
-					helpSection(
-						title: "Sample Announcement",
-						body: "Read an example of an announcement using your selected settings."
-					)
-
-					helpSection(
-						title: "Include crossings",
-						body: "Add mapped crossings on named roads."
-					)
-
-					helpSection(
-						title: "Include walking paths",
-						body: "Add named paths and their intersections."
+						title: "Live Mode",
+						paragraphs: [
+							"Turn on Live to hear upcoming intersections as you travel, including while the phone is locked.",
+							"Live Mode in Settings shows or hides Live on the home screen.",
+							"Choose Walking for travel on foot or Driving for travel by car or bus. Driving announces intersections sooner.",
+							"Driving turns Live off when you enter a highway; turn Live back on after leaving the highway.",
+							"Stop When Stationary sets how long Live continues after you stop moving.",
+							"Choose a voice, Speech Rate, and Speech Volume for Live announcements. Use Test Speech to hear your selections."
+						]
 					)
 
 					helpSection(
 						title: "Siri and Shortcuts",
-						body: "Use Siri or Shortcuts for Nearest Intersection, Upcoming Intersection, My Direction, Scan Mode, Start Live Mode, and Stop Live Mode. To start Live with Siri or Shortcuts, turn on Live Mode in Settings and choose your travel and speech settings. Use the Shortcuts app to create your own phrases."
+						paragraphs: [
+							"Use Siri or Shortcuts for Nearest Intersection, Upcoming Intersection, My Direction, Scan Mode, Start Live Mode, and Stop Live Mode.",
+							"To start Live with Siri or Shortcuts, turn on Live Mode in Settings and choose your travel and speech settings.",
+							"Use the Shortcuts app to create your own phrases."
+						]
 					)
 
 					helpSection(
 						title: "Apple Watch",
-						body: "Use Intersector on your watch for Nearest, Upcoming, Direction, and second and third results. Change announcement settings on your iPhone to use them on your watch."
-					)
-
-					helpSection(
-						title: "Send Intersector Feedback",
-						body: "Open an email to send feedback about Intersector."
-					)
-
-					helpSection(
-						title: "Privacy Policy",
-						body: "Read how Intersector uses your information."
-					)
-
-					helpSection(
-						title: "Acknowledgements",
-						body: "Read the credits and map licensing information."
+						paragraphs: [
+							"Use Intersector on your watch for Nearest, Upcoming, Direction, and second and third results.",
+							"Change announcement settings on your iPhone to use them on your watch."
+						]
 					)
 
 					helpSection(
 						title: "Accuracy",
-						body: "Directions and distances are estimates. Location accuracy, compass accuracy, and map coverage affect results. Tall buildings, magnetic interference, and missing or outdated map information can affect the announcements."
+						paragraphs: [
+							"Directions and distances are estimates.",
+							"Location accuracy, compass accuracy, and map coverage affect results.",
+							"Tall buildings, magnetic interference, and missing or outdated map information can affect the announcements."
+						]
 					)
 				}
 				.padding(24)
@@ -1985,7 +1961,7 @@ struct ContentView: View {
 		.tint(Color.crossAccent)
 	}
 
-	private func helpSection(title: String, body: String) -> some View {
+	private func helpSection(title: String, paragraphs: [String]) -> some View {
 		VStack(alignment: .leading, spacing: 8) {
 			Text(title)
 				.font(.headline)
@@ -1993,11 +1969,13 @@ struct ContentView: View {
 				.lineLimit(nil)
 				.fixedSize(horizontal: false, vertical: true)
 				.accessibilityAddTraits(.isHeader)
-			Text(body)
-				.font(.body)
-				.foregroundStyle(Color.crossText)
-				.lineLimit(nil)
-				.fixedSize(horizontal: false, vertical: true)
+			ForEach(paragraphs.indices, id: \.self) { index in
+				Text(paragraphs[index])
+					.font(.body)
+					.foregroundStyle(Color.crossText)
+					.lineLimit(nil)
+					.fixedSize(horizontal: false, vertical: true)
+			}
 		}
 	}
 
