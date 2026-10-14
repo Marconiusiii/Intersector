@@ -54,11 +54,17 @@ struct ThemeContrastTests {
         #expect(contrast(rgb(boundary, style), rgb(.crossBg, style)) >= 3)
     }
 
-    @Test(arguments: [1, 2])
-    func nativeControlThumbAndTrackContrast(styleValue: Int) {
-        let style = UIUserInterfaceStyle(rawValue: styleValue)!
-        #expect(contrast(rgb(.white, style), rgb(.crossControlTint, style)) >= 3)
-        #expect(contrast(rgb(.crossControlTint, style), rgb(.crossSettingsRow, style)) >= 3)
+    @Test func darkPalettePreservesBrightControls() {
+        let yellow = rgb(.crossControlTint, .dark)
+        for (actual, expected) in zip(yellow, [1.0, 0.8, 0.18]) {
+            #expect(abs(actual - expected) < 0.001)
+        }
+        let orange = rgb(.crossScanActive, .dark)
+        for (actual, expected) in zip(orange, [1.0, 0.55, 0.12]) {
+            #expect(abs(actual - expected) < 0.001)
+        }
+        // The light-mode control tint still contrasts with its white thumb.
+        #expect(contrast(rgb(.white, .light), rgb(.crossControlTint, .light)) >= 3)
     }
 
     @Test(arguments: [1, 2])

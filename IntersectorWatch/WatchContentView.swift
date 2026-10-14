@@ -324,7 +324,10 @@ struct WatchContentView: View {
 			.padding(.horizontal, 10)
 			.contentShape(Rectangle())
 		}
-		.buttonStyle(WatchIntersectorActionButtonStyle())
+		.buttonStyle(.plain)
+		.foregroundStyle(Color.watchCrossButtonText)
+		.background(Color.watchCrossBtn)
+		.overlay(Rectangle().stroke(Color.watchCrossButtonBorder, lineWidth: 1))
 		.disabled(isDisabled ?? isLoading)
 		.accessibilityLabel(accessibilityLabel ?? title)
 		.accessibilityHint(accessibilityHint ?? "")
@@ -408,22 +411,9 @@ struct WatchContentView: View {
 	}
 }
 
-private struct WatchIntersectorActionButtonStyle: ButtonStyle {
-	@Environment(\.isEnabled) private var isEnabled
-
-	func makeBody(configuration: Configuration) -> some View {
-		configuration.label
-			.foregroundStyle(Color.watchCrossButtonText)
-			.background(Color.watchCrossBtn)
-			.overlay(Rectangle().stroke(Color.watchCrossButtonBorder, lineWidth: 1))
-			.opacity(isEnabled ? (configuration.isPressed ? 0.82 : 1) : 0.45)
-			.scaleEffect(configuration.isPressed ? 0.985 : 1)
-	}
-}
-
 extension Color {
 	static let watchCrossBg = Color(red: 0.02, green: 0.02, blue: 0.02)
-	static let watchCrossBtn = Color(red: 1.00, green: 0.80, blue: 0.18)
+	static let watchCrossBtn = Color(red: 0.98, green: 0.75, blue: 0.18)
 	static let watchCrossPanel = Color(red: 0.12, green: 0.12, blue: 0.12)
 	static let watchCrossText = Color(red: 0.98, green: 0.98, blue: 0.96)
 	static let watchCrossButtonText = Color(red: 0.02, green: 0.02, blue: 0.02)

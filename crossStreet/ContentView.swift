@@ -851,6 +851,7 @@ struct ContentView: View {
 			GeometryReader { geometry in
 				ScrollView {
 					VStack(spacing: 0) {
+						headerView
 						statusView
 						Group {
 							if showRankedControls {
@@ -904,15 +905,7 @@ struct ContentView: View {
 			}
 			.background(Color.crossBg)
 			.navigationBarTitleDisplayMode(.inline)
-			.navigationTitle("Intersector")
-			.toolbarBackground(Color.crossBg, for: .navigationBar)
-			.toolbarBackground(.visible, for: .navigationBar)
-			.toolbar {
-				ToolbarItemGroup(placement: .topBarTrailing) {
-					if liveModeEnabled { liveToggle }
-					settingsButton
-				}
-			}
+			.toolbar(.hidden, for: .navigationBar)
 			.sheet(isPresented: $isShowingSettings) {
 				settingsView
 			}
@@ -955,16 +948,92 @@ struct ContentView: View {
 		}
 	}
 
+	private var headerView: some View {
+		ViewThatFits(in: .horizontal) {
+			HStack(alignment: .center, spacing: 0) {
+				appTitle
+					.fixedSize(horizontal: true, vertical: false)
+				Spacer(minLength: 0)
+				headerControls
+			}
+			VStack(alignment: .leading, spacing: 0) {
+				appTitle
+					.frame(maxWidth: .infinity, alignment: .leading)
+				headerControls
+					.frame(maxWidth: .infinity, alignment: .trailing)
+			}
+		}
+		.frame(maxWidth: .infinity, alignment: .leading)
+		.background(Color.crossBg)
+		.tint(Color.crossAccent)
+	}
+
+	private var headerControls: some View {
+		ViewThatFits(in: .horizontal) {
+			HStack(spacing: 0) {
+				if liveModeEnabled {
+					liveToggle
+				}
+				settingsButton
+			}
+			VStack(alignment: .trailing, spacing: 0) {
+				if liveModeEnabled {
+					liveToggle
+				}
+				settingsButton
+			}
+		}
+	}
+
 	private var liveToggle: some View {
 		Toggle("Live", isOn: liveModeBinding)
 			.accessibilityAction(named: Text("Walking Mode")) { selectLiveMode(.walking) }
 			.accessibilityAction(named: Text("Driving Mode")) { selectLiveMode(.driving) }
 			.toggleStyle(.button)
-			.tint(Color.crossAccent)
+			.tint(Color.crossScanActive)
+			.font(.body)
+			.fontWeight(.semibold)
+			.multilineTextAlignment(.center)
+			.lineLimit(nil)
+			.fixedSize(horizontal: false, vertical: true)
+			.padding(.horizontal, 12)
+			.padding(.vertical, 6)
+			.frame(minWidth: 72, minHeight: 56, alignment: .center)
+			.contentShape(Rectangle())
+	}
+
+	private var appTitle: some View {
+		Text("Intersector")
+			.font(.largeTitle)
+			.fontWeight(.bold)
+			.foregroundStyle(Color.crossText)
+			.lineLimit(nil)
+			.fixedSize(horizontal: false, vertical: true)
+			.padding(.leading, 16)
+			.padding(.trailing, 8)
+			.padding(.vertical, 6)
+			.frame(minHeight: 56, alignment: .leading)
+			.contentShape(Rectangle())
+			.accessibilityAddTraits(.isHeader)
 	}
 
 	private var settingsButton: some View {
-		Button("Settings") { isShowingSettings = true }
+		Button {
+			isShowingSettings = true
+		} label: {
+			Text("Settings")
+				.font(.body)
+				.fontWeight(.semibold)
+				.multilineTextAlignment(.center)
+				.lineLimit(nil)
+				.fixedSize(horizontal: false, vertical: true)
+				.padding(.horizontal, 14)
+				.padding(.vertical, 6)
+				.frame(minWidth: 96, minHeight: 56, alignment: .center)
+				.contentShape(Rectangle())
+		}
+		.buttonStyle(.plain)
+		.foregroundStyle(Color.crossAccent)
 	}
 
 	private var statusView: some View {
@@ -2615,14 +2684,7 @@ extension Color {
 				: UIColor(red: 112.0 / 255, green: 85.0 / 255, blue: 0, alpha: 1)
 		}
 	)
-	// Native switches and sliders have white thumbs in both appearances.
-	static let crossControlTint = Color(
-		UIColor { traits in
-			traits.userInterfaceStyle == .dark
-				? UIColor(red: 0.72, green: 0.46, blue: 0, alpha: 1)
-				: UIColor(red: 112.0 / 255, green: 85.0 / 255, blue: 0, alpha: 1)
-		}
-	)
+	static let crossControlTint = crossAccent
 	static let crossPanelAccent = Color(
 		UIColor { traits in
 			traits.userInterfaceStyle == .dark
