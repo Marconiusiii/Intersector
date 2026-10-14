@@ -54,35 +54,35 @@ final class SiriIntersectionRequest {
 
 	static func failureMessage(_ error: Error, kind: ReportKind, rank: Int = 1) -> String {
 		if let urlError = error as? URLError {
-			if urlError.code == .timedOut { return "This is taking too long. Please try again." }
-			return "I couldn't connect. Check your internet connection and try again."
+			if urlError.code == .timedOut { return L10n.text("This is taking too long. Please try again.") }
+			return L10n.text("I couldn't connect. Check your internet connection and try again.")
 		}
 		if case MapDataError.serversCoolingDown = error {
-			return "I can't get intersection information right now. Please wait a minute and try again."
+			return L10n.text("I can't get intersection information right now. Please wait a minute and try again.")
 		}
 		if case MapDataError.serverError(429) = error {
-			return "I can't get intersection information right now. Please wait a minute and try again."
+			return L10n.text("I can't get intersection information right now. Please wait a minute and try again.")
 		}
 		if case OrientError.headingUnavailable = error {
-			return "I couldn't tell which way you're facing. Hold your device steady and try again."
+			return L10n.text("I couldn't tell which way you're facing. Hold your device steady and try again.")
 		}
 		if case OrientError.locationUnavailable = error {
-			return "I couldn't get your location. Please try again."
+			return L10n.text("I couldn't get your location. Please try again.")
 		}
 		if let locationError = error as? CLError {
 			return locationError.code == .denied
-				? "Allow Intersector to use your location in iPhone Settings, then ask again."
-				: "I couldn't get your location. Please try again."
+				? L10n.text("Allow Intersector to use your location in iPhone Settings, then ask again.")
+				: L10n.text("I couldn't get your location. Please try again.")
 		}
 		if case OrientError.noIntersections = error {
 			if rank > 1 {
-				let order = rank == 2 ? "second" : "third"
-				return "I couldn't find your \(order) \(kind == .upcoming ? "upcoming" : "nearest") intersection. Please try again."
+				let order = rank == 2 ? L10n.text("second") : L10n.text("third")
+				return L10n.text("I couldn't find your %@ %@ intersection. Please try again.", String(describing: order), String(describing: kind == .upcoming ? L10n.text("upcoming") : L10n.text("nearest")))
 			}
 			return kind == .upcoming
-				? "I couldn't find an intersection ahead. Try facing along the street and ask again."
-				: "I couldn't find a nearby intersection. Please try again."
+				? L10n.text("I couldn't find an intersection ahead. Try facing along the street and ask again.")
+				: L10n.text("I couldn't find a nearby intersection. Please try again.")
 		}
-		return "I can't get intersection information right now. Please try again."
+		return L10n.text("I can't get intersection information right now. Please try again.")
 	}
 }

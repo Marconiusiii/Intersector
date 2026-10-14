@@ -21,9 +21,9 @@ private enum DisplayLayout: String, CaseIterable, Identifiable {
 	var label: String {
 		switch self {
 		case .standard:
-			"Default"
+			L10n.text("Default")
 		case .centered:
-			"Centered"
+			L10n.text("Centered")
 		}
 	}
 }
@@ -36,7 +36,7 @@ private struct AcknowledgementsSettingsButton: View {
 		Button {
 			isShowingAcknowledgements = true
 		} label: {
-			Text("Acknowledgements")
+			Text(L10n.text("Acknowledgements"))
 				.font(.body)
 				.fontWeight(.semibold)
 				.foregroundStyle(Color.crossAccent)
@@ -75,7 +75,7 @@ private struct AcknowledgementsView: View {
 		NavigationStack {
 			ScrollView {
 				VStack(alignment: .leading, spacing: 20) {
-					Text("Acknowledgements")
+					Text(L10n.text("Acknowledgements"))
 						.font(.largeTitle)
 						.fontWeight(.bold)
 						.foregroundStyle(Color.crossText)
@@ -84,20 +84,20 @@ private struct AcknowledgementsView: View {
 						.accessibilityAddTraits(.isHeader)
 						.accessibilityFocused($isHeadingFocused)
 
-					Text("Special thanks to Jen Walz for inspiring the creation of this app!")
+					Text(L10n.text("Special thanks to Jen Walz for inspiring the creation of this app!"))
 						.font(.body)
 						.foregroundStyle(Color.crossText)
 						.lineLimit(nil)
 						.fixedSize(horizontal: false, vertical: true)
 
-					Text("Map data from OpenStreetMap, available under the Open Database License.")
+					Text(L10n.text("Map data from OpenStreetMap, available under the Open Database License."))
 						.font(.body)
 						.foregroundStyle(Color.crossText)
 						.lineLimit(nil)
 						.fixedSize(horizontal: false, vertical: true)
 
 					Link(
-						"OpenStreetMap copyright and licence",
+						L10n.text("OpenStreetMap copyright and licence"),
 						destination: URL(string: "https://www.openstreetmap.org/copyright")!
 					)
 					.font(.body)
@@ -108,7 +108,7 @@ private struct AcknowledgementsView: View {
 					.accessibilityTouchRegion(minHeight: 60, verticalPadding: 4, alignment: .leading)
 					.accessibilityAddTraits(.isLink)
 					.accessibilityRemoveTraits(.isButton)
-					.accessibilityHint("Opens in external browser")
+					.accessibilityHint(L10n.text("Opens in external browser"))
 				}
 				.padding(24)
 				.frame(maxWidth: .infinity, alignment: .leading)
@@ -118,7 +118,7 @@ private struct AcknowledgementsView: View {
 			.navigationBarTitleDisplayMode(.inline)
 			.toolbar {
 				ToolbarItem(placement: .confirmationAction) {
-					Button("Done") {
+					Button(L10n.text("Done")) {
 						dismiss()
 					}
 				}
@@ -150,7 +150,7 @@ private struct LiveVoicePicker: View {
 	}
 
 	var body: some View {
-		Picker("Voice", selection: $voiceIdentifier) {
+		Picker(L10n.text("Voice"), selection: $voiceIdentifier) {
 			ForEach(voices) { voice in
 				Text(voice.label).tag(voice.id)
 			}
@@ -164,12 +164,12 @@ private struct LiveVoicePicker: View {
 	}
 }
 
-private let lookupLoadingText = "Still finding the intersection."
-private let extendedLookupLoadingText = "Still working. Map data is taking longer than usual."
-private let startupLoadingText = "Loading Intersector..."
-private let mapPreparationText = "Preparing map data for Nearest and Upcoming."
-private let mapWaitingText = "Waiting for map data. Nearest and Upcoming will become available automatically."
-private let readyText = "Intersector Ready."
+private let lookupLoadingText = L10n.text("Still finding the intersection.")
+private let extendedLookupLoadingText = L10n.text("Still working. Map data is taking longer than usual.")
+private let startupLoadingText = L10n.text("Loading Intersector...")
+private let mapPreparationText = L10n.text("Preparing map data for Nearest and Upcoming.")
+private let mapWaitingText = L10n.text("Waiting for map data. Nearest and Upcoming will become available automatically.")
+private let readyText = L10n.text("Intersector Ready.")
 
 @MainActor
 private enum LoadingThrobber {
@@ -858,10 +858,10 @@ struct ContentView: View {
 								rankedActionRow(
 									primary: nearestButton,
 									menu: rankedMenu(
-										title: "More Nearest",
+										title: L10n.text("More Nearest"),
 										actions: [
-											("2nd", { await updateReport(.nearest, rank: 2) }),
-											("3rd", { await updateReport(.nearest, rank: 3) })
+											(L10n.text("2nd"), { await updateReport(.nearest, rank: 2) }),
+											(L10n.text("3rd"), { await updateReport(.nearest, rank: 3) })
 										]
 									)
 								)
@@ -875,10 +875,10 @@ struct ContentView: View {
 								rankedActionRow(
 									primary: upcomingButton,
 									menu: rankedMenu(
-										title: "More Upcoming",
+										title: L10n.text("More Upcoming"),
 										actions: [
-											("2nd", { await updateReport(.upcoming, rank: 2) }),
-											("3rd", { await updateReport(.upcoming, rank: 3) })
+											(L10n.text("2nd"), { await updateReport(.upcoming, rank: 2) }),
+											(L10n.text("3rd"), { await updateReport(.upcoming, rank: 3) })
 										]
 									)
 								)
@@ -888,10 +888,10 @@ struct ContentView: View {
 						}
 						.frame(minHeight: actionMinHeight)
 						actionButton(
-							"Direction",
+							L10n.text("Direction"),
 							systemImage: "safari.fill",
-							accessibilityLabel: "My Direction",
-							accessibilityHint: "Speaks cardinal direction.",
+							accessibilityLabel: L10n.text("My Direction"),
+							accessibilityHint: L10n.text("Speaks cardinal direction."),
 							isDisabled: isDirectionLoading || isStartupLoading
 						) {
 							await updateDirection()
@@ -986,9 +986,9 @@ struct ContentView: View {
 	}
 
 	private var liveToggle: some View {
-		Toggle("Live", isOn: liveModeBinding)
-			.accessibilityAction(named: Text("Walking Mode")) { selectLiveMode(.walking) }
-			.accessibilityAction(named: Text("Driving Mode")) { selectLiveMode(.driving) }
+		Toggle(L10n.text("Live"), isOn: liveModeBinding)
+			.accessibilityAction(named: Text(L10n.text("Walking Mode"))) { selectLiveMode(.walking) }
+			.accessibilityAction(named: Text(L10n.text("Driving Mode"))) { selectLiveMode(.driving) }
 			.toggleStyle(.button)
 			.tint(Color.crossScanActive)
 			.font(.body)
@@ -1021,7 +1021,7 @@ struct ContentView: View {
 		Button {
 			isShowingSettings = true
 		} label: {
-			Text("Settings")
+			Text(L10n.text("Settings"))
 				.font(.body)
 				.fontWeight(.semibold)
 				.multilineTextAlignment(.center)
@@ -1077,7 +1077,7 @@ struct ContentView: View {
 		isCentered: Bool
 	) -> some View {
 		HStack(alignment: .center, spacing: 8) {
-			Text("Current Info")
+			Text(L10n.text("Current Info"))
 				.font(.title2)
 				.fontWeight(.semibold)
 				.foregroundStyle(.white)
@@ -1221,21 +1221,21 @@ struct ContentView: View {
 
 	private var nearestButton: some View {
 		actionButton(
-			"Nearest",
+			L10n.text("Nearest"),
 			systemImage: "location.fill",
-			accessibilityLabel: "Nearest Intersection",
+			accessibilityLabel: L10n.text("Nearest Intersection"),
 			isDisabled: isLoading || isStartupLoading || isMapPreparationLoading || pointScanner.isScanning || pointScanner.isPreparing,
 			drawsChrome: !showRankedControls,
 			isVisuallyDimmed: pointScanner.isScanning || pointScanner.isPreparing
 		) {
 			await updateReport(.nearest)
 		}
-		.accessibilityAction(named: Text("3rd Nearest Intersection")) {
+		.accessibilityAction(named: Text(L10n.text("3rd Nearest Intersection"))) {
 			Task {
 				await updateReport(.nearest, rank: 3)
 			}
 		}
-		.accessibilityAction(named: Text("2nd Nearest Intersection")) {
+		.accessibilityAction(named: Text(L10n.text("2nd Nearest Intersection"))) {
 			Task {
 				await updateReport(.nearest, rank: 2)
 			}
@@ -1244,21 +1244,21 @@ struct ContentView: View {
 
 	private var upcomingButton: some View {
 		actionButton(
-			"Upcoming",
+			L10n.text("Upcoming"),
 			systemImage: "arrow.up.circle.fill",
-			accessibilityLabel: "Upcoming Intersection",
+			accessibilityLabel: L10n.text("Upcoming Intersection"),
 			isDisabled: isLoading || isStartupLoading || isMapPreparationLoading || pointScanner.isScanning || pointScanner.isPreparing,
 			drawsChrome: !showRankedControls,
 			isVisuallyDimmed: pointScanner.isScanning || pointScanner.isPreparing
 		) {
 			await updateReport(.upcoming)
 		}
-		.accessibilityAction(named: Text("3rd Upcoming Intersection")) {
+		.accessibilityAction(named: Text(L10n.text("3rd Upcoming Intersection"))) {
 			Task {
 				await updateReport(.upcoming, rank: 3)
 			}
 		}
-		.accessibilityAction(named: Text("2nd Upcoming Intersection")) {
+		.accessibilityAction(named: Text(L10n.text("2nd Upcoming Intersection"))) {
 			Task {
 				await updateReport(.upcoming, rank: 2)
 			}
@@ -1269,7 +1269,7 @@ struct ContentView: View {
 		Button {
 			toggleScanMode()
 		} label: {
-			actionLabel("Scan", systemImage: "dot.radiowaves.left.and.right")
+			actionLabel(L10n.text("Scan"), systemImage: "dot.radiowaves.left.and.right")
 				.frame(maxWidth: .infinity, minHeight: actionMinHeight, alignment: .center)
 				.contentShape(Rectangle())
 		}
@@ -1281,7 +1281,7 @@ struct ContentView: View {
 		.shadow(color: Color.black.opacity(0.18), radius: 2, x: 0, y: 1)
 		.contentShape(Rectangle())
 		.disabled(isLoading || isStartupLoading)
-		.accessibilityValue(pointScanner.isScanning || pointScanner.isPreparing ? "On" : "Off")
+		.accessibilityValue(pointScanner.isScanning || pointScanner.isPreparing ? L10n.text("control.on") : L10n.text("Off"))
 		.accessibilityAddTraits(pointScanner.isScanning || pointScanner.isPreparing ? .isSelected : [])
 	}
 
@@ -1416,10 +1416,10 @@ struct ContentView: View {
 		let report = OrientReport(
 			kind: .nearest,
 			cross: includeCrossings
-				? "Crossing on Amsterdam Avenue near West 94th Street"
-				: "Amsterdam Avenue and West 94th Street",
-			dist: "120 feet",
-			relDir: "ahead",
+				? L10n.text("Crossing on Amsterdam Avenue near West 94th Street")
+				: L10n.text("Amsterdam Avenue and West 94th Street"),
+			dist: Geo.spokenDistance(36.576, unit: prefs.measurementUnit),
+			relDir: L10n.text("ahead"),
 			relDegrees: 0,
 			street: "Amsterdam Avenue",
 			crossStreet: nil,
@@ -1465,11 +1465,11 @@ struct ContentView: View {
 	private func spokenIntersectionOptionAccessibilityLabel(_ count: SpokenIntersectionCount) -> String {
 		switch count {
 		case .one:
-			"1 intersection"
+			L10n.text("1 intersection")
 		case .two:
-			"2 intersections"
+			L10n.text("2 intersections")
 		case .three:
-			"3 intersections"
+			L10n.text("3 intersections")
 		}
 	}
 
@@ -1520,7 +1520,7 @@ struct ContentView: View {
 			.navigationBarTitleDisplayMode(.inline)
 			.toolbar {
 				ToolbarItem(placement: .confirmationAction) {
-					Button("Done") {
+					Button(L10n.text("Done")) {
 						isShowingSettings = false
 					}
 				}
@@ -1528,7 +1528,7 @@ struct ContentView: View {
 			.sheet(isPresented: $isShowingMailComposer) {
 				MailComposerView(
 					recipient: "marco@marconius.com",
-					subject: "Intersector Feedback",
+					subject: L10n.text("Intersector Feedback"),
 					body: feedbackEmailBody,
 					onFinish: { _ in }
 				)
@@ -1555,17 +1555,17 @@ struct ContentView: View {
 
 	private var settingsLiveModeSection: some View {
 		Group {
-			settingsHeader("Live Mode")
+			settingsHeader(L10n.text("Live Mode"))
 			settingsControlRow {
-				Toggle("Live Mode", isOn: $liveModeEnabled)
+				Toggle(L10n.text("Live Mode"), isOn: $liveModeEnabled)
 					.tint(Color.crossControlTint)
 			}
 			if liveModeEnabled {
 				settingsControlRow {
 					VStack(alignment: .leading, spacing: 8) {
-						Text("Travel Mode")
+						Text(L10n.text("Travel Mode"))
 							.foregroundStyle(Color.crossText)
-						Picker("Travel Mode", selection: liveTravelModeBinding) {
+						Picker(L10n.text("Travel Mode"), selection: liveTravelModeBinding) {
 							ForEach(LiveTravelMode.allCases) { mode in
 								Text(mode.label).tag(mode)
 							}
@@ -1575,45 +1575,45 @@ struct ContentView: View {
 				}
 				settingsControlRow {
 					VStack(alignment: .leading, spacing: 8) {
-						Text("Stop When Stationary: \(Int(liveStationaryMinutes.rounded())) minutes")
+						Text(L10n.text("Stop When Stationary: %@ minutes", String(describing: Int(liveStationaryMinutes.rounded()))))
 							.foregroundStyle(Color.crossText)
 							.accessibilityHidden(true)
 						Slider(
 							value: $liveStationaryMinutes,
 							in: 5...30,
 							step: 1,
-							label: { Text("Stop When Stationary, \(Int(liveStationaryMinutes.rounded())) minutes") }
+							label: { Text(L10n.text("Stop When Stationary, %@ minutes", String(describing: Int(liveStationaryMinutes.rounded())))) }
 						)
 						.tint(Color.crossControlTint)
 					}
 				}
-				settingsHeader("System Speech")
+				settingsHeader(L10n.text("System Speech"))
 				settingsControlRow {
 					LiveVoicePicker(voiceIdentifier: $liveVoiceIdentifier)
 				}
 				settingsControlRow {
 					VStack(alignment: .leading, spacing: 8) {
-						Text("Speech Rate: \(liveSpeechRatePercent) percent")
+						Text(L10n.text("Speech Rate: %@ percent", String(describing: liveSpeechRatePercent)))
 							.foregroundStyle(Color.crossText)
 							.accessibilityHidden(true)
 						Slider(
 							value: liveSpeechRateBinding,
 							in: 0...100,
 							step: 5,
-							label: { Text("Speech Rate") }
+							label: { Text(L10n.text("Speech Rate")) }
 						)
 						.tint(Color.crossControlTint)
 					}
 				}
 				settingsControlRow {
 					VStack(alignment: .leading, spacing: 8) {
-						Text("Speech Volume")
+						Text(L10n.text("Speech Volume"))
 							.foregroundStyle(Color.crossText)
 							.accessibilityHidden(true)
 						Slider(
 							value: $liveSpeechVolume,
 							in: 0...1,
-							label: { Text("Speech Volume") }
+							label: { Text(L10n.text("Speech Volume")) }
 						)
 						.tint(Color.crossControlTint)
 					}
@@ -1621,11 +1621,11 @@ struct ContentView: View {
 				settingsControlRow {
 					Button {
 						SystemSpeechController.shared.speak(
-							"Welcome to Intersector!",
+							L10n.text("Welcome to Intersector!"),
 							settings: liveSpeechSettings
 						)
 					} label: {
-						settingsButtonLabel("Test Speech")
+						settingsButtonLabel(L10n.text("Test Speech"))
 					}
 					.buttonStyle(.plain)
 				}
@@ -1663,7 +1663,7 @@ struct ContentView: View {
 	}
 
 	private var settingsTitle: some View {
-		Text("Settings")
+		Text(L10n.text("Settings"))
 			.font(.largeTitle)
 			.fontWeight(.bold)
 			.foregroundStyle(Color.crossText)
@@ -1676,7 +1676,7 @@ struct ContentView: View {
 		Button {
 			isShowingHelp = true
 		} label: {
-			Text("Help")
+			Text(L10n.text("Help"))
 				.font(.body)
 				.fontWeight(.semibold)
 				.foregroundStyle(Color.crossAccent)
@@ -1689,17 +1689,17 @@ struct ContentView: View {
 				.contentShape(Rectangle())
 		}
 		.buttonStyle(.plain)
-		.accessibilityHint("Opens instructions for using Intersector.")
+		.accessibilityHint(L10n.text("Opens instructions for using Intersector."))
 	}
 
 	private var settingsDisplaySection: some View {
 		Group {
-			settingsHeader("Display")
+			settingsHeader(L10n.text("Display"))
 			settingsControlRow {
 				VStack(alignment: .leading, spacing: 8) {
-					Text("Current Info Layout")
+					Text(L10n.text("Current Info Layout"))
 						.foregroundStyle(Color.crossText)
-					Picker("Current Info Layout", selection: displayLayoutBinding) {
+					Picker(L10n.text("Current Info Layout"), selection: displayLayoutBinding) {
 						ForEach(DisplayLayout.allCases) { layout in
 							Text(layout.label).tag(layout)
 						}
@@ -1708,24 +1708,24 @@ struct ContentView: View {
 				}
 			}
 			settingsControlRow {
-				Toggle("Show 2nd and 3rd Controls", isOn: rankedControlsBinding)
+				Toggle(L10n.text("Show 2nd and 3rd Controls"), isOn: rankedControlsBinding)
 					.tint(Color.crossControlTint)
-					.accessibilityHint("Toggles the visibility of the menu chevrons")
+					.accessibilityHint(L10n.text("Toggles the visibility of the menu chevrons"))
 			}
 		}
 	}
 
 	private var settingsAnnouncementSection: some View {
 		Group {
-			settingsHeader("Spoken Announcements")
+			settingsHeader(L10n.text("Spoken Announcements"))
 			settingsControlRow {
-				Toggle("Distance", isOn: announcementDistanceBinding)
+				Toggle(L10n.text("Distance"), isOn: announcementDistanceBinding)
 					.tint(Color.crossControlTint)
 			}
 			if includeAnnouncementDistance {
 				settingsControlRow {
 					VStack(alignment: .leading, spacing: 8) {
-						Picker("Measurement Unit", selection: measurementUnitBinding) {
+						Picker(L10n.text("Measurement Unit"), selection: measurementUnitBinding) {
 							ForEach(MeasurementUnit.allCases) { item in
 								Text(item.label).tag(item)
 							}
@@ -1735,13 +1735,13 @@ struct ContentView: View {
 				}
 			}
 			settingsControlRow {
-				Toggle("Direction", isOn: announcementDirectionBinding)
+				Toggle(L10n.text("Direction"), isOn: announcementDirectionBinding)
 					.tint(Color.crossControlTint)
 			}
 			if includeAnnouncementDirection {
 				settingsControlRow {
 					VStack(alignment: .leading, spacing: 8) {
-						Picker("Direction Style", selection: directionStyleBinding) {
+						Picker(L10n.text("Direction Style"), selection: directionStyleBinding) {
 							ForEach(DirectionStyle.allCases) { item in
 								Text(directionStyleSegmentLabel(item))
 									.accessibilityLabel(directionStyleSegmentAccessibilityLabel(item))
@@ -1753,13 +1753,13 @@ struct ContentView: View {
 				}
 			}
 			settingsControlRow {
-				Toggle("Neighborhood", isOn: announcementNeighborhoodBinding)
+				Toggle(L10n.text("Neighborhood"), isOn: announcementNeighborhoodBinding)
 					.tint(Color.crossControlTint)
 			}
 			if includeAnnouncementNeighborhood {
 				settingsControlRow {
 					VStack(alignment: .leading, spacing: 8) {
-						Picker("Neighborhood Context", selection: areaModeBinding) {
+						Picker(L10n.text("Neighborhood Context"), selection: areaModeBinding) {
 							ForEach(AreaMode.selectableCases) { mode in
 								Text(areaModeSegmentLabel(mode))
 									.accessibilityLabel(areaModeSegmentAccessibilityLabel(mode))
@@ -1771,7 +1771,7 @@ struct ContentView: View {
 				}
 			}
 			settingsControlRow {
-				Toggle("Intersection Details", isOn: intersectionDetailsBinding)
+				Toggle(L10n.text("Intersection Details"), isOn: intersectionDetailsBinding)
 					.tint(Color.crossControlTint)
 			}
 			settingsControlRow {
@@ -1783,7 +1783,7 @@ struct ContentView: View {
 
 	private var sampleAnnouncementSection: some View {
 		VStack(alignment: .leading, spacing: 0) {
-			Text("Sample Announcement")
+			Text(L10n.text("Sample Announcement"))
 				.font(.headline)
 				.fontWeight(.bold)
 				.foregroundStyle(Color.crossText)
@@ -1811,9 +1811,9 @@ struct ContentView: View {
 
 	private var settingsRegionalWordingSection: some View {
 		Group {
-			settingsHeader("Regional Wording")
+			settingsHeader(L10n.text("Regional Wording"))
 			settingsControlRow {
-				Toggle("Manhattan Snob Mode", isOn: manhattanSnobModeBinding)
+				Toggle(L10n.text("Manhattan Snob Mode"), isOn: manhattanSnobModeBinding)
 					.tint(Color.crossControlTint)
 			}
 		}
@@ -1821,9 +1821,9 @@ struct ContentView: View {
 
 	private var spokenIntersectionsControl: some View {
 		VStack(alignment: .leading, spacing: 8) {
-			Text("Spoken Intersections")
+			Text(L10n.text("Spoken Intersections"))
 				.foregroundStyle(Color.crossText)
-			Picker("Spoken Intersections", selection: spokenIntersectionCountBinding) {
+			Picker(L10n.text("Spoken Intersections"), selection: spokenIntersectionCountBinding) {
 				ForEach(SpokenIntersectionCount.allCases) { count in
 					Text(count.label)
 						.accessibilityLabel(spokenIntersectionOptionAccessibilityLabel(count))
@@ -1836,13 +1836,13 @@ struct ContentView: View {
 
 	private var settingsMapDetailSection: some View {
 		Group {
-			settingsHeader("Map Data")
+			settingsHeader(L10n.text("Map Data"))
 			settingsControlRow {
-				Toggle("Include crossings", isOn: crossingsBinding)
+				Toggle(L10n.text("Include crossings"), isOn: crossingsBinding)
 					.tint(Color.crossControlTint)
 			}
 			settingsControlRow {
-				Toggle("Include walking paths", isOn: walkingPathsBinding)
+				Toggle(L10n.text("Include walking paths"), isOn: walkingPathsBinding)
 					.tint(Color.crossControlTint)
 			}
 		}
@@ -1850,9 +1850,9 @@ struct ContentView: View {
 
 	private var settingsInteractionSection: some View {
 		Group {
-			settingsHeader("Interaction")
+			settingsHeader(L10n.text("Interaction"))
 			settingsControlRow {
-				Toggle("Haptic scan feedback", isOn: hapticsBinding)
+				Toggle(L10n.text("Haptic scan feedback"), isOn: hapticsBinding)
 					.tint(Color.crossControlTint)
 			}
 		}
@@ -1860,7 +1860,7 @@ struct ContentView: View {
 
 	private var settingsAboutSection: some View {
 		Group {
-			settingsHeader("About Intersector")
+			settingsHeader(L10n.text("About Intersector"))
 			settingsControlRow {
 				Button {
 					if MFMailComposeViewController.canSendMail() {
@@ -1869,13 +1869,13 @@ struct ContentView: View {
 						openMailFallback()
 					}
 				} label: {
-					settingsButtonLabel("Send Intersector Feedback")
+					settingsButtonLabel(L10n.text("Send Intersector Feedback"))
 				}
 				.buttonStyle(.plain)
-				.accessibilityHint("Opens Mail so you can send feedback about Intersector.")
+				.accessibilityHint(L10n.text("Opens Mail so you can send feedback about Intersector."))
 			}
 			settingsControlRow {
-				externalLink(title: "Privacy Policy", url: "https://marconius.com/csPrivacy/")
+				externalLink(title: L10n.text("Privacy Policy"), url: "https://marconius.com/csPrivacy/")
 			}
 			settingsControlRow {
 				AcknowledgementsSettingsButton()
@@ -1896,120 +1896,120 @@ struct ContentView: View {
 		NavigationStack {
 			ScrollView {
 				VStack(alignment: .leading, spacing: 20) {
-					Text("Intersector helps you identify nearby intersections, find the direction your phone is facing, and get street information through the app, Siri, Shortcuts, or Apple Watch.")
+					Text(L10n.text("Intersector helps you identify nearby intersections, find the direction your phone is facing, and get street information through the app, Siri, Shortcuts, or Apple Watch."))
 						.font(.body)
 						.foregroundStyle(Color.crossText)
 						.lineLimit(nil)
 						.fixedSize(horizontal: false, vertical: true)
 
 					helpSection(
-						title: "Nearest Intersection",
+						title: L10n.text("Nearest Intersection"),
 						paragraphs: [
-							"Use Nearest to find the intersection closest to your current location."
+							L10n.text("Use Nearest to find the intersection closest to your current location.")
 						]
 					)
 
 					helpSection(
-						title: "Upcoming Intersection",
+						title: L10n.text("Upcoming Intersection"),
 						paragraphs: [
-							"Use Upcoming to find the next intersection along your current road in the direction your phone is facing."
+							L10n.text("Use Upcoming to find the next intersection along your current road in the direction your phone is facing.")
 						]
 					)
 
 					helpSection(
-						title: "2nd and 3rd Results",
+						title: L10n.text("2nd and 3rd Results"),
 						paragraphs: [
-							"Use the menus beside Nearest and Upcoming to choose the second or third result.",
-							"With VoiceOver, choose the second or third intersection from the button’s Actions menu.",
-							"Use Show 2nd and 3rd Controls in Settings to show or hide these menus."
+							L10n.text("Use the menus beside Nearest and Upcoming to choose the second or third result."),
+							L10n.text("With VoiceOver, choose the second or third intersection from the button’s Actions menu."),
+							L10n.text("Use Show 2nd and 3rd Controls in Settings to show or hide these menus.")
 						]
 					)
 
 					helpSection(
-						title: "My Direction",
+						title: L10n.text("My Direction"),
 						paragraphs: [
-							"Use Direction to hear the direction your phone is facing, such as north or southwest."
+							L10n.text("Use Direction to hear the direction your phone is facing, such as north or southwest.")
 						]
 					)
 
 					helpSection(
-						title: "Scan",
+						title: L10n.text("Scan"),
 						paragraphs: [
-							"Turn on Scan and point the top of your phone around you to identify nearby intersections and crossings. Intersector announces a result when your phone lines up with it.",
-							"Scan uses the location where you turned it on. Stay at that location while scanning.",
-							"Turn Scan off before moving to a new location. Once you arrive, turn it on again to scan from there.",
-							"Vibration gets stronger as you point toward a result. Use Haptic scan feedback in Settings to turn vibration on or off."
+							L10n.text("Turn on Scan and point the top of your phone around you to identify nearby intersections and crossings. Intersector announces a result when your phone lines up with it."),
+							L10n.text("Scan uses the location where you turned it on. Stay at that location while scanning."),
+							L10n.text("Turn Scan off before moving to a new location. Once you arrive, turn it on again to scan from there."),
+							L10n.text("Vibration gets stronger as you point toward a result. Use Haptic scan feedback in Settings to turn vibration on or off.")
 						]
 					)
 
 					helpSection(
-						title: "Current Info Layout",
+						title: L10n.text("Current Info Layout"),
 						paragraphs: [
-							"Choose Default to place the heading beside the announcement, or Centered to place it above the announcement."
+							L10n.text("Choose Default to place the heading beside the announcement, or Centered to place it above the announcement.")
 						]
 					)
 
 					helpSection(
-						title: "Announcement Options",
+						title: L10n.text("Announcement Options"),
 						paragraphs: [
-							"Distance adds the approximate distance to an intersection. Use Measurement Unit to choose feet or meters.",
-							"Direction adds the direction of an intersection. Choose Relative for ahead, left, and right; Cardinal for north, south, east, and west; or Clock Face for positions such as 10 o’clock.",
-							"Neighborhood adds the nearby area. Choose Toward to also include the area ahead.",
-							"Intersection Details adds mapped traffic signals and pedestrian islands.",
-							"Spoken Intersections chooses one, two, or three results per announcement."
+							L10n.text("Distance adds the approximate distance to an intersection. Use Measurement Unit to choose feet or meters."),
+							L10n.text("Direction adds the direction of an intersection. Choose Relative for ahead, left, and right; Cardinal for north, south, east, and west; or Clock Face for positions such as 10 o’clock."),
+							L10n.text("Neighborhood adds the nearby area. Choose Toward to also include the area ahead."),
+							L10n.text("Intersection Details adds mapped traffic signals and pedestrian islands."),
+							L10n.text("Spoken Intersections chooses one, two, or three results per announcement.")
 						]
 					)
 
 					helpSection(
-						title: "Manhattan Snob Mode",
+						title: L10n.text("Manhattan Snob Mode"),
 						paragraphs: [
-							"Use Uptown, Downtown, East Side, and West Side for spoken compass directions."
+							L10n.text("Use Uptown, Downtown, East Side, and West Side for spoken compass directions.")
 						]
 					)
 
 					helpSection(
-						title: "Map Options",
+						title: L10n.text("Map Options"),
 						paragraphs: [
-							"Include crossings adds mapped crossings on named roads.",
-							"Include walking paths adds named paths and their intersections."
+							L10n.text("Include crossings adds mapped crossings on named roads."),
+							L10n.text("Include walking paths adds named paths and their intersections.")
 						]
 					)
 
 					helpSection(
-						title: "Live Mode",
+						title: L10n.text("Live Mode"),
 						paragraphs: [
-							"Turn on Live to hear upcoming intersections as you travel, including while the phone is locked.",
-							"Live Mode in Settings shows or hides Live on the home screen.",
-							"Choose Walking for travel on foot or Driving for travel by car or bus. Driving announces intersections sooner.",
-							"Driving turns Live off when you enter a highway; turn Live back on after leaving the highway.",
-							"Stop When Stationary sets how long Live continues after you stop moving.",
-							"Choose a voice, Speech Rate, and Speech Volume for Live announcements. Use Test Speech to hear your selections."
+							L10n.text("Turn on Live to hear upcoming intersections as you travel, including while the phone is locked."),
+							L10n.text("Live Mode in Settings shows or hides Live on the home screen."),
+							L10n.text("Choose Walking for travel on foot or Driving for travel by car or bus. Driving announces intersections sooner."),
+							L10n.text("Driving turns Live off when you enter a highway; turn Live back on after leaving the highway."),
+							L10n.text("Stop When Stationary sets how long Live continues after you stop moving."),
+							L10n.text("Choose a voice, Speech Rate, and Speech Volume for Live announcements. Use Test Speech to hear your selections.")
 						]
 					)
 
 					helpSection(
-						title: "Siri and Shortcuts",
+						title: L10n.text("Siri and Shortcuts"),
 						paragraphs: [
-							"Use Siri or Shortcuts for Nearest Intersection, Upcoming Intersection, My Direction, Scan Mode, Start Live Mode, and Stop Live Mode.",
-							"To start Live with Siri or Shortcuts, turn on Live Mode in Settings and choose your travel and speech settings.",
-							"Use the Shortcuts app to create your own phrases."
+							L10n.text("Use Siri or Shortcuts for Nearest Intersection, Upcoming Intersection, My Direction, Scan Mode, Start Live Mode, and Stop Live Mode."),
+							L10n.text("To start Live with Siri or Shortcuts, turn on Live Mode in Settings and choose your travel and speech settings."),
+							L10n.text("Use the Shortcuts app to create your own phrases.")
 						]
 					)
 
 					helpSection(
-						title: "Apple Watch",
+						title: L10n.text("Apple Watch"),
 						paragraphs: [
-							"Use Intersector on your watch for Nearest, Upcoming, Direction, and second and third results.",
-							"Change announcement settings on your iPhone to use them on your watch."
+							L10n.text("Use Intersector on your watch for Nearest, Upcoming, Direction, and second and third results."),
+							L10n.text("Change announcement settings on your iPhone to use them on your watch.")
 						]
 					)
 
 					helpSection(
-						title: "Accuracy",
+						title: L10n.text("Accuracy"),
 						paragraphs: [
-							"Directions and distances are estimates.",
-							"Location accuracy, compass accuracy, and map coverage affect results.",
-							"Tall buildings, magnetic interference, and missing or outdated map information can affect the announcements."
+							L10n.text("Directions and distances are estimates."),
+							L10n.text("Location accuracy, compass accuracy, and map coverage affect results."),
+							L10n.text("Tall buildings, magnetic interference, and missing or outdated map information can affect the announcements.")
 						]
 					)
 				}
@@ -2018,10 +2018,10 @@ struct ContentView: View {
 			}
 			.scrollContentBackground(.hidden)
 			.background(Color.crossBg)
-			.navigationTitle("Help")
+			.navigationTitle(L10n.text("Help"))
 			.toolbar {
 				ToolbarItem(placement: .confirmationAction) {
-					Button("Done") {
+					Button(L10n.text("Done")) {
 						isShowingHelp = false
 					}
 				}
@@ -2051,44 +2051,44 @@ struct ContentView: View {
 	private func directionStyleSegmentLabel(_ style: DirectionStyle) -> String {
 		switch style {
 		case .words:
-			"Relative"
+			L10n.text("Relative")
 		case .cardinal:
-			"Cardinal"
+			L10n.text("Cardinal")
 		case .clockFace:
-			"Clock"
+			L10n.text("Clock")
 		}
 	}
 
 	private func directionStyleSegmentAccessibilityLabel(_ style: DirectionStyle) -> String {
 		switch style {
 		case .words:
-			"Relative direction"
+			L10n.text("Relative direction")
 		case .cardinal:
-			"Cardinal direction"
+			L10n.text("Cardinal direction")
 		case .clockFace:
-			"Clock face direction"
+			L10n.text("Clock face direction")
 		}
 	}
 
 	private func areaModeSegmentLabel(_ mode: AreaMode) -> String {
 		switch mode {
 		case .off:
-			"Off"
+			L10n.text("Off")
 		case .near:
-			"Nearby"
+			L10n.text("Nearby")
 		case .toward:
-			"Toward"
+			L10n.text("Toward")
 		}
 	}
 
 	private func areaModeSegmentAccessibilityLabel(_ mode: AreaMode) -> String {
 		switch mode {
 		case .off:
-			"Off"
+			L10n.text("Off")
 		case .near:
-			"Nearby only"
+			L10n.text("Nearby only")
 		case .toward:
-			"Toward, includes nearby and toward areas"
+			L10n.text("Toward, includes nearby and toward areas")
 		}
 	}
 
@@ -2182,7 +2182,7 @@ struct ContentView: View {
 			.accessibilityTouchRegion(minHeight: 60, verticalPadding: 4, alignment: .leading)
 			.accessibilityAddTraits(.isLink)
 			.accessibilityRemoveTraits(.isButton)
-			.accessibilityHint("Opens in external browser")
+			.accessibilityHint(L10n.text("Opens in external browser"))
 	}
 
 
@@ -2211,7 +2211,7 @@ struct ContentView: View {
 	}
 
 	private func handleScanModeStatus(_ text: String) {
-		guard text != "Scan Mode Loading..." else {
+		guard text != L10n.text("Scan Mode Loading...") else {
 			return
 		}
 		let completedPreparation = finishScanPreparationPresentation()
@@ -2382,39 +2382,39 @@ struct ContentView: View {
 
 	private func reportFailureText(_ kind: ReportKind, rank: Int, error: Error) -> String {
 		if case MapDataError.serversCoolingDown = error {
-			return "Map services are temporarily busy. Please wait a minute, then choose Nearest or Upcoming to try again."
+			return L10n.text("Map services are temporarily busy. Please wait a minute, then choose Nearest or Upcoming to try again.")
 		}
 		if let locationError = error as? CLError {
 			return locationError.code == .denied
-				? "Allow Intersector to use your location in iPhone Settings, then choose Nearest or Upcoming to try again."
-				: "Intersector could not get your location yet. Choose Nearest or Upcoming to try again."
+				? L10n.text("Allow Intersector to use your location in iPhone Settings, then choose Nearest or Upcoming to try again.")
+				: L10n.text("Intersector could not get your location yet. Choose Nearest or Upcoming to try again.")
 		}
 		if rank > 1 {
-			return "Intersector could not find the \(rankedFailureLabel(kind, rank: rank)). Please try again."
+			return L10n.text("Intersector could not find the %@. Please try again.", String(describing: rankedFailureLabel(kind, rank: rank)))
 		}
 		if let orientError = error as? OrientError {
 			switch orientError {
 			case .noIntersections where kind == .upcoming:
-				return "Intersector could not identify an Upcoming intersection for that direction. Please try again."
+				return L10n.text("Intersector could not identify an Upcoming intersection for that direction. Please try again.")
 			case .headingUnavailable:
-				return "Intersector could not get a stable direction yet. Please try again."
+				return L10n.text("Intersector could not get a stable direction yet. Please try again.")
 			case .locationUnavailable:
-				return "Intersector could not get your location yet. Please try again."
+				return L10n.text("Intersector could not get your location yet. Please try again.")
 			default:
 				break
 			}
 		}
-		return "Intersector is having trouble loading map data. Choose Nearest or Upcoming to try again."
+		return L10n.text("Intersector is having trouble loading map data. Choose Nearest or Upcoming to try again.")
 	}
 
 	private func rankedFailureLabel(_ kind: ReportKind, rank: Int) -> String {
 		switch kind {
 		case .nearest:
-			return "\(ordinal(rank)) Nearest intersection"
+			return L10n.text("%@ Nearest intersection", String(describing: ordinal(rank)))
 		case .upcoming:
-			return "\(ordinal(rank)) Upcoming intersection"
+			return L10n.text("%@ Upcoming intersection", String(describing: ordinal(rank)))
 		case .scan:
-			return "\(ordinal(rank)) Pointed intersection"
+			return L10n.text("%@ Pointed intersection", String(describing: ordinal(rank)))
 		}
 	}
 
@@ -2422,17 +2422,17 @@ struct ContentView: View {
 		guard rank > 1 else {
 			return kind.intentLabel
 		}
-		return "\(ordinal(rank)) \(kind.intentLabel)"
+		return L10n.text("%@ %@", String(describing: ordinal(rank)), String(describing: kind.intentLabel))
 	}
 
 	private func ordinal(_ value: Int) -> String {
 		switch value {
 		case 2:
-			"2nd"
+			L10n.text("2nd")
 		case 3:
-			"3rd"
+			L10n.text("3rd")
 		default:
-			"\(value)th"
+			L10n.text("%@th", String(describing: value))
 		}
 	}
 
@@ -2449,11 +2449,11 @@ struct ContentView: View {
 
 		do {
 			let heading = try await directionLocationProvider.currentHeading(allowCached: false)
-			let text = "Facing \(Geo.localizedDirection(heading, prefs: prefs))."
+			let text = L10n.text("Facing %@.", String(describing: Geo.localizedDirection(heading, prefs: prefs)))
 			presentStatusText(text)
 			VoiceOverAnnouncer.reportUpdated(text)
 		} catch {
-			let text = "Intersector is having trouble getting your direction. Please try again."
+			let text = L10n.text("Intersector is having trouble getting your direction. Please try again.")
 			presentStatusText(text)
 			VoiceOverAnnouncer.reportUpdated(text)
 		}
@@ -2548,21 +2548,15 @@ struct ContentView: View {
 		let year = Calendar.current.component(.year, from: .now)
 		let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
 		let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
-		return "Copyright \(year) by Marco Salsiccia\nVersion \(version) (\(build))"
+		return L10n.text("Copyright %@ by Marco Salsiccia\nVersion %@ (%@)", String(describing: year), String(describing: version), String(describing: build))
 	}
 
 	private var feedbackEmailBody: String {
-		let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
-		let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
+		let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? L10n.text("Unknown")
+		let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? L10n.text("Unknown")
 		let device = UIDevice.current
-		return """
-
-
-		---
-		Intersector version: \(version) (\(build))
-		Device: \(device.model) (\(deviceHardwareIdentifier))
-		OS: \(device.systemName) \(device.systemVersion)
-		"""
+        return "\n\n---\n" + L10n.text("Intersector version: %@ (%@)\nDevice: %@ (%@)\nOS: %@ %@",
+            version, build, device.model, deviceHardwareIdentifier, device.systemName, device.systemVersion)
 	}
 
 	private var deviceHardwareIdentifier: String {
@@ -2583,7 +2577,7 @@ struct ContentView: View {
 		components.scheme = "mailto"
 		components.path = "marco@marconius.com"
 		components.queryItems = [
-			URLQueryItem(name: "subject", value: "Intersector Feedback"),
+			URLQueryItem(name: "subject", value: L10n.text("Intersector Feedback")),
 			URLQueryItem(name: "body", value: feedbackEmailBody)
 		]
 		guard let mailURL = components.url else {

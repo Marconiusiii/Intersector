@@ -48,7 +48,7 @@ final class PointScanController: ObservableObject {
 		}
 
 		isPreparing = true
-		let loadingText = "Scan Mode Loading..."
+		let loadingText = L10n.text("Scan Mode Loading...")
 		onUpdate(loadingText)
 		VoiceOverAnnouncer.reportUpdated(loadingText)
 		if prefs.haptics {
@@ -79,7 +79,7 @@ final class PointScanController: ObservableObject {
 				isPreparing = false
 				isScanning = true
 				stopPreparationHaptics()
-				let readyText = "Scan Mode Ready."
+				let readyText = L10n.text("Scan Mode Ready.")
 				onUpdate(readyText)
 				VoiceOverAnnouncer.reportUpdated(readyText)
 
@@ -104,7 +104,7 @@ final class PointScanController: ObservableObject {
 				isScanning = false
 				scanTask = nil
 				stopPreparationHaptics()
-				let text = "Unable to start Scan Mode. \(error.localizedDescription)"
+				let text = L10n.text("Unable to start Scan Mode. %@", String(describing: error.localizedDescription))
 				onUpdate(text)
 				VoiceOverAnnouncer.reportUpdated(text)
 			}
@@ -173,10 +173,10 @@ final class PointScanController: ObservableObject {
 				on: roadName,
 				heading: context.dependableTravelDirection
 			)
-			return names.isEmpty ? nil : names.joined(separator: " and ")
+			return names.isEmpty ? nil : names.joined(separator: L10n.text(" and "))
 		}
 		let cross = currentStreet.flatMap { roadName in
-			crossStreet.map { "\(roadName) and \($0)" }
+			crossStreet.map { L10n.text("%@ and %@", String(describing: roadName), String(describing: $0)) }
 		} ?? match.candidate.title
 
 		let report = OrientReport(

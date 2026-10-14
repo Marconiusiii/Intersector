@@ -9,7 +9,7 @@ import Foundation
 
 enum LiveModeAvailability {
 	static let enabledKey = "liveModeEnabled"
-	static let disabledMessage = "Turn on Live Mode in Settings before starting Live Mode."
+	static let disabledMessage = L10n.text("Turn on Live Mode in Settings before starting Live Mode.")
 
 	static func isEnabled(in defaults: UserDefaults = .standard) -> Bool {
 		defaults.object(forKey: enabledKey) == nil || defaults.bool(forKey: enabledKey)
@@ -25,9 +25,9 @@ enum LiveTravelMode: String, CaseIterable, Identifiable, Sendable {
 	var label: String {
 		switch self {
 		case .walking:
-			"Walking"
+			L10n.text("Walking")
 		case .driving:
-			"Driving"
+			L10n.text("Driving")
 		}
 	}
 
@@ -274,8 +274,8 @@ struct LiveHighwayDetector {
 
 	static func shutdownMessage(for road: MapRoad) -> String {
 		let identity = road.routeReference.flatMap { $0.isEmpty ? nil : $0 } ?? road.name
-		let entrance = identity.isEmpty ? "Entering highway." : "Entering \(identity)."
-		return "\(entrance) Live Mode off. Turn Live back on after exiting the highway."
+		let entrance = identity.isEmpty ? L10n.text("Entering highway.") : L10n.text("Entering %@.", String(describing: identity))
+		return L10n.text("%@ Live Mode off. Turn Live back on after exiting the highway.", String(describing: entrance))
 	}
 }
 
@@ -332,15 +332,27 @@ final class SystemSpeechController: NSObject, LiveSpeaking, @preconcurrency AVSp
 		synthesizer.stopSpeaking(at: .immediate)
 		prepareAudioSession()
 		let utterance = AVSpeechUtterance(string: text)
-		if !settings.voiceIdentifier.isEmpty {
-			utterance.voice = AVSpeechSynthesisVoice(identifier: settings.voiceIdentifier)
-		}
+        utterance.voice = Self.voice(for: settings.voiceIdentifier)
 		utterance.rate = Self.speechRate(forPercent: settings.ratePercent)
 		utterance.volume = min(1, max(0, settings.volume))
 		utterance.preUtteranceDelay = max(0, delay)
 		utteranceTracker.begin(utterance)
 		synthesizer.speak(utterance)
 	}
+
+    static func voice(for identifier: String) -> AVSpeechSynthesisVoice? {
+        let language = L10n.language
+        if let selected = AVSpeechSynthesisVoice(identifier: identifier),
+           LiveSpeechVoice.matchesDeviceLanguage(voiceLanguage: selected.language, deviceLanguageCode: language) {
+            return selected
+        }
+        // Let the system retain its regional Spanish voice; require Brazil for Portuguese.
+        if language == "es", let preferred = AVSpeechSynthesisVoice(language: AVSpeechSynthesisVoice.currentLanguageCode()),
+           LiveSpeechVoice.matchesDeviceLanguage(voiceLanguage: preferred.language, deviceLanguageCode: language) {
+            return preferred
+        }
+        return AVSpeechSynthesisVoice(language: language)
+    }
 
 	func stop() {
 		utteranceTracker.clear()
@@ -388,10 +400,8 @@ struct LiveSpeechVoice: Identifiable, Equatable {
 	var label: String
 
 	static var available: [LiveSpeechVoice] {
-		let systemDefault = LiveSpeechVoice(id: "", label: "System Default")
-		guard let deviceLanguageCode = Locale.current.language.languageCode?.identifier else {
-			return [systemDefault]
-		}
+		let systemDefault = LiveSpeechVoice(id: "", label: L10n.text("System Default"))
+        let deviceLanguageCode = L10n.language
 		let installed = AVSpeechSynthesisVoice.speechVoices()
 			.filter { matchesDeviceLanguage(voiceLanguage: $0.language, deviceLanguageCode: deviceLanguageCode) }
 			.sorted {
@@ -403,7 +413,7 @@ struct LiveSpeechVoice: Identifiable, Equatable {
 				return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
 			}
 			.map { voice in
-				LiveSpeechVoice(id: voice.identifier, label: "\(voice.name), \(voice.language)")
+				LiveSpeechVoice(id: voice.identifier, label: L10n.text("%@, %@", String(describing: voice.name), String(describing: voice.language)))
 			}
 		return [systemDefault] + installed
 	}

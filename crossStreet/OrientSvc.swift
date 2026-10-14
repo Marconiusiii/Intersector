@@ -16,11 +16,11 @@ enum OrientError: LocalizedError {
 	var errorDescription: String? {
 		switch self {
 		case .noIntersections:
-			"No nearby mapped intersections were found."
+			L10n.text("No nearby mapped intersections were found.")
 		case .headingUnavailable:
-			"Direction is not available yet."
+			L10n.text("Direction is not available yet.")
 		case .locationUnavailable:
-			"Location is not available yet. Try again."
+			L10n.text("Location is not available yet. Try again.")
 		}
 	}
 }
@@ -625,10 +625,10 @@ struct OrientSvc {
 				on: roadName,
 				heading: streetHeading
 			)
-			return otherNames.isEmpty ? nil : otherNames.joined(separator: " and ")
+			return otherNames.isEmpty ? nil : otherNames.joined(separator: L10n.text(" and "))
 		}
 		let cross = currentStreet.flatMap { roadName in
-			crossStreet.map { "\(roadName) and \($0)" }
+			crossStreet.map { L10n.text("%@ and %@", String(describing: roadName), String(describing: $0)) }
 		} ?? match.title
 
 		return OrientReport(
@@ -892,21 +892,21 @@ struct OrientSvc {
 
 		switch degrees {
 		case 337.5...360, 0..<22.5:
-			return "ahead"
+			return L10n.text("ahead")
 		case 22.5..<67.5:
-			return "ahead and right"
+			return L10n.text("ahead and right")
 		case 67.5..<112.5:
-			return "right"
+			return L10n.text("right")
 		case 112.5..<157.5:
-			return "behind and right"
+			return L10n.text("behind and right")
 		case 157.5..<202.5:
-			return "behind"
+			return L10n.text("behind")
 		case 202.5..<247.5:
-			return "behind and left"
+			return L10n.text("behind and left")
 		case 247.5..<292.5:
-			return "left"
+			return L10n.text("left")
 		default:
-			return "ahead and left"
+			return L10n.text("ahead and left")
 		}
 	}
 
@@ -1047,7 +1047,7 @@ enum Geo {
 			"south", "southwest", "west", "northwest"
 		]
 		let index = Int((normalizedDegrees(degrees) + 22.5) / 45) % names.count
-		return names[index]
+		return L10n.text(names[index])
 	}
 
 	static func localizedDirection(_ degrees: CLLocationDirection, prefs: AppPrefs) -> String {
@@ -1059,19 +1059,18 @@ enum Geo {
 	}
 
 	static func manhattanDirection(for direction: String) -> String {
-		switch direction {
-		case "north", "northeast":
-			"Uptown"
-		case "east", "southeast":
-			"East Side"
-		case "south", "southwest":
-			"Downtown"
-		case "west", "northwest":
-			"West Side"
-		default:
-			direction
-		}
-	}
+        for (names, regionalName) in [
+            (["north", "northeast"], "Uptown"),
+            (["east", "southeast"], "East Side"),
+            (["south", "southwest"], "Downtown"),
+            (["west", "northwest"], "West Side")
+        ] {
+            if names.contains(direction) || names.map({ L10n.text($0) }).contains(direction) {
+                return regionalName
+            }
+        }
+        return direction
+    }
 
 	static func spokenDistance(_ meters: CLLocationDistance, unit: MeasurementUnit = .feet) -> String {
 		switch unit {
@@ -1086,18 +1085,18 @@ enum Geo {
 		let feet = meters * 3.28084
 		if feet < 500 {
 			let rounded = (feet / 10).rounded() * 10
-			return "\(Int(rounded)) feet"
+			return L10n.quantity("%lld feet", Int(rounded))
 		}
 		let miles = feet / 5280
-		return String(format: "%.1f miles", miles)
+		return L10n.decimalQuantity("%.1f miles", miles)
 	}
 
 	private static func spokenMeterDistance(_ meters: CLLocationDistance) -> String {
 		if meters < 1_000 {
 			let rounded = (meters / 5).rounded() * 5
-			return "\(Int(rounded)) meters"
+			return L10n.quantity("%lld meters", Int(rounded))
 		}
 		let kilometers = meters / 1_000
-		return String(format: "%.1f kilometers", kilometers)
+		return L10n.decimalQuantity("%.1f kilometers", kilometers)
 	}
 }

@@ -20,6 +20,7 @@ with tempfile.TemporaryDirectory(prefix='intersector-watch-map-') as directory:
     service.write_text(source[:start] + stub + source[end:])
     subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', '-default-isolation', 'MainActor',
         '-parse-as-library', '-module-cache-path', str(Path(directory) / 'modules'),
+        str(root / 'crossStreet/Localization.swift'),
         str(root / 'crossStreet/LookupAttempt.swift'),
         str(root / 'crossStreet/OverpassRequestPolicy.swift'),
         str(service),

@@ -30,5 +30,5 @@ with tempfile.TemporaryDirectory(prefix='intersector-watch-checks-') as director
     combined = directory / 'Checks.swift'
     combined.write_text(doubles + '\n' + context + '\n' + provider + '\n' + wording + wording_checks)
     executable = directory / 'checks'
-    subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', '-parse-as-library', '-module-cache-path', str(directory / 'modules'), str(combined), '-o', str(executable)], check=True)
+    subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', '-parse-as-library', '-module-cache-path', str(directory / 'modules'), str(root / 'crossStreet/Localization.swift'), str(combined), '-o', str(executable)], check=True)
     subprocess.run([str(executable)], check=True, timeout=35)

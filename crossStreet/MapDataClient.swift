@@ -390,26 +390,26 @@ enum MapDataError: LocalizedError {
 	var errorDescription: String? {
 		switch self {
 		case .serversCoolingDown:
-			"Map services are temporarily busy. Please wait a minute before trying again."
+			L10n.text("Map services are temporarily busy. Please wait a minute before trying again.")
 		case .invalidResponse:
-			"The map server returned an unreadable response."
+			L10n.text("The map server returned an unreadable response.")
 		case .serverError(let statusCode):
 			Self.serverErrorDescription(for: statusCode)
 		case .invalidMapData:
-			"The map server returned data Intersector could not read."
+			L10n.text("The map server returned data Intersector could not read.")
 		}
 	}
 
 	private static func serverErrorDescription(for statusCode: Int) -> String {
 		switch statusCode {
 		case 429:
-			"The map server returned error 429, which usually means too many requests."
+			L10n.text("The map server returned error 429, which usually means too many requests.")
 		case 502, 503:
-			"The map server returned error \(statusCode), which usually means it is temporarily unavailable."
+			L10n.text("The map server returned error %@, which usually means it is temporarily unavailable.", String(describing: statusCode))
 		case 504:
-			"The map server returned error 504, which usually means the request timed out."
+			L10n.text("The map server returned error 504, which usually means the request timed out.")
 		default:
-			"The map server returned error \(statusCode)."
+			L10n.text("The map server returned error %@.", String(describing: statusCode))
 		}
 	}
 }
@@ -952,9 +952,9 @@ struct IntersectionBuilder {
 		near anchor: IntersectionCandidate?
 	) -> String {
 		guard let anchor else {
-			return "Crossing on \(roadName)"
+			return L10n.text("Crossing on %@", String(describing: roadName))
 		}
-		return "Crossing on \(roadName) near \(anchor.contextLabel(on: roadName, minimal: true))"
+		return L10n.text("Crossing on %@ near %@", String(describing: roadName), String(describing: anchor.contextLabel(on: roadName, minimal: true)))
 	}
 
 	private func nearestIntersection(

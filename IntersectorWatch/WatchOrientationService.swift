@@ -15,18 +15,18 @@ nonisolated enum WatchReportKind {
 	var leadText: String {
 		switch self {
 		case .nearest:
-			"Nearest"
+			L10n.text("Nearest")
 		case .upcoming:
-			"Upcoming"
+			L10n.text("Upcoming")
 		}
 	}
 
 	var intentLabel: String {
 		switch self {
 		case .nearest:
-			"nearest intersection"
+			L10n.text("nearest intersection")
 		case .upcoming:
-			"upcoming intersection"
+			L10n.text("upcoming intersection")
 		}
 	}
 }
@@ -43,19 +43,19 @@ enum WatchReportError: LocalizedError {
 	var errorDescription: String? {
 		switch self {
 		case .serversCoolingDown:
-			"I can't get intersection information right now. Please wait a minute and try again."
+			L10n.text("I can't get intersection information right now. Please wait a minute and try again.")
 		case .noIntersections:
-			"No nearby mapped intersections were found."
+			L10n.text("No nearby mapped intersections were found.")
 		case .headingUnavailable:
-			"Direction is not available yet."
+			L10n.text("Direction is not available yet.")
 		case .locationUnavailable:
-			"Location is not available yet. Try again."
+			L10n.text("Location is not available yet. Try again.")
 		case .invalidMapData:
-			"The map server returned data Intersector could not read."
+			L10n.text("The map server returned data Intersector could not read.")
 		case .invalidResponse:
-			"The map server returned an unreadable response."
+			L10n.text("The map server returned an unreadable response.")
 		case .serverError(let statusCode):
-			"The map server returned error \(statusCode)."
+			L10n.text("The map server returned error %@.", String(describing: statusCode))
 		}
 	}
 }
@@ -71,6 +71,7 @@ struct WatchAppPrefs: Equatable, Hashable {
 	var manhattanSnobMode = false
 
 	nonisolated static func saved(from defaults: UserDefaults = .standard) -> WatchAppPrefs {
+		L10n.initializeUnits(in: defaults)
 		let announcementOptions = WatchAnnouncementOptions.saved(from: defaults)
 		let savedAreaMode = WatchAreaMode(rawValue: defaults.string(forKey: "areaMode") ?? "") ?? .near
 		return WatchAppPrefs(
@@ -166,11 +167,11 @@ enum WatchAreaMode: String, CaseIterable, Identifiable {
 	var label: String {
 		switch self {
 		case .off:
-			"Off"
+			L10n.text("Off")
 		case .near:
-			"Nearby only"
+			L10n.text("Nearby only")
 		case .toward:
-			"Nearby and toward"
+			L10n.text("Nearby and toward")
 		}
 	}
 }
@@ -184,9 +185,9 @@ enum WatchMeasurementUnit: String, CaseIterable, Identifiable {
 	var label: String {
 		switch self {
 		case .feet:
-			"Feet"
+			L10n.text("Feet")
 		case .meters:
-			"Meters"
+			L10n.text("Meters")
 		}
 	}
 }
@@ -201,11 +202,11 @@ enum WatchDirectionStyle: String, CaseIterable, Identifiable {
 	var label: String {
 		switch self {
 		case .words:
-			"Relative"
+			L10n.text("Relative")
 		case .cardinal:
-			"Cardinal"
+			L10n.text("Cardinal")
 		case .clockFace:
-			"Clock Face"
+			L10n.text("Clock Face")
 		}
 	}
 }
@@ -247,30 +248,30 @@ enum IntersectorWatchReporter {
 
 	static func failureMessage(_ error: Error, kind: WatchReportKind, rank: Int = 1) -> String {
 		if let error = error as? URLError {
-			if error.code == .timedOut { return "This is taking too long. Please try again." }
-			return "I couldn't connect. Check your internet connection and try again."
+			if error.code == .timedOut { return L10n.text("This is taking too long. Please try again.") }
+			return L10n.text("I couldn't connect. Check your internet connection and try again.")
 		}
-		if case WatchReportError.serversCoolingDown = error { return "I can't get intersection information right now. Please wait a minute and try again." }
-		if case WatchReportError.serverError(429) = error { return "I can't get intersection information right now. Please wait a minute and try again." }
-		if case WatchReportError.headingUnavailable = error { return "I couldn't tell which way you're facing. Hold your Watch steady and try again." }
-		if case WatchReportError.locationUnavailable = error { return "I couldn't get your location. Please try again." }
+		if case WatchReportError.serversCoolingDown = error { return L10n.text("I can't get intersection information right now. Please wait a minute and try again.") }
+		if case WatchReportError.serverError(429) = error { return L10n.text("I can't get intersection information right now. Please wait a minute and try again.") }
+		if case WatchReportError.headingUnavailable = error { return L10n.text("I couldn't tell which way you're facing. Hold your Watch steady and try again.") }
+		if case WatchReportError.locationUnavailable = error { return L10n.text("I couldn't get your location. Please try again.") }
 		if case WatchReportError.noIntersections = error {
 			if rank > 1 {
-				let order = rank == 2 ? "second" : "third"
-				return "I couldn't find your \(order) \(kind == .upcoming ? "upcoming" : "nearest") intersection. Please try again."
+				let order = rank == 2 ? L10n.text("second") : L10n.text("third")
+				return L10n.text("I couldn't find your %@ %@ intersection. Please try again.", String(describing: order), String(describing: kind == .upcoming ? L10n.text("upcoming") : L10n.text("nearest")))
 			}
-			return kind == .upcoming ? "I couldn't find an intersection ahead. Try facing along the street and ask again." : "I couldn't find a nearby intersection. Please try again."
+			return kind == .upcoming ? L10n.text("I couldn't find an intersection ahead. Try facing along the street and ask again.") : L10n.text("I couldn't find a nearby intersection. Please try again.")
 		}
-		return "I can't get intersection information right now. Please try again."
+		return L10n.text("I can't get intersection information right now. Please try again.")
 	}
 
 	@MainActor
 	static func directionText(prefs: WatchAppPrefs = WatchAppPrefs.saved()) async -> String {
 		do {
 			let heading = try await WatchLocationProvider().currentHeading(allowCached: false)
-			return "Facing \(WatchGeo.localizedDirection(heading, prefs: prefs))."
+			return L10n.text("Facing %@.", String(describing: WatchGeo.localizedDirection(heading, prefs: prefs)))
 		} catch {
-			return "I couldn't get your direction. Please try again."
+			return L10n.text("I couldn't get your direction. Please try again.")
 		}
 	}
 }
@@ -529,10 +530,10 @@ struct WatchOrientationService {
 				on: roadName,
 				heading: context.headingDegrees
 			)
-			return otherNames.isEmpty ? nil : otherNames.joined(separator: " and ")
+			return otherNames.isEmpty ? nil : otherNames.joined(separator: L10n.text(" and "))
 		}
 		let cross = currentStreet.flatMap { roadName in
-			crossStreet.map { "\(roadName) and \($0)" }
+			crossStreet.map { L10n.text("%@ and %@", String(describing: roadName), String(describing: $0)) }
 		} ?? match.title
 
 		return WatchOrientationReport(
@@ -767,21 +768,21 @@ struct WatchOrientationService {
 		let degrees = WatchGeo.normalizedDegrees(bearing - heading)
 		switch degrees {
 		case 337.5...360, 0..<22.5:
-			return "ahead"
+			return L10n.text("ahead")
 		case 22.5..<67.5:
-			return "ahead and right"
+			return L10n.text("ahead and right")
 		case 67.5..<112.5:
-			return "right"
+			return L10n.text("right")
 		case 112.5..<157.5:
-			return "behind and right"
+			return L10n.text("behind and right")
 		case 157.5..<202.5:
-			return "behind"
+			return L10n.text("behind")
 		case 202.5..<247.5:
-			return "behind and left"
+			return L10n.text("behind and left")
 		case 247.5..<292.5:
-			return "left"
+			return L10n.text("left")
 		default:
-			return "ahead and left"
+			return L10n.text("ahead and left")
 		}
 	}
 
@@ -844,10 +845,10 @@ struct WatchOrientationReport: Equatable {
 			text = directText(with: prefs)
 		}
 		if includeLead {
-			text = "\(leadText(rank: rank)): \(text)"
+			text = L10n.text("%@: %@", String(describing: leadText(rank: rank)), String(describing: text))
 		}
 		if includeNeighborhood, let area = areaText(prefs) {
-			text += " \(area)"
+			text += L10n.text(" %@", String(describing: area))
 		}
 		return text + "."
 	}
@@ -856,12 +857,15 @@ struct WatchOrientationReport: Equatable {
 		guard let street, let crossStreet else {
 			return cross
 		}
-		return "\(street) and \(crossStreet)"
+		return L10n.text("%@ and %@", String(describing: street), String(describing: crossStreet))
 	}
 
 	private func leadText(rank: Int? = nil) -> String {
 		if let rank, rank > 1 {
-			return "\(Self.ordinal(rank)) \(kind.leadText)"
+			switch kind {
+            case .nearest: return L10n.text("%@ Nearest", Self.ordinal(rank))
+            case .upcoming: return L10n.text("%@ Upcoming", Self.ordinal(rank))
+            }
 		}
 		return kind.leadText
 	}
@@ -869,11 +873,11 @@ struct WatchOrientationReport: Equatable {
 	private static func ordinal(_ value: Int) -> String {
 		switch value {
 		case 2:
-			"2nd"
+			L10n.text("2nd")
 		case 3:
-			"3rd"
+			L10n.text("3rd")
 		default:
-			"\(value)th"
+			L10n.text("%@th", String(describing: value))
 		}
 	}
 
@@ -881,7 +885,7 @@ struct WatchOrientationReport: Equatable {
 		var text = cross
 		let details = reportDetails(with: prefs)
 		if !details.isEmpty {
-			text += ", \(details.joined(separator: ", "))"
+			text += L10n.text(", %@", String(describing: details.joined(separator: ", ")))
 		}
 		return text
 	}
@@ -893,16 +897,16 @@ struct WatchOrientationReport: Equatable {
 	) -> String {
 		let details = reportDetails(with: prefs)
 		guard !details.isEmpty else {
-			return "On \(street) at \(crossStreet)"
+			return L10n.text("On %@ at %@", String(describing: street), String(describing: crossStreet))
 		}
-		return "On \(street) at \(crossStreet), \(details.joined(separator: ", "))"
+		return L10n.text("On %@ at %@, %@", String(describing: street), String(describing: crossStreet), String(describing: details.joined(separator: ", ")))
 	}
 
 	private func reportDetails(with prefs: WatchAppPrefs) -> [String] {
 		var details: [String] = []
 		var travelDetails: [String] = []
 		if prefs.announcementOptions.includeDistance {
-			travelDetails.append("about \(dist)")
+			travelDetails.append(L10n.text("about %@", String(describing: dist)))
 		}
 		if
 			prefs.announcementOptions.includeDirection,
@@ -927,12 +931,12 @@ struct WatchOrientationReport: Equatable {
 		case .off:
 			nil
 		case .near:
-			area.map { "in \($0)" }
+			area.map { L10n.text("in %@", String(describing: $0)) }
 		case .toward:
 			if let toward {
-				"toward \(toward)"
+				L10n.text("toward %@", String(describing: toward))
 			} else {
-				area.map { "in \($0)" }
+				area.map { L10n.text("in %@", String(describing: $0)) }
 			}
 		}
 	}
@@ -940,15 +944,15 @@ struct WatchOrientationReport: Equatable {
 	private func directionText(with prefs: WatchAppPrefs) -> String? {
 		switch prefs.directionStyle {
 		case .words:
-			return relDir
+			return relDir.map { L10n.text($0) }
 		case .cardinal:
 			guard let head else {
 				return nil
 			}
 			if prefs.manhattanSnobMode {
-				return "toward \(WatchGeo.manhattanDirection(for: head))"
+				return L10n.text("toward %@", String(describing: WatchGeo.manhattanDirection(for: head)))
 			}
-			return head
+			return L10n.text(head)
 		case .clockFace:
 			return relDegrees.map { Self.clockFaceDirection(from: $0) }
 		}
@@ -956,7 +960,8 @@ struct WatchOrientationReport: Equatable {
 
 	private static func clockFaceDirection(from degrees: CLLocationDirection) -> String {
 		let hour = Int((WatchGeo.normalizedDegrees(degrees) + 15) / 30) % 12
-		return "at \(hour == 0 ? 12 : hour) o'clock"
+        if hour == 1 { return L10n.text("at 1 o'clock") }
+		return L10n.text("at %@ o'clock", String(describing: hour == 0 ? 12 : hour))
 	}
 }
 
@@ -977,7 +982,7 @@ struct WatchIntersectionReportList: Equatable {
 					guard let crossStreet = report.crossStreet else {
 						return report.cross
 					}
-					return index == 0 ? "\(sharedStreet) and \(crossStreet)" : crossStreet
+					return index == 0 ? L10n.text("%@ and %@", String(describing: sharedStreet), String(describing: crossStreet)) : crossStreet
 				}
 			} else {
 				labels = reports.map(\.cross)
@@ -996,7 +1001,7 @@ struct WatchIntersectionReportList: Equatable {
 		guard let sharedNeighborhood else {
 			return text
 		}
-		return text.dropTrailingPeriod() + " \(sharedNeighborhood)."
+		return text.dropTrailingPeriod() + L10n.text(" %@.", String(describing: sharedNeighborhood))
 	}
 
 	private func sharedNeighborhoodText(with prefs: WatchAppPrefs) -> String? {
@@ -1069,7 +1074,7 @@ struct WatchIntersectionCandidate: Identifiable, Equatable {
 	var intersectionDetails: WatchIntersectionDetails?
 
 	var title: String {
-		names.prefix(2).joined(separator: " and ")
+		names.prefix(2).joined(separator: L10n.text(" and "))
 	}
 
 	var roadNames: [String] {
@@ -1078,7 +1083,7 @@ struct WatchIntersectionCandidate: Identifiable, Equatable {
 
 	func contextLabel(on streetName: String) -> String {
 		let otherNames = names.filter { $0 != streetName }
-		return otherNames.isEmpty ? title : otherNames.joined(separator: " and ")
+		return otherNames.isEmpty ? title : otherNames.joined(separator: L10n.text(" and "))
 	}
 }
 
@@ -1090,10 +1095,10 @@ struct WatchIntersectionDetails: Equatable, Hashable {
 	var spokenPhrases: [String] {
 		var phrases: [String] = []
 		if isSignalized {
-			phrases.append(isStreetIntersection ? "signalized intersection" : "signalized crossing")
+			phrases.append(isStreetIntersection ? L10n.text("signalized intersection") : L10n.text("signalized crossing"))
 		}
 		if hasPedestrianIsland {
-			phrases.append("pedestrian island")
+			phrases.append(L10n.text("pedestrian island"))
 		}
 		return phrases
 	}
@@ -2519,9 +2524,9 @@ struct WatchIntersectionBuilder {
 		near anchor: WatchIntersectionCandidate?
 	) -> String {
 		guard let anchor else {
-			return "Crossing on \(roadName)"
+			return L10n.text("Crossing on %@", String(describing: roadName))
 		}
-		return "Crossing on \(roadName) near \(anchor.contextLabel(on: roadName))"
+		return L10n.text("Crossing on %@ near %@", String(describing: roadName), String(describing: anchor.contextLabel(on: roadName)))
 	}
 
 	private func nearestIntersection(
@@ -3011,7 +3016,7 @@ enum WatchGeo {
 			"south", "southwest", "west", "northwest"
 		]
 		let index = Int((normalizedDegrees(degrees) + 22.5) / 45) % names.count
-		return names[index]
+		return L10n.text(names[index])
 	}
 
 	static func localizedDirection(_ degrees: CLLocationDirection, prefs: WatchAppPrefs) -> String {
@@ -3023,19 +3028,18 @@ enum WatchGeo {
 	}
 
 	static func manhattanDirection(for direction: String) -> String {
-		switch direction {
-		case "north", "northeast":
-			"Uptown"
-		case "east", "southeast":
-			"East Side"
-		case "south", "southwest":
-			"Downtown"
-		case "west", "northwest":
-			"West Side"
-		default:
-			direction
-		}
-	}
+        for (names, regionalName) in [
+            (["north", "northeast"], "Uptown"),
+            (["east", "southeast"], "East Side"),
+            (["south", "southwest"], "Downtown"),
+            (["west", "northwest"], "West Side")
+        ] {
+            if names.contains(direction) || names.map({ L10n.text($0) }).contains(direction) {
+                return regionalName
+            }
+        }
+        return direction
+    }
 
 	static func spokenDistance(_ meters: CLLocationDistance, unit: WatchMeasurementUnit = .feet) -> String {
 		switch unit {
@@ -3050,19 +3054,19 @@ enum WatchGeo {
 		let feet = meters * 3.28084
 		if feet < 500 {
 			let rounded = (feet / 10).rounded() * 10
-			return "\(Int(rounded)) feet"
+			return L10n.quantity("%lld feet", Int(rounded))
 		}
 		let miles = feet / 5280
-		return String(format: "%.1f miles", miles)
+		return L10n.decimalQuantity("%.1f miles", miles)
 	}
 
 	private static func spokenMeterDistance(_ meters: CLLocationDistance) -> String {
 		if meters < 500 {
 			let rounded = (meters / 10).rounded() * 10
-			return "\(Int(rounded)) meters"
+			return L10n.quantity("%lld meters", Int(rounded))
 		}
 		let kilometers = meters / 1_000
-		return String(format: "%.1f kilometers", kilometers)
+		return L10n.decimalQuantity("%.1f kilometers", kilometers)
 	}
 }
 

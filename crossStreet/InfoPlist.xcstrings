@@ -1,0 +1,29 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "NSLocationWhenInUseUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intersector uses your location to find nearby mapped intersections."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intersector usa tu ubicación para encontrar intersecciones cercanas en el mapa."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Intersector usa sua localização para encontrar cruzamentos próximos no mapa."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

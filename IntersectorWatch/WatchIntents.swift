@@ -242,7 +242,7 @@ struct WatchGetMyDirectionIntent: AppIntent {
 		let direction = WatchGeo.localizedDirection(heading, prefs: prefs)
 		return .result(
 			value: WatchIntersectorShortcutResult(
-				announcementText: "Facing \(direction).",
+				announcementText: L10n.text("Facing %@.", String(describing: direction)),
 				direction: direction,
 				heading: WatchGeo.compassDirection(heading)
 			)

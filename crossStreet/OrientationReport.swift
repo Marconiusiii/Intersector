@@ -83,10 +83,10 @@ struct OrientReport: Equatable {
 			text = directText(with: prefs)
 		}
 		if includeLead {
-			text = "\(leadText(rank: rank)): \(text)"
+			text = L10n.text("%@: %@", String(describing: leadText(rank: rank)), String(describing: text))
 		}
 		if includeNeighborhood, let area = areaText(prefs) {
-			text += " \(area)"
+			text += L10n.text(" %@", String(describing: area))
 		}
 		text += "."
 		return text
@@ -96,12 +96,16 @@ struct OrientReport: Equatable {
 		guard let street, let crossStreet else {
 			return cross
 		}
-		return "\(street) and \(crossStreet)"
+		return L10n.text("%@ and %@", String(describing: street), String(describing: crossStreet))
 	}
 
 	private func leadText(rank: Int? = nil) -> String {
 		if let rank, rank > 1 {
-			return "\(Self.ordinal(rank)) \(baseLeadText)"
+			switch kind {
+            case .nearest: return L10n.text("%@ Nearest", Self.ordinal(rank))
+            case .upcoming: return L10n.text("%@ Upcoming", Self.ordinal(rank))
+            case .scan: return L10n.text("%@ Pointed", Self.ordinal(rank))
+            }
 		}
 		return baseLeadText
 	}
@@ -109,22 +113,22 @@ struct OrientReport: Equatable {
 	fileprivate var baseLeadText: String {
 		switch kind {
 		case .nearest:
-			"Nearest"
+			L10n.text("Nearest")
 		case .upcoming:
-			"Upcoming"
+			L10n.text("Upcoming")
 		case .scan:
-			"Pointed"
+			L10n.text("Pointed")
 		}
 	}
 
 	private static func ordinal(_ value: Int) -> String {
 		switch value {
 		case 2:
-			"2nd"
+			L10n.text("2nd")
 		case 3:
-			"3rd"
+			L10n.text("3rd")
 		default:
-			"\(value)th"
+			L10n.text("%@th", String(describing: value))
 		}
 	}
 
@@ -132,7 +136,7 @@ struct OrientReport: Equatable {
 		var text = cross
 		let details = reportDetails(with: prefs)
 		if !details.isEmpty {
-			text += ", \(details.joined(separator: ", "))"
+			text += L10n.text(", %@", String(describing: details.joined(separator: ", ")))
 		}
 		return text
 	}
@@ -144,16 +148,16 @@ struct OrientReport: Equatable {
 	) -> String {
 		let details = reportDetails(with: prefs)
 		guard !details.isEmpty else {
-			return "On \(street) at \(crossStreet)"
+			return L10n.text("On %@ at %@", String(describing: street), String(describing: crossStreet))
 		}
-		return "On \(street) at \(crossStreet), \(details.joined(separator: ", "))"
+		return L10n.text("On %@ at %@, %@", String(describing: street), String(describing: crossStreet), String(describing: details.joined(separator: ", ")))
 	}
 
 	private func reportDetails(with prefs: AppPrefs) -> [String] {
 		var details: [String] = []
 		var travelDetails: [String] = []
 		if prefs.announcementOptions.includeDistance {
-			travelDetails.append("about \(dist)")
+			travelDetails.append(L10n.text("about %@", String(describing: dist)))
 		}
 		if
 			prefs.announcementOptions.includeDirection,
@@ -179,12 +183,12 @@ struct OrientReport: Equatable {
 		case .off:
 			nil
 		case .near:
-			area.map { "in \($0)" }
+			area.map { L10n.text("in %@", String(describing: $0)) }
 		case .toward:
 			if let toward {
-				"toward \(toward)"
+				L10n.text("toward %@", String(describing: toward))
 			} else {
-				area.map { "in \($0)" }
+				area.map { L10n.text("in %@", String(describing: $0)) }
 			}
 		}
 	}
@@ -192,15 +196,15 @@ struct OrientReport: Equatable {
 	private func directionText(with prefs: AppPrefs) -> String? {
 		switch prefs.directionStyle {
 		case .words:
-			return relDir
+			return relDir.map { L10n.text($0) }
 		case .cardinal:
 			guard let head else {
 				return nil
 			}
 			if prefs.manhattanSnobMode {
-				return "toward \(Geo.manhattanDirection(for: head))"
+				return L10n.text("toward %@", String(describing: Geo.manhattanDirection(for: head)))
 			}
-			return head
+			return L10n.text(head)
 		case .clockFace:
 			return relDegrees.map { Self.clockFaceDirection(from: $0) }
 		}
@@ -208,7 +212,8 @@ struct OrientReport: Equatable {
 
 	private static func clockFaceDirection(from degrees: CLLocationDirection) -> String {
 		let hour = Int((Geo.normalizedDegrees(degrees) + 15) / 30) % 12
-		return "at \(hour == 0 ? 12 : hour) o'clock"
+        if hour == 1 { return L10n.text("at 1 o'clock") }
+		return L10n.text("at %@ o'clock", String(describing: hour == 0 ? 12 : hour))
 	}
 }
 
@@ -231,13 +236,13 @@ struct IntersectionReportList: Equatable {
 					guard let crossStreet = report.crossStreet else {
 						return report.cross
 					}
-					return index == 0 ? "\(sharedStreet) and \(crossStreet)" : crossStreet
+					return index == 0 ? L10n.text("%@ and %@", String(describing: sharedStreet), String(describing: crossStreet)) : crossStreet
 				}
 			} else {
 				labels = reports.map(\.cross)
 			}
-			let lead = includeLead ? "\(first.baseLeadText): " : ""
-			return "\(lead)\(labels.joined(separator: ", "))."
+			let lead = includeLead ? L10n.text("%@: ", String(describing: first.baseLeadText)) : ""
+			return L10n.text("%@%@.", String(describing: lead), String(describing: labels.joined(separator: ", ")))
 		}
 
 		let sharedNeighborhood = sharedNeighborhoodText(with: prefs)
@@ -251,7 +256,7 @@ struct IntersectionReportList: Equatable {
 		guard let sharedNeighborhood else {
 			return text
 		}
-		return text.dropTrailingPeriod() + " \(sharedNeighborhood)."
+		return text.dropTrailingPeriod() + L10n.text(" %@.", String(describing: sharedNeighborhood))
 	}
 
 	private func sharedNeighborhoodText(with prefs: AppPrefs) -> String? {
@@ -290,11 +295,11 @@ nonisolated enum ReportKind {
 	var intentLabel: String {
 		switch self {
 		case .nearest:
-			"nearest intersection"
+			L10n.text("nearest intersection")
 		case .upcoming:
-			"upcoming intersection"
+			L10n.text("upcoming intersection")
 		case .scan:
-			"pointed intersection"
+			L10n.text("pointed intersection")
 		}
 	}
 }
@@ -339,7 +344,7 @@ struct IntersectionCandidate: Equatable, Identifiable {
 	var intersectionDetails: IntersectionDetails?
 
 	var title: String {
-		names.prefix(2).joined(separator: " and ")
+		names.prefix(2).joined(separator: L10n.text(" and "))
 	}
 
 	var roadNames: [String] {
@@ -348,10 +353,10 @@ struct IntersectionCandidate: Equatable, Identifiable {
 
 	func contextLabel(on streetName: String, minimal: Bool) -> String {
 		if id.hasPrefix("crossing-") {
-			return minimal ? "mapped crossing" : "a mapped crossing"
+			return minimal ? L10n.text("mapped crossing") : L10n.text("a mapped crossing")
 		}
 		let otherNames = names.filter { $0 != streetName }
-		return otherNames.isEmpty ? title : otherNames.joined(separator: " and ")
+		return otherNames.isEmpty ? title : otherNames.joined(separator: L10n.text(" and "))
 	}
 }
 
@@ -363,10 +368,10 @@ struct IntersectionDetails: Equatable, Hashable, Sendable {
 	var spokenPhrases: [String] {
 		var phrases: [String] = []
 		if isSignalized {
-			phrases.append(isStreetIntersection ? "signalized intersection" : "signalized crossing")
+			phrases.append(isStreetIntersection ? L10n.text("signalized intersection") : L10n.text("signalized crossing"))
 		}
 		if hasPedestrianIsland {
-			phrases.append("pedestrian island")
+			phrases.append(L10n.text("pedestrian island"))
 		}
 		return phrases
 	}
@@ -400,12 +405,12 @@ struct StreetPositionContext: Equatable {
 		guard boundaries.count == 2 else {
 			return ""
 		}
-		let prefix = isOnStreet ? "On" : "Along"
+		let prefix = isOnStreet ? L10n.text("On") : L10n.text("Along")
 		let first = boundaries[0].contextLabel(on: streetName, minimal: false)
 		let second = boundaries[1].contextLabel(on: streetName, minimal: false)
-		var text = "\(prefix) \(streetName) between \(first) and \(second)"
+		var text = L10n.text("%@ %@ between %@ and %@", String(describing: prefix), String(describing: streetName), String(describing: first), String(describing: second))
 		if let following {
-			text += ", toward \(following.contextLabel(on: streetName, minimal: false))"
+			text += L10n.text(", toward %@", String(describing: following.contextLabel(on: streetName, minimal: false)))
 		}
 		return text + "."
 	}

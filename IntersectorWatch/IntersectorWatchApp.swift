@@ -11,6 +11,7 @@ import SwiftUI
 @main
 struct IntersectorWatchApp: App {
 	init() {
+		L10n.initializeUnits()
 		IntersectorWatchShortcuts.updateAppShortcutParameters()
 	}
 

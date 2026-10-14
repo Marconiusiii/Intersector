@@ -42,6 +42,7 @@ struct AppPrefs {
 
 	@MainActor
 	static func saved(from defaults: UserDefaults = .standard) -> AppPrefs {
+		L10n.initializeUnits(in: defaults)
 		let announcementOptions = AnnouncementOptions.saved(from: defaults)
 		let savedAreaMode = AreaMode(rawValue: defaults.string(forKey: "areaMode") ?? "") ?? .near
 		return AppPrefs(
@@ -154,11 +155,11 @@ enum AreaMode: String, CaseIterable, Identifiable {
 	var label: String {
 		switch self {
 		case .off:
-			"Off"
+			L10n.text("Off")
 		case .near:
-			"Nearby only"
+			L10n.text("Nearby only")
 		case .toward:
-			"Nearby and toward"
+			L10n.text("Nearby and toward")
 		}
 	}
 }
@@ -173,11 +174,11 @@ enum DetailLev: String, CaseIterable, Identifiable {
 	var label: String {
 		switch self {
 		case .minimal:
-			"Minimal"
+			L10n.text("Minimal")
 		case .brief:
-			"Brief"
+			L10n.text("Brief")
 		case .standard:
-			"Standard"
+			L10n.text("Standard")
 		}
 	}
 }
@@ -191,9 +192,9 @@ enum MeasurementUnit: String, CaseIterable, Identifiable {
 	var label: String {
 		switch self {
 		case .feet:
-			"Feet"
+			L10n.text("Feet")
 		case .meters:
-			"Meters"
+			L10n.text("Meters")
 		}
 	}
 }
@@ -208,11 +209,11 @@ enum DirectionStyle: String, CaseIterable, Identifiable {
 	var label: String {
 		switch self {
 		case .words:
-			"Relative"
+			L10n.text("Relative")
 		case .cardinal:
-			"Cardinal"
+			L10n.text("Cardinal")
 		case .clockFace:
-			"Clock Face"
+			L10n.text("Clock Face")
 		}
 	}
 }

@@ -125,11 +125,11 @@ private func shortcutResult(from report: OrientReport, prefs: AppPrefs, rank: In
 private func confidenceText(_ confidence: ConfLev) -> String {
 	switch confidence {
 	case .high:
-		"High"
+		L10n.text("High")
 	case .medium:
-		"Medium"
+		L10n.text("Medium")
 	case .low:
-		"Low"
+		L10n.text("Low")
 	}
 }
 
@@ -334,7 +334,7 @@ struct GetMyDirectionIntent: AppIntent {
 		let direction = Geo.localizedDirection(heading, prefs: prefs)
 		return .result(
 			value: IntersectorShortcutResult(
-				announcementText: "Facing \(direction).",
+				announcementText: L10n.text("Facing %@.", String(describing: direction)),
 				direction: direction,
 				heading: Geo.compassDirection(heading)
 			)
@@ -356,12 +356,12 @@ struct MyDirectionIntent: AppIntent {
 			let text = Self.spokenDirection(for: heading, prefs: prefs)
 			return intersectorResult(text)
 		} catch {
-			return intersectorResult("I couldn't get your direction. Please try again.")
+			return intersectorResult(L10n.text("I couldn't get your direction. Please try again."))
 		}
 	}
 
 	static func spokenDirection(for heading: CLLocationDirection, prefs: AppPrefs) -> String {
-		"Facing \(Geo.localizedDirection(heading, prefs: prefs))."
+		L10n.text("Facing %@.", String(describing: Geo.localizedDirection(heading, prefs: prefs)))
 	}
 }
 
@@ -377,9 +377,9 @@ enum LiveModeShortcutCommand: String {
 	var resultDialog: String {
 		switch self {
 		case .start:
-			"Opening Intersector to start Live Mode."
+			L10n.text("Opening Intersector to start Live Mode.")
 		case .stop:
-			"Opening Intersector to stop Live Mode."
+			L10n.text("Opening Intersector to stop Live Mode.")
 		}
 	}
 }
@@ -392,7 +392,7 @@ struct StartPointScanIntent: AppIntent {
 	func perform() async throws -> some IntentResult & ProvidesDialog {
 		UserDefaults.standard.removeObject(forKey: await LaunchKeys.liveModeCommand)
 		UserDefaults.standard.set(true, forKey: await LaunchKeys.startPointScan)
-		return .result(dialog: "Opening Intersector in Scan Mode.")
+		return .result(dialog: IntentDialog(stringLiteral: L10n.text("Opening Intersector in Scan Mode.")))
 	}
 }
 

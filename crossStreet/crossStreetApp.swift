@@ -11,6 +11,7 @@ import AppIntents
 @main
 struct IntersectorApp: App {
 	init() {
+		L10n.initializeUnits()
 		IntersectorShortcuts.updateAppShortcutParameters()
 	}
 

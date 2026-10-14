@@ -16,20 +16,20 @@ struct OnboardingView: View {
 
 	private let pages = [
 		OnboardingPage(
-			title: "Welcome to Intersector",
-			body: "Intersector helps you identify nearby intersections and orient yourself by street direction. It is built for quick, accessible street context from the app or Siri."
+			title: L10n.text("Welcome to Intersector"),
+			body: L10n.text("Intersector helps you identify nearby intersections and orient yourself by street direction. It is built for quick, accessible street context from the app or Siri.")
 		),
 		OnboardingPage(
-			title: "Use Siri Shortcuts",
-			body: "Try saying: Nearest intersection in Intersector. Upcoming intersection in Intersector. Start Scan Mode in Intersector. You can also set up your own shortcuts using Intersector in the Shortcuts app."
+			title: L10n.text("Use Siri Shortcuts"),
+			body: L10n.text("Try saying: Nearest intersection in Intersector. Upcoming intersection in Intersector. Start Scan Mode in Intersector. You can also set up your own shortcuts using Intersector in the Shortcuts app.")
 		),
 		OnboardingPage(
-			title: "Apple Watch Support",
-			body: "Apple Watch support is included. If Intersector does not appear on your watch automatically, open the Watch app on iPhone and install it from Available Apps."
+			title: L10n.text("Apple Watch Support"),
+			body: L10n.text("Apple Watch support is included. If Intersector does not appear on your watch automatically, open the Watch app on iPhone and install it from Available Apps.")
 		),
 		OnboardingPage(
-			title: "Location Permission",
-			body: "Intersector needs your location to find the streets and intersections around you. The next step opens the iOS location permission request."
+			title: L10n.text("Location Permission"),
+			body: L10n.text("Intersector needs your location to find the streets and intersections around you. The next step opens the iOS location permission request.")
 		)
 	]
 
@@ -97,7 +97,7 @@ private struct OnboardingPageView: View {
 			Button {
 				onNext()
 			} label: {
-				Text(isRequestingPermission ? "Requesting..." : "Next")
+				Text(isRequestingPermission ? L10n.text("Requesting...") : L10n.text("Next"))
 					.font(.title3)
 					.fontWeight(.semibold)
 					.foregroundStyle(Color.crossButtonText)

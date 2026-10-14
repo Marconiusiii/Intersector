@@ -10,7 +10,7 @@ import Foundation
 @MainActor
 final class LiveModeCoordinator: ObservableObject {
 	@Published private(set) var isActive = false
-	@Published private(set) var statusText = "Live Mode off."
+	@Published private(set) var statusText = L10n.text("Live Mode off.")
 
 	private let locationProvider: any LiveLocationProviding
 	private let mapDataClient: MapDataFetching
@@ -111,11 +111,11 @@ final class LiveModeCoordinator: ObservableObject {
 					receive(context)
 				}
 				guard !Task.isCancelled, sessionID == session, isActive else { return }
-				stop(message: "Live Mode stopped because location updates ended.")
+				stop(message: L10n.text("Live Mode stopped because location updates ended."))
 			} catch is CancellationError {
 			} catch {
 				guard !Task.isCancelled, sessionID == session, isActive else { return }
-				stop(message: "Live Mode stopped because location is unavailable.")
+				stop(message: L10n.text("Live Mode stopped because location is unavailable."))
 			}
 		}
 
@@ -130,7 +130,7 @@ final class LiveModeCoordinator: ObservableObject {
 		}
 	}
 
-	func stop(message: String = "Live Mode off.") {
+	func stop(message: String = L10n.text("Live Mode off.")) {
 		guard isActive else {
 			statusText = message
 			return
@@ -153,13 +153,13 @@ final class LiveModeCoordinator: ObservableObject {
 	}
 
 	static func activationMessage(for mode: LiveTravelMode) -> String {
-		"Live Mode on. \(mode.label)."
+		L10n.text("Live Mode on. %@.", String(describing: mode.label))
 	}
 
 	func switchMode(to mode: LiveTravelMode) {
 		guard isActive else { return }
 		guard activeMode != mode else {
-			speechController.speak("\(mode.label) already selected.", settings: activeSpeechSettings, delay: 0)
+			speechController.speak(L10n.text("%@ already selected.", String(describing: mode.label)), settings: activeSpeechSettings, delay: 0)
 			return
 		}
 		activeMode = mode
@@ -172,7 +172,7 @@ final class LiveModeCoordinator: ObservableObject {
 		highwayDetector.reset()
 		announcementGate.reset()
 		walkingTracker = WalkingLiveTracker()
-		let message = "Live Mode switched to \(mode.label)."
+		let message = L10n.text("Live Mode switched to %@.", String(describing: mode.label))
 		statusText = message
 		speechController.speak(message, settings: activeSpeechSettings, delay: 0)
 	}
@@ -256,7 +256,7 @@ final class LiveModeCoordinator: ObservableObject {
 	@discardableResult
 	private func stopIfLocationUnavailable() -> Bool {
 		guard now().timeIntervalSince(lastLocationAt) >= max(120, stationaryMinutes * 60) else { return false }
-		stop(message: "Live Mode stopped because no recent location updates are available.")
+		stop(message: L10n.text("Live Mode stopped because no recent location updates are available."))
 		return true
 	}
 
@@ -266,8 +266,8 @@ final class LiveModeCoordinator: ObservableObject {
 			return false
 		}
 		let minutes = Int(stationaryMinutes.rounded())
-		let duration = minutes == 1 ? "1 minute" : "\(minutes) minutes"
-		stop(message: "Live Mode stopped because you haven't moved for \(duration).")
+		let duration = L10n.quantity("%lld minutes", minutes)
+		stop(message: L10n.text("Live Mode stopped because you haven't moved for %@.", String(describing: duration)))
 		return true
 	}
 

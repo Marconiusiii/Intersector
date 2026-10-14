@@ -8,7 +8,7 @@
 import SwiftUI
 import WatchConnectivity
 
-private let watchLookupLoadingText = "Intersecting..."
+private let watchLookupLoadingText = L10n.text("Intersecting...")
 
 @MainActor
 private enum WatchVoiceOverAnnouncer {
@@ -105,7 +105,7 @@ struct WatchContentView: View {
 	@AppStorage("includeCrossings") private var includeCrossings = false
 	@AppStorage("includeWalkingPaths") private var includeWalkingPaths = false
 	@AppStorage("manhattanSnobMode") private var manhattanSnobMode = false
-	@State private var statusText = "Choose an action."
+	@State private var statusText = L10n.text("Choose an action.")
 	@State private var isLoading = false
 	@State private var isDirectionLoading = false
 	@State private var isShowingSettings = false
@@ -144,44 +144,44 @@ struct WatchContentView: View {
 					headerView
 					statusView
 					actionButton(
-						"Nearest",
+						L10n.text("Nearest"),
 						systemImage: "location.fill",
-						accessibilityLabel: "Nearest Intersection"
+						accessibilityLabel: L10n.text("Nearest Intersection")
 					) {
 						await update(.nearest)
 					}
-					.accessibilityAction(named: Text("3rd Nearest Intersection")) {
+					.accessibilityAction(named: Text(L10n.text("3rd Nearest Intersection"))) {
 						Task {
 							await update(.nearest, rank: 3)
 						}
 					}
-					.accessibilityAction(named: Text("2nd Nearest Intersection")) {
+					.accessibilityAction(named: Text(L10n.text("2nd Nearest Intersection"))) {
 						Task {
 							await update(.nearest, rank: 2)
 						}
 					}
 					actionButton(
-						"Upcoming",
+						L10n.text("Upcoming"),
 						systemImage: "arrow.up.circle.fill",
-						accessibilityLabel: "Upcoming Intersection"
+						accessibilityLabel: L10n.text("Upcoming Intersection")
 					) {
 						await update(.upcoming)
 					}
-					.accessibilityAction(named: Text("3rd Upcoming Intersection")) {
+					.accessibilityAction(named: Text(L10n.text("3rd Upcoming Intersection"))) {
 						Task {
 							await update(.upcoming, rank: 3)
 						}
 					}
-					.accessibilityAction(named: Text("2nd Upcoming Intersection")) {
+					.accessibilityAction(named: Text(L10n.text("2nd Upcoming Intersection"))) {
 						Task {
 							await update(.upcoming, rank: 2)
 						}
 					}
 					actionButton(
-						"Direction",
+						L10n.text("Direction"),
 						systemImage: "safari.fill",
-						accessibilityLabel: "My Direction",
-						accessibilityHint: "Speaks cardinal direction.",
+						accessibilityLabel: L10n.text("My Direction"),
+						accessibilityHint: L10n.text("Speaks cardinal direction."),
 						isDisabled: isDirectionLoading
 					) {
 						await updateDirection()
@@ -198,8 +198,8 @@ struct WatchContentView: View {
 					} label: {
 						Image(systemName: "gearshape")
 					}
-					.accessibilityLabel("Settings")
-					.accessibilityHint("Shows settings synced from iPhone.")
+					.accessibilityLabel(L10n.text("Settings"))
+					.accessibilityHint(L10n.text("Shows settings synced from iPhone."))
 				}
 			}
 			.sheet(isPresented: $isShowingSettings) {
@@ -241,16 +241,16 @@ struct WatchContentView: View {
 		NavigationStack {
 			Form {
 				Section {
-					Text("Settings sync from iPhone")
+					Text(L10n.text("Settings sync from iPhone"))
 						.font(.headline)
 						.foregroundStyle(Color.watchCrossText)
 						.accessibilityAddTraits(.isHeader)
-					Text("Open Intersector on iPhone to change announcement settings.")
+					Text(L10n.text("Open Intersector on iPhone to change announcement settings."))
 						.font(.footnote)
 						.foregroundStyle(Color.watchCrossText)
 						.lineLimit(nil)
 						.fixedSize(horizontal: false, vertical: true)
-					Text("Sample Announcement")
+					Text(L10n.text("Sample Announcement"))
 						.font(.headline)
 						.foregroundStyle(Color.watchCrossText)
 						.accessibilityAddTraits(.isHeader)
@@ -260,15 +260,15 @@ struct WatchContentView: View {
 						.lineLimit(nil)
 						.fixedSize(horizontal: false, vertical: true)
 				} header: {
-					Text("Announcements")
+					Text(L10n.text("Announcements"))
 				}
 			}
 			.scrollContentBackground(.hidden)
 			.background(Color.watchCrossBg)
-			.navigationTitle("Settings")
+			.navigationTitle(L10n.text("Settings"))
 			.toolbar {
 				ToolbarItem(placement: .confirmationAction) {
-					Button("Done") {
+					Button(L10n.text("Done")) {
 						isShowingSettings = false
 					}
 				}
@@ -279,9 +279,9 @@ struct WatchContentView: View {
 	private var announcementSampleText: String {
 		let report = WatchOrientationReport(
 			kind: .nearest,
-			cross: "Crossing on Amsterdam Avenue near West 94th Street",
-			dist: "120 feet",
-			relDir: "ahead",
+			cross: L10n.text("Crossing on Amsterdam Avenue near West 94th Street"),
+			dist: WatchGeo.spokenDistance(36.576, unit: prefs.measurementUnit),
+			relDir: L10n.text("ahead"),
 			relDegrees: 0,
 			street: "Amsterdam Avenue",
 			crossStreet: nil,
@@ -293,7 +293,7 @@ struct WatchContentView: View {
 				hasPedestrianIsland: true
 			)
 		)
-		return "Sample: \(report.text(with: prefs))"
+		return L10n.text("Sample: %@", String(describing: report.text(with: prefs)))
 	}
 
 	private func actionButton(
@@ -375,9 +375,9 @@ struct WatchContentView: View {
 	private func rankedFailureLabel(_ kind: WatchReportKind, rank: Int) -> String {
 		switch kind {
 		case .nearest:
-			return "\(ordinal(rank)) Nearest intersection"
+			return L10n.text("%@ Nearest intersection", String(describing: ordinal(rank)))
 		case .upcoming:
-			return "\(ordinal(rank)) Upcoming intersection"
+			return L10n.text("%@ Upcoming intersection", String(describing: ordinal(rank)))
 		}
 	}
 
@@ -396,17 +396,17 @@ struct WatchContentView: View {
 		guard rank > 1 else {
 			return kind.intentLabel
 		}
-		return "\(ordinal(rank)) \(kind.intentLabel)"
+		return L10n.text("%@ %@", String(describing: ordinal(rank)), String(describing: kind.intentLabel))
 	}
 
 	private func ordinal(_ value: Int) -> String {
 		switch value {
 		case 2:
-			"2nd"
+			L10n.text("2nd")
 		case 3:
-			"3rd"
+			L10n.text("3rd")
 		default:
-			"\(value)th"
+			L10n.text("%@th", String(describing: value))
 		}
 	}
 }
