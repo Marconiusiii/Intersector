@@ -27,6 +27,70 @@ import CoreLocation
             }
             return
         }
+        // Independent clients model separate Watch buttons and Siri actions.
+        let clock = WatchTestClock()
+        let cache = WatchRoadMapCache(now: { clock.date })
+        let requests = WatchRequestLog()
+        func rankedClient() -> WatchMapDataClient {
+            var value = client()
+            value.roadCache = cache
+            value.requestHandler = { request in await requests.record(); return response(request, data: roadFixture) }
+            return value
+        }
+        let firstClient = rankedClient()
+        _ = try await firstClient.roadMapData(near: origin, roadName: "Oak Street", radiusMeters: 1200, options: WatchMapDetailOptions())
+        _ = try await rankedClient().roadMapData(near: origin, roadName: "Oak Street", radiusMeters: 750, options: WatchMapDetailOptions())
+        let checkedValue1 = await requests.count
+        precondition(checkedValue1 == 1, "A separate action must reuse wider road coverage")
+        let nearby = CLLocationCoordinate2D(latitude: origin.latitude + 0.00005, longitude: origin.longitude)
+        _ = try await rankedClient().roadMapData(near: nearby, roadName: "Oak Street", radiusMeters: 750, options: WatchMapDetailOptions())
+        let checkedValue2 = await requests.count
+        precondition(checkedValue2 == 1, "Small GPS changes must not redownload road coverage")
+        let farther = CLLocationCoordinate2D(latitude: origin.latitude + 0.001, longitude: origin.longitude)
+        let checkedValue3 = await cache.value(near: farther, roadName: "Oak Street", radius: 750, options: WatchMapDetailOptions(), language: "en")
+        precondition(checkedValue3 == nil)
+        let checkedValue4 = await cache.value(near: origin, roadName: "Other Street", radius: 750, options: WatchMapDetailOptions(), language: "en")
+        precondition(checkedValue4 == nil)
+        let checkedValue5 = await cache.value(near: origin, roadName: "Oak Street", radius: 1500, options: WatchMapDetailOptions(), language: "en")
+        precondition(checkedValue5 == nil)
+        let checkedValue6 = await cache.value(near: origin, roadName: "Oak Street", radius: 750, options: WatchMapDetailOptions(includeCrossings: true), language: "en")
+        precondition(checkedValue6 == nil)
+        let checkedValue7 = await cache.value(near: origin, roadName: "Oak Street", radius: 750, options: WatchMapDetailOptions(), language: "fr")
+        precondition(checkedValue7 == nil)
+        clock.advance(121)
+        let checkedValue8 = await cache.value(near: origin, roadName: "Oak Street", radius: 750, options: WatchMapDetailOptions(), language: "en")
+        precondition(checkedValue8 == nil)
+        _ = try await firstClient.roadMapData(near: origin, roadName: "Oak Street", radiusMeters: 1200, options: WatchMapDetailOptions())
+        let checkedValue9 = await requests.count
+        precondition(checkedValue9 == 2, "Expired road geometry must reload even on the original client")
+        let bounded = WatchRoadMapCache(now: { clock.date })
+        let geometry = WatchIntersectionBuilder().mapData(from: try JSONDecoder().decode(WatchOverpassResponse.self, from: roadFixture), options: WatchMapDetailOptions())
+        for index in 0..<5 {
+            await bounded.store(geometry, near: origin, roadName: "Road \(index)", radius: 750,
+                                options: WatchMapDetailOptions(), language: "en", requestedAt: clock.date)
+        }
+        let evicted = await bounded.value(near: origin, roadName: "Road 0", radius: 750, options: WatchMapDetailOptions(), language: "en")
+        let retained = await bounded.value(near: origin, roadName: "Road 4", radius: 750, options: WatchMapDetailOptions(), language: "en")
+        precondition(evicted == nil && retained != nil, "Road cache must retain at most four areas")
+        print("PASS: ranked Watch road reuse across actions, movement/options/language/coverage checks and expiration")
+
+        let originNorth = CLLocationCoordinate2D(latitude: 40, longitude: -74)
+        let positions = [-0.001, 0, 0.001, 0.0011, 0.002, 0.003, 0.004].map {
+            CLLocationCoordinate2D(latitude: originNorth.latitude + $0, longitude: originNorth.longitude)
+        }
+        let rankedMap = WatchMapDataSet(intersections: [
+            WatchIntersectionCandidate(id: "first", names: ["Oak Street", "First Street"], coordinate: positions[2]),
+            WatchIntersectionCandidate(id: "duplicate", names: ["Oak Street", "First Street"], coordinate: positions[3]),
+            WatchIntersectionCandidate(id: "second", names: ["Oak Street", "Second Street"], coordinate: positions[4]),
+            WatchIntersectionCandidate(id: "third", names: ["Oak Street", "Third Street"], coordinate: positions[5])
+        ], roads: [WatchMapRoad(id: "road", name: "Oak Street", nodeIDs: [1,2,3,4,5,6,7], coordinates: positions)])
+        let service = WatchOrientationService()
+        let north = service.distinctUpcomingMatches(from: WatchDeviceContext(coordinate: originNorth, headingDegrees: 0), in: rankedMap, prefs: WatchAppPrefs())
+        precondition(north.map(\.id) == ["first", "second", "third"], "Ranks must count distinct spoken intersections")
+        let south = service.distinctUpcomingMatches(from: WatchDeviceContext(coordinate: positions[6], headingDegrees: 180), in: rankedMap, prefs: WatchAppPrefs())
+        precondition(south.map(\.id) == ["third", "second", "duplicate"], "Reused geometry must be ranked with the current heading")
+        print("PASS: distinct Watch ranks and reversed heading")
+
         // An offline failure must leave the endpoint available for an explicit retry.
         var offline = client()
         offline.requestHandler = { _ in throw URLError(.notConnectedToInternet) }
@@ -133,4 +197,11 @@ import CoreLocation
 private actor WatchRequestLog {
     private(set) var count = 0
     func record() { count += 1 }
+}
+
+private nonisolated final class WatchTestClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var instant = Date()
+    var date: Date { lock.lock(); defer { lock.unlock() }; return instant }
+    func advance(_ seconds: TimeInterval) { lock.lock(); defer { lock.unlock() }; instant.addTimeInterval(seconds) }
 }

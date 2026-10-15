@@ -82,3 +82,23 @@ struct IntersectionDetailFixture {
         .init(name: "blinking vehicle signal omitted", nodeTags: ["highway": "traffic_signals", "traffic_signals": "blinker"], streetIntersection: true, phrases: [])
     ]
 }
+
+// Separate downloads can each be valid while their union reveals duplicate corners.
+struct CrossingMergeFixture {
+    static func response(crossings: [Int], junction: Bool) throws -> Data {
+        var elements: [[String: Any]] = (1...6).map { id in
+            let latitude = [39.999, 40.0, 40.0001, 40.0005, 40.00065, 40.003][id - 1]
+            var node: [String: Any] = ["type": "node", "id": id, "lat": latitude, "lon": -74.0]
+            if crossings.contains(id) { node["tags"] = ["highway": "crossing", "crossing": "marked"] }
+            return node
+        }
+        elements.append(["type": "way", "id": 10, "nodes": [1, 2, 3, 4, 5, 6],
+                         "tags": ["highway": "residential", "name": "Main Street"]])
+        if junction {
+            elements.append(["type": "node", "id": 7, "lat": 40.0, "lon": -74.001])
+            elements.append(["type": "way", "id": 11, "nodes": [7, 2],
+                             "tags": ["highway": "residential", "name": "Oak Street"]])
+        }
+        return try JSONSerialization.data(withJSONObject: ["elements": elements])
+    }
+}

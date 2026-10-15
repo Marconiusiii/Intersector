@@ -847,10 +847,11 @@ struct IntersectionBuilder {
 			from: crossingResponse, roads: coreData.roads, streetIntersections: streetIntersections
 		)
 		let existingIDs = Set(coreData.intersections.map(\.id))
-		return MapDataSet(
+		return removingRedundantCrossings(from: MapDataSet(
 			intersections: updatedIntersections + candidates.filter { !existingIDs.contains($0.id) },
-			roads: coreData.roads
-		)
+			roads: coreData.roads,
+            suppressedCrossingIDs: coreData.suppressedCrossingIDs
+		))
 	}
 
 	// A crossing belongs to a road only at a shared OSM node. Distance alone
@@ -920,6 +921,23 @@ struct IntersectionBuilder {
 		}
 		return evidence
 	}
+
+	func removingRedundantCrossings(from map: MapDataSet) -> MapDataSet {
+        let streets = map.intersections.filter { !$0.id.hasPrefix("crossing-") }
+        let crossings = map.intersections.filter { $0.id.hasPrefix("crossing-") }
+        let coordinates = crossings.map(\.coordinate)
+        var result = map
+        result.intersections = map.intersections.filter { candidate in
+            guard !map.suppressedCrossingIDs.contains(candidate.id) else { return false }
+            guard candidate.id.hasPrefix("crossing-"),
+                  let road = map.roads.first(where: { $0.isPublicStreet && candidate.roadNames.contains($0.name) }) else { return true }
+            return !shouldSuppressCrossing(at: candidate.coordinate, on: road,
+                                          streetIntersections: streets, crossingNodeCoordinates: coordinates)
+        }
+        let retainedIDs = Set(result.intersections.map(\.id))
+        result.suppressedCrossingIDs.formUnion(crossings.map(\.id).filter { !retainedIDs.contains($0) })
+        return result
+    }
 
 	private func shouldSuppressCrossing(
 		at coordinate: CLLocationCoordinate2D,

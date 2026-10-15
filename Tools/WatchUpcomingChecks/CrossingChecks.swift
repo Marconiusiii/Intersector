@@ -19,6 +19,25 @@ import CoreLocation
                 print("PASS: split ordering separateNodes=\(separateNodes), heading=\(heading)")
             }
         }
+        let mergeBuilder = WatchIntersectionBuilder()
+        func mergeMap(_ crossings: [Int], junction: Bool) throws -> WatchMapDataSet {
+            mergeBuilder.mapData(from: try JSONDecoder().decode(WatchOverpassResponse.self,
+                from: CrossingMergeFixture.response(crossings: crossings, junction: junction)),
+                options: WatchMapDetailOptions(includeCrossings: true))
+        }
+        let partial = try mergeMap([3, 4, 5, 6], junction: false)
+        let complete = try mergeMap([3, 4, 5, 6], junction: true)
+        precondition(partial.intersections.count == 4)
+        for merged in [partial.merging(complete), complete.merging(partial), partial.merging(complete).merging(partial)] {
+            precondition(Set(merged.intersections.map(\.id)) == ["2", "crossing-6"])
+        }
+        let firstCorner = try mergeMap([4], junction: true)
+        let secondCorner = try mergeMap([5], junction: true)
+        precondition(firstCorner.intersections.count == 2 && secondCorner.intersections.count == 2)
+        precondition(firstCorner.merging(secondCorner).intersections.map(\.id) == ["2"])
+        precondition(secondCorner.merging(firstCorner).intersections.map(\.id) == ["2"])
+        precondition(firstCorner.merging(secondCorner).merging(firstCorner).intersections.map(\.id) == ["2"])
+        print("PASS: overlapping coverage removes corner duplicates and retains the midblock crossing")
         let fixtures = try JSONDecoder().decode(CrossingFixtures<WatchOverpassResponse>.self, from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1])))
         let builder = WatchIntersectionBuilder()
         for fixture in fixtures.cases {

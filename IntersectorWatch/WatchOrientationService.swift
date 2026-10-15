@@ -396,10 +396,7 @@ struct WatchOrientationService {
 		case .nearest:
 			ranked = finder.rankedNearest(from: context.coordinate, in: mapData.intersections)
 		case .upcoming:
-			ranked = finder.upcomingSequence(
-				from: context,
-				in: mapData
-			)
+			ranked = distinctUpcomingMatches(from: context, in: mapData, prefs: prefs)
 		}
 		let neighborhoodContext = await neighborhoodContext(for: prefs.areaMode, from: context)
 		var reports: [WatchOrientationReport] = []
@@ -446,15 +443,11 @@ struct WatchOrientationService {
 		var match = if kind == .nearest {
 			finder.nearest(rank: rank, from: context.coordinate, in: mapData.intersections)
 		} else {
-			finder.upcoming(
-				rank: rank,
-				from: context,
-				in: mapData
-			)
+			upcomingMatch(rank: rank, from: context, in: mapData, prefs: prefs)
 		}
 		if kind == .upcoming, match == nil,
 		   let retryContext = try? await locationProvider.currentContext(requiresFreshHeading: true) {
-			let retryMatch = finder.upcoming(rank: rank, from: retryContext, in: mapData)
+			let retryMatch = upcomingMatch(rank: rank, from: retryContext, in: mapData, prefs: prefs)
 			context = retryContext
 			match = retryMatch
 		}
@@ -465,7 +458,7 @@ struct WatchOrientationService {
 				minimumCandidateCount: 1,
 				prefs: lookupPrefs
 			)
-			match = finder.upcoming(rank: 1, from: context, in: mapData)
+			match = upcomingMatch(rank: 1, from: context, in: mapData, prefs: prefs)
 		}
 		guard let match else {
 			throw WatchReportError.noIntersections
@@ -510,6 +503,24 @@ struct WatchOrientationService {
 			previousData: WatchMapDataSet(intersections: [], roads: [])
 		)
 	}
+
+    func distinctUpcomingMatches(from context: WatchDeviceContext, in mapData: WatchMapDataSet,
+                                 prefs: WatchAppPrefs) -> [WatchIntersectionCandidate] {
+        var reports: [WatchOrientationReport] = []
+        return finder.upcomingSequence(from: context, in: mapData).filter { match in
+            let report = makeReport(.upcoming, match: match, context: context, mapData: mapData,
+                                    prefs: prefs, neighborhoodContext: WatchNeighborhoodContext(area: nil, toward: nil))
+            guard !reports.containsSpokenIntersection(matching: report) else { return false }
+            reports.append(report)
+            return true
+        }
+    }
+
+    private func upcomingMatch(rank: Int, from context: WatchDeviceContext, in mapData: WatchMapDataSet,
+                               prefs: WatchAppPrefs) -> WatchIntersectionCandidate? {
+        let matches = distinctUpcomingMatches(from: context, in: mapData, prefs: prefs)
+        return rank > 0 && matches.indices.contains(rank - 1) ? matches[rank - 1] : nil
+    }
 
 	private func makeReport(
 		_ kind: WatchReportKind,
@@ -579,6 +590,11 @@ struct WatchOrientationService {
 			guard let roadName = initialData.currentRoadName(from: context) else {
 				return initialData
 			}
+            if let cached = await mapClient.cachedRoadMapData(near: context.coordinate, roadName: roadName, options: prefs.mapDetails) {
+                let combined = initialData.merging(cached)
+                if hasEnoughCandidates(for: kind, from: context, minimumCandidateCount: minimumCandidateCount,
+                                       mapData: combined, prefs: prefs) { return combined }
+            }
 			do {
 				let focusedData = try await mapClient.roadMapData(
 					near: context.coordinate,
@@ -713,26 +729,7 @@ struct WatchOrientationService {
 		guard context.headingDegrees != nil else {
 			return false
 		}
-		let ranked = finder.upcomingSequence(from: context, in: mapData)
-		let neighborhoodContext = WatchNeighborhoodContext(area: nil, toward: nil)
-		var reports: [WatchOrientationReport] = []
-		for match in ranked {
-			let report = makeReport(
-				.upcoming,
-				match: match,
-				context: context,
-				mapData: mapData,
-				prefs: prefs,
-				neighborhoodContext: neighborhoodContext
-			)
-			if !reports.containsSpokenIntersection(matching: report) {
-				reports.append(report)
-			}
-			if reports.count >= minimumCandidateCount {
-				return true
-			}
-		}
-		return false
+        return distinctUpcomingMatches(from: context, in: mapData, prefs: prefs).count >= minimumCandidateCount
 	}
 
 	private func neighborhoodContext(
@@ -1134,6 +1131,7 @@ private struct WatchRoadStartSegment {
 struct WatchMapDataSet: Equatable {
 	var intersections: [WatchIntersectionCandidate]
 	var roads: [WatchMapRoad]
+    var suppressedCrossingIDs: Set<String> = []
 
 	func merging(_ other: WatchMapDataSet) -> WatchMapDataSet {
 		var mergedIntersections = intersections
@@ -1144,7 +1142,9 @@ struct WatchMapDataSet: Equatable {
 		let existingRoadIDs = Set(mergedRoads.map(\.id))
 		mergedRoads.append(contentsOf: other.roads.filter { !existingRoadIDs.contains($0.id) })
 
-		return WatchMapDataSet(intersections: mergedIntersections, roads: mergedRoads)
+		return WatchIntersectionBuilder().removingRedundantCrossings(from: WatchMapDataSet(
+            intersections: mergedIntersections, roads: mergedRoads,
+            suppressedCrossingIDs: suppressedCrossingIDs.union(other.suppressedCrossingIDs)))
 	}
 
 	func currentRoadName(from context: WatchDeviceContext) -> String? {
@@ -1964,6 +1964,8 @@ struct WatchMapDataClient {
 	private var successfulResponses: OverpassRoadResponseCache? { responseCache ?? (requestHandler == nil ? .shared : nil) }
 	var endpointHealth = OverpassEndpointHealth.shared
 	private let requestData = WatchRequestMapData()
+    var roadCache: WatchRoadMapCache?
+    private var recentRoads: WatchRoadMapCache? { roadCache ?? (requestHandler == nil ? .shared : nil) }
 
 	func mapData(
 		near coordinate: CLLocationCoordinate2D,
@@ -1990,16 +1992,26 @@ struct WatchMapDataClient {
 		radiusMeters: CLLocationDistance,
 		options: WatchMapDetailOptions
 	) async throws -> WatchMapDataSet {
-		try await fetchMapData(
-			options: options,
-			query: focusedRoadQuery(
-				near: coordinate,
-				roadName: roadName,
-				radiusMeters: radiusMeters,
-				options: options
-			)
-		)
+        try Task.checkCancellation()
+        if let cached = await recentRoads?.value(near: coordinate, roadName: roadName, radius: radiusMeters,
+                                                options: options, language: L10n.language) { return cached }
+        let requestedAt = await recentRoads?.requestDate() ?? Date()
+        let result = try await fetchMapData(
+            options: options,
+            query: focusedRoadQuery(near: coordinate, roadName: roadName, radiusMeters: radiusMeters, options: options),
+            usesRequestCache: false
+        )
+        try Task.checkCancellation()
+        await recentRoads?.store(result, near: coordinate, roadName: roadName, radius: radiusMeters,
+                                 options: options, language: L10n.language, requestedAt: requestedAt)
+        return result
 	}
+
+    func cachedRoadMapData(near coordinate: CLLocationCoordinate2D, roadName: String,
+                           options: WatchMapDetailOptions) async -> WatchMapDataSet? {
+        await recentRoads?.value(near: coordinate, roadName: roadName, radius: 0,
+                                options: options, language: L10n.language)
+    }
 
 	private func fetchMapData(
 		near coordinate: CLLocationCoordinate2D,
@@ -2016,7 +2028,8 @@ struct WatchMapDataClient {
 	private func fetchMapData(
 		options: WatchMapDetailOptions,
 		query: String,
-		area: OverpassMapArea? = nil
+		area: OverpassMapArea? = nil,
+        usesRequestCache: Bool = true
 	) async throws -> WatchMapDataSet {
 		try Task.checkCancellation()
 		if let area, let cached = await successfulResponses?.value(for: area) {
@@ -2026,7 +2039,7 @@ struct WatchMapDataClient {
 		let requestedAt = Date()
 		try Task.checkCancellation()
 		let key = "\(options)-\(query)"
-		if let data = await requestData.value(for: key) { return data }
+		if usesRequestCache, let data = await requestData.value(for: key) { return data }
 		let endpoints = await endpointHealth.orderedEndpoints(
 			primary: endpoint,
 			fallbacks: fallbackEndpoints
@@ -2043,7 +2056,7 @@ struct WatchMapDataClient {
 				}
 				try Task.checkCancellation()
 				await endpointHealth.markSuccess(endpoint)
-				await requestData.store(data, for: key)
+				if usesRequestCache { await requestData.store(data, for: key) }
 				return data
 			} catch {
 				try Task.checkCancellation()
@@ -2419,10 +2432,11 @@ struct WatchIntersectionBuilder {
 			from: crossingResponse, roads: coreData.roads, streetIntersections: streetIntersections
 		)
 		let existingIDs = Set(coreData.intersections.map(\.id))
-		return WatchMapDataSet(
+		return removingRedundantCrossings(from: WatchMapDataSet(
 			intersections: updatedIntersections + candidates.filter { !existingIDs.contains($0.id) },
-			roads: coreData.roads
-		)
+			roads: coreData.roads,
+            suppressedCrossingIDs: coreData.suppressedCrossingIDs
+		))
 	}
 
 	// A crossing belongs to a road only at a shared OSM node. Distance alone
@@ -2492,6 +2506,23 @@ struct WatchIntersectionBuilder {
 		}
 		return evidence
 	}
+
+	func removingRedundantCrossings(from map: WatchMapDataSet) -> WatchMapDataSet {
+        let streets = map.intersections.filter { !$0.id.hasPrefix("crossing-") }
+        let crossings = map.intersections.filter { $0.id.hasPrefix("crossing-") }
+        let coordinates = crossings.map(\.coordinate)
+        var result = map
+        result.intersections = map.intersections.filter { candidate in
+            guard !map.suppressedCrossingIDs.contains(candidate.id) else { return false }
+            guard candidate.id.hasPrefix("crossing-"),
+                  let road = map.roads.first(where: { $0.isPublicStreet && candidate.roadNames.contains($0.name) }) else { return true }
+            return !shouldSuppressCrossing(at: candidate.coordinate, on: road,
+                                          streetIntersections: streets, crossingNodeCoordinates: coordinates)
+        }
+        let retainedIDs = Set(result.intersections.map(\.id))
+        result.suppressedCrossingIDs.formUnion(crossings.map(\.id).filter { !retainedIDs.contains($0) })
+        return result
+    }
 
 	private func shouldSuppressCrossing(
 		at coordinate: CLLocationCoordinate2D,
@@ -2985,7 +3016,7 @@ struct WatchOverpassCenter: Decodable, Equatable {
 }
 
 enum WatchGeo {
-	static func distanceMeters(
+	nonisolated static func distanceMeters(
 		from start: CLLocationCoordinate2D,
 		to end: CLLocationCoordinate2D
 	) -> CLLocationDistance {
@@ -3094,4 +3125,51 @@ private actor WatchRequestMapData {
 private struct WatchActionFailure: LocalizedError {
 	let message: String
 	var errorDescription: String? { message }
+}
+
+// Geometry is reused briefly; every action still obtains its own location and heading.
+actor WatchRoadMapCache {
+    static let shared = WatchRoadMapCache()
+    private struct Entry {
+        var coordinate: CLLocationCoordinate2D
+        var roadName: String
+        var radius: CLLocationDistance
+        var options: WatchMapDetailOptions
+        var language: String
+        var requestedAt: Date
+        var data: WatchMapDataSet
+    }
+    private var entries: [Entry] = []
+    private let now: @Sendable () -> Date
+    init(now: @escaping @Sendable () -> Date = { Date() }) { self.now = now }
+
+    func requestDate() -> Date { now() }
+
+    func value(near coordinate: CLLocationCoordinate2D, roadName: String, radius: CLLocationDistance,
+               options: WatchMapDetailOptions, language: String) -> WatchMapDataSet? {
+        prune()
+        return entries.first { entry in
+            entry.roadName == roadName && entry.options == options && entry.language == language &&
+            entry.radius >= radius && WatchGeo.distanceMeters(from: entry.coordinate, to: coordinate) <= 25
+        }?.data
+    }
+
+    func store(_ data: WatchMapDataSet, near coordinate: CLLocationCoordinate2D, roadName: String,
+               radius: CLLocationDistance, options: WatchMapDetailOptions, language: String, requestedAt: Date) {
+        prune()
+        guard !data.roads.isEmpty, now().timeIntervalSince(requestedAt) >= 0,
+              now().timeIntervalSince(requestedAt) < 120 else { return }
+        // An older request finishing late must not replace newer coverage.
+        guard !entries.contains(where: { $0.roadName == roadName && $0.options == options &&
+            $0.language == language && $0.requestedAt > requestedAt &&
+            WatchGeo.distanceMeters(from: $0.coordinate, to: coordinate) <= 25 }) else { return }
+        entries.insert(Entry(coordinate: coordinate, roadName: roadName, radius: radius, options: options,
+                             language: language, requestedAt: requestedAt, data: data), at: 0)
+        entries = Array(entries.prefix(4))
+    }
+
+    private func prune() {
+        let date = now()
+        entries.removeAll { date.timeIntervalSince($0.requestedAt) < 0 || date.timeIntervalSince($0.requestedAt) >= 120 }
+    }
 }

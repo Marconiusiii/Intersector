@@ -450,13 +450,14 @@ struct UpcomingRoadPosition {
 struct MapDataSet: Equatable {
 	var intersections: [IntersectionCandidate]
 	var roads: [MapRoad]
+    var suppressedCrossingIDs: Set<String> = []
 	// Retain original download age when disk data enters the memory cache.
 	var cacheStoredAt: Date? = nil
 	var cacheRequestedAt: Date? = nil
 	var cacheArea: OverpassMapArea? = nil
 
 	static func == (lhs: Self, rhs: Self) -> Bool {
-		lhs.intersections == rhs.intersections && lhs.roads == rhs.roads
+		lhs.intersections == rhs.intersections && lhs.roads == rhs.roads && lhs.suppressedCrossingIDs == rhs.suppressedCrossingIDs
 	}
 
 	func merging(_ other: MapDataSet) -> MapDataSet {
@@ -468,7 +469,9 @@ struct MapDataSet: Equatable {
 		let existingRoadIDs = Set(mergedRoads.map(\.id))
 		mergedRoads.append(contentsOf: other.roads.filter { !existingRoadIDs.contains($0.id) })
 
-		return MapDataSet(intersections: mergedIntersections, roads: mergedRoads)
+		return IntersectionBuilder().removingRedundantCrossings(from: MapDataSet(
+            intersections: mergedIntersections, roads: mergedRoads,
+            suppressedCrossingIDs: suppressedCrossingIDs.union(other.suppressedCrossingIDs)))
 	}
 
 	func currentStreetIntersections(from coordinate: CLLocationCoordinate2D) -> [IntersectionCandidate] {

@@ -66,3 +66,28 @@ private final class CrossingFixtureBundle: NSObject {}
         }
     }
 }
+
+@MainActor struct CrossingMergeTests {
+    @Test func laterJunctionSuppressesEarlierCrossings() throws {
+        let builder = IntersectionBuilder()
+        let options = MapDetailOptions(includeCrossings: true)
+        func map(_ crossings: [Int], junction: Bool) throws -> MapDataSet {
+            builder.mapData(from: try JSONDecoder().decode(OverpassResponse.self,
+                from: CrossingMergeFixture.response(crossings: crossings, junction: junction)), options: options)
+        }
+        let partial = try map([3, 4, 5, 6], junction: false)
+        let complete = try map([3, 4, 5, 6], junction: true)
+        #expect(partial.intersections.count == 4)
+        #expect(Set(complete.intersections.map(\.id)) == ["2", "crossing-6"])
+        for merged in [partial.merging(complete), complete.merging(partial), partial.merging(complete).merging(partial)] {
+            #expect(Set(merged.intersections.map(\.id)) == ["2", "crossing-6"])
+        }
+        let firstCorner = try map([4], junction: true)
+        let secondCorner = try map([5], junction: true)
+        #expect(firstCorner.intersections.count == 2)
+        #expect(secondCorner.intersections.count == 2)
+        #expect(firstCorner.merging(secondCorner).intersections.map(\.id) == ["2"])
+        #expect(secondCorner.merging(firstCorner).intersections.map(\.id) == ["2"])
+        #expect(firstCorner.merging(secondCorner).merging(firstCorner).intersections.map(\.id) == ["2"])
+    }
+}
