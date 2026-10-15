@@ -42,7 +42,7 @@ enum L10n {
             || defaults.object(forKey: "directionStyle") != nil
             || defaults.object(forKey: "areaMode") != nil
         let code = locale.language.languageCode?.identifier
-        defaults.set(!existingInstallation && (code == "es" || code == "pt") ? "meters" : "feet",
+        defaults.set(!existingInstallation && ["es", "pt", "fr", "de", "it"].contains(code ?? "") ? "meters" : "feet",
                      forKey: "measurementUnit")
     }
 }

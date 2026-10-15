@@ -1,6 +1,32 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "CFBundleDisplayName": {
+      "comment": "Bundle display name",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Intersector"
+          }
+        }
+      },
+      "shouldTranslate": false
+    },
+    "CFBundleName": {
+      "comment": "Bundle name",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Intersector"
+          }
+        }
+      },
+      "shouldTranslate": false
+    },
     "NSLocationWhenInUseUsageDescription": {
       "extractionState": "manual",
       "localizations": {
@@ -20,6 +46,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "O Intersector usa sua localização para encontrar cruzamentos próximos no mapa."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intersector utilise votre position pour trouver les intersections cartographiées à proximité."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intersector verwendet Ihren Standort, um kartierte Kreuzungen in der Nähe zu finden."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intersector usa la tua posizione per trovare gli incroci sulla mappa nelle vicinanze."
           }
         }
       }

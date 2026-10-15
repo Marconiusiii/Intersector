@@ -303,6 +303,9 @@
 				en,
 				es,
 				"pt-BR",
+				fr,
+				de,
+				it,
 				Base,
 			);
 			mainGroup = 82E831952FD62E4300071B9D;

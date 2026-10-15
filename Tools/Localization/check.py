@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-LANGUAGES = ('en', 'es', 'pt-BR')
+LANGUAGES = ('en', 'es', 'pt-BR', 'fr', 'de', 'it')
 errors = []
 
 def units(value):
@@ -63,4 +63,4 @@ for path in [ROOT / 'crossStreet/CrossStreetIntents.swift', ROOT / 'IntersectorW
 if errors:
     raise SystemExit('\n'.join(errors))
 print(f'Passed: {sum(map(len, catalogs.values()))} entries across {len(catalogs)} catalogs; '
-      'English, Spanish and Brazilian Portuguese complete; placeholders and source references match.')
+      'English, Spanish, Brazilian Portuguese, French, German and Italian complete; placeholders and source references match.')

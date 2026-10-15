@@ -21,6 +21,24 @@
             "state": "translated",
             "value": "2º cruzamento mais próximo no ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2e intersection la plus proche dans ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2. nächstgelegene Kreuzung in ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2° incrocio più vicino in ${applicationName}"
+          }
         }
       }
     },
@@ -43,6 +61,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "2º cruzamento à frente no ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2e intersection à venir dans ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2. Kreuzung voraus in ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2° incrocio in arrivo in ${applicationName}"
           }
         }
       }
@@ -67,6 +103,24 @@
             "state": "translated",
             "value": "3º cruzamento mais próximo no ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3e intersection la plus proche dans ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3. nächstgelegene Kreuzung in ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3° incrocio più vicino in ${applicationName}"
+          }
         }
       }
     },
@@ -89,6 +143,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "3º cruzamento à frente no ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3e intersection à venir dans ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3. Kreuzung voraus in ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3° incrocio in arrivo in ${applicationName}"
           }
         }
       }
@@ -113,6 +185,24 @@
             "state": "translated",
             "value": "Encontre meu segundo cruzamento mais próximo com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trouver la deuxième intersection la plus proche avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finde meine zweite nächstgelegene Kreuzung mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trova il secondo incrocio più vicino con ${applicationName}"
+          }
         }
       }
     },
@@ -135,6 +225,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Encontre meu segundo cruzamento à frente com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trouver la deuxième intersection à venir avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finde meine zweite Kreuzung voraus mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trova il secondo incrocio in arrivo con ${applicationName}"
           }
         }
       }
@@ -159,6 +267,24 @@
             "state": "translated",
             "value": "Encontre meu terceiro cruzamento mais próximo com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trouver la troisième intersection la plus proche avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finde meine dritte nächstgelegene Kreuzung mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trova il terzo incrocio più vicino con ${applicationName}"
+          }
         }
       }
     },
@@ -181,6 +307,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Encontre meu terceiro cruzamento à frente com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trouver la troisième intersection à venir avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finde meine dritte Kreuzung voraus mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trova il terzo incrocio in arrivo con ${applicationName}"
           }
         }
       }
@@ -205,6 +349,24 @@
             "state": "translated",
             "value": "Minha direção no ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ma direction dans ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meine Richtung in ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La mia direzione in ${applicationName}"
+          }
         }
       }
     },
@@ -227,6 +389,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cruzamento mais próximo no ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intersection la plus proche dans ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nächstgelegene Kreuzung in ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incrocio più vicino in ${applicationName}"
           }
         }
       }
@@ -251,6 +431,24 @@
             "state": "translated",
             "value": "Explorar cruzamentos com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher des intersections avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kreuzungen scannen mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esplora gli incroci con ${applicationName}"
+          }
         }
       }
     },
@@ -273,6 +471,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Segundo cruzamento mais próximo no ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deuxième intersection la plus proche dans ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zweite nächstgelegene Kreuzung in ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Secondo incrocio più vicino in ${applicationName}"
           }
         }
       }
@@ -297,6 +513,24 @@
             "state": "translated",
             "value": "Segundo cruzamento à frente no ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deuxième intersection à venir dans ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zweite Kreuzung voraus in ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Secondo incrocio in arrivo in ${applicationName}"
+          }
         }
       }
     },
@@ -319,6 +553,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Iniciar acompanhamento no ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Démarrer le mode en direct dans ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Modus starten in ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avvia modalità Live in ${applicationName}"
           }
         }
       }
@@ -343,6 +595,24 @@
             "state": "translated",
             "value": "Iniciar modo Explorar no ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Démarrer le mode balayage dans ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan-Modus starten in ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avvia modalità esplorazione in ${applicationName}"
+          }
         }
       }
     },
@@ -365,6 +635,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Parar acompanhamento no ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêter le mode en direct dans ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Modus stoppen in ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interrompi modalità Live in ${applicationName}"
           }
         }
       }
@@ -389,6 +677,24 @@
             "state": "translated",
             "value": "Terceiro cruzamento mais próximo no ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Troisième intersection la plus proche dans ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dritte nächstgelegene Kreuzung in ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terzo incrocio più vicino in ${applicationName}"
+          }
         }
       }
     },
@@ -411,6 +717,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Terceiro cruzamento à frente no ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Troisième intersection à venir dans ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dritte Kreuzung voraus in ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terzo incrocio in arrivo in ${applicationName}"
           }
         }
       }
@@ -435,6 +759,24 @@
             "state": "translated",
             "value": "Desativar acompanhamento no ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactiver le mode en direct dans ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Modus ausschalten in ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disattiva modalità Live in ${applicationName}"
+          }
         }
       }
     },
@@ -457,6 +799,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ativar acompanhamento no ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activer le mode en direct dans ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Modus einschalten in ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attiva modalità Live in ${applicationName}"
           }
         }
       }
@@ -481,6 +841,24 @@
             "state": "translated",
             "value": "Cruzamento à frente no ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intersection à venir dans ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kreuzung voraus in ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incrocio in arrivo in ${applicationName}"
+          }
         }
       }
     },
@@ -503,6 +881,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qual é a minha direção com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dans quelle direction suis-je orienté avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In welche Richtung schaue ich mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In che direzione sono rivolto con ${applicationName}"
           }
         }
       }
@@ -527,6 +923,24 @@
             "state": "translated",
             "value": "De qual cruzamento estou perto com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Près de quelle intersection suis-je avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bei welcher Kreuzung bin ich mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vicino a quale incrocio mi trovo con ${applicationName}"
+          }
         }
       }
     },
@@ -549,6 +963,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qual cruzamento está à frente com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle intersection est devant moi avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche Kreuzung liegt vor mir mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quale incrocio è davanti a me con ${applicationName}"
           }
         }
       }
@@ -573,6 +1005,24 @@
             "state": "translated",
             "value": "Qual é o próximo cruzamento com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle intersection arrive avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche Kreuzung kommt als Nächstes mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quale incrocio sta arrivando con ${applicationName}"
+          }
         }
       }
     },
@@ -595,6 +1045,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Diga qual é meu cruzamento mais próximo com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est mon intersection la plus proche avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Was ist meine nächstgelegene Kreuzung mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il mio incrocio più vicino con ${applicationName}"
           }
         }
       }
@@ -619,6 +1087,24 @@
             "state": "translated",
             "value": "Diga qual é meu segundo cruzamento mais próximo com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est ma deuxième intersection la plus proche avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Was ist meine zweite nächstgelegene Kreuzung mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il mio secondo incrocio più vicino con ${applicationName}"
+          }
         }
       }
     },
@@ -641,6 +1127,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Diga qual é meu segundo cruzamento à frente com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est ma deuxième intersection à venir avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Was ist meine zweite Kreuzung voraus mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il mio secondo incrocio in arrivo con ${applicationName}"
           }
         }
       }
@@ -665,6 +1169,24 @@
             "state": "translated",
             "value": "Diga qual é meu terceiro cruzamento mais próximo com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est ma troisième intersection la plus proche avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Was ist meine dritte nächstgelegene Kreuzung mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il mio terzo incrocio più vicino con ${applicationName}"
+          }
         }
       }
     },
@@ -687,6 +1209,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Diga qual é meu terceiro cruzamento à frente com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est ma troisième intersection à venir avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Was ist meine dritte Kreuzung voraus mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il mio terzo incrocio in arrivo con ${applicationName}"
           }
         }
       }
@@ -711,6 +1251,24 @@
             "state": "translated",
             "value": "Diga qual é meu cruzamento à frente com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est mon intersection à venir avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Was ist meine Kreuzung voraus mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il mio incrocio in arrivo con ${applicationName}"
+          }
         }
       }
     },
@@ -733,6 +1291,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Em que direção estou apontando com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "De quel côté suis-je orienté avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wohin schaue ich mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Da che parte sono rivolto con ${applicationName}"
           }
         }
       }
@@ -757,6 +1333,24 @@
             "state": "translated",
             "value": "Qual é meu 2º cruzamento mais próximo com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est ma 2e intersection la plus proche avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Was ist meine 2. nächstgelegene Kreuzung mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il mio 2° incrocio più vicino con ${applicationName}"
+          }
         }
       }
     },
@@ -779,6 +1373,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qual é meu 2º cruzamento à frente com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est ma 2e intersection à venir avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Was ist meine 2. Kreuzung voraus mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il mio 2° incrocio in arrivo con ${applicationName}"
           }
         }
       }
@@ -803,6 +1415,24 @@
             "state": "translated",
             "value": "Qual é meu 3º cruzamento mais próximo com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est ma 3e intersection la plus proche avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Was ist meine 3. nächstgelegene Kreuzung mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il mio 3° incrocio più vicino con ${applicationName}"
+          }
         }
       }
     },
@@ -825,6 +1455,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qual é meu 3º cruzamento à frente com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est ma 3e intersection à venir avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Was ist meine 3. Kreuzung voraus mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il mio 3° incrocio in arrivo con ${applicationName}"
           }
         }
       }
@@ -849,6 +1497,24 @@
             "state": "translated",
             "value": "Qual é meu cruzamento mais próximo com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle intersection est la plus proche de moi avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche Kreuzung ist mir am nächsten mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quale incrocio è più vicino a me con ${applicationName}"
+          }
         }
       }
     },
@@ -871,6 +1537,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qual é meu segundo cruzamento mais próximo com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est la deuxième intersection la plus proche de moi avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche Kreuzung ist mir am zweitnächsten mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il secondo incrocio più vicino a me con ${applicationName}"
           }
         }
       }
@@ -895,6 +1579,24 @@
             "state": "translated",
             "value": "Qual é meu segundo cruzamento à frente com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est la deuxième intersection devant moi avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche zweite Kreuzung liegt vor mir mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il secondo incrocio davanti a me con ${applicationName}"
+          }
         }
       }
     },
@@ -917,6 +1619,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qual é meu terceiro cruzamento mais próximo com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est la troisième intersection la plus proche de moi avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche Kreuzung ist mir am drittnächsten mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il terzo incrocio più vicino a me con ${applicationName}"
           }
         }
       }
@@ -941,6 +1661,24 @@
             "state": "translated",
             "value": "Qual é meu terceiro cruzamento à frente com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est la troisième intersection devant moi avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche dritte Kreuzung liegt vor mir mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il terzo incrocio davanti a me con ${applicationName}"
+          }
         }
       }
     },
@@ -963,6 +1701,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qual é meu cruzamento à frente com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle intersection est devant avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche Kreuzung ist voraus mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quale incrocio è in arrivo con ${applicationName}"
           }
         }
       }
@@ -987,6 +1743,24 @@
             "state": "translated",
             "value": "Qual é o 2º cruzamento mais próximo com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est la 2e intersection la plus proche avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche ist die 2. nächstgelegene Kreuzung mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il 2° incrocio più vicino con ${applicationName}"
+          }
         }
       }
     },
@@ -1009,6 +1783,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qual é o 2º cruzamento à frente com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est la 2e intersection à venir avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche ist die 2. Kreuzung voraus mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il 2° incrocio in arrivo con ${applicationName}"
           }
         }
       }
@@ -1033,6 +1825,24 @@
             "state": "translated",
             "value": "Qual é o 3º cruzamento mais próximo com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est la 3e intersection la plus proche avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche ist die 3. nächstgelegene Kreuzung mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il 3° incrocio più vicino con ${applicationName}"
+          }
         }
       }
     },
@@ -1055,6 +1865,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qual é o 3º cruzamento à frente com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est la 3e intersection à venir avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche ist die 3. Kreuzung voraus mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il 3° incrocio in arrivo con ${applicationName}"
           }
         }
       }
@@ -1079,6 +1907,24 @@
             "state": "translated",
             "value": "Qual é o cruzamento mais próximo com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est l’intersection la plus proche avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche ist die nächstgelegene Kreuzung mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è l’incrocio più vicino con ${applicationName}"
+          }
         }
       }
     },
@@ -1101,6 +1947,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qual é o cruzamento à frente com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est la prochaine intersection avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche ist die nächste Kreuzung mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il prossimo incrocio con ${applicationName}"
           }
         }
       }
@@ -1125,6 +1989,24 @@
             "state": "translated",
             "value": "Qual é o segundo cruzamento mais próximo com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est la deuxième intersection la plus proche avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche ist die zweite nächstgelegene Kreuzung mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il secondo incrocio più vicino con ${applicationName}"
+          }
         }
       }
     },
@@ -1147,6 +2029,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qual é o segundo cruzamento à frente com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est la deuxième intersection à venir avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche ist die zweite Kreuzung voraus mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il secondo incrocio in arrivo con ${applicationName}"
           }
         }
       }
@@ -1171,6 +2071,24 @@
             "state": "translated",
             "value": "Qual é o terceiro cruzamento mais próximo com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est la troisième intersection la plus proche avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche ist die dritte nächstgelegene Kreuzung mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il terzo incrocio più vicino con ${applicationName}"
+          }
         }
       }
     },
@@ -1193,6 +2111,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qual é o terceiro cruzamento à frente com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle est la troisième intersection à venir avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche ist die dritte Kreuzung voraus mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qual è il terzo incrocio in arrivo con ${applicationName}"
           }
         }
       }
@@ -1217,6 +2153,24 @@
             "state": "translated",
             "value": "Para onde estou voltado com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vers où suis-je tourné avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In welche Richtung bin ich ausgerichtet mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verso dove sono rivolto con ${applicationName}"
+          }
         }
       }
     },
@@ -1240,6 +2194,24 @@
             "state": "translated",
             "value": "Onde está o cruzamento mais próximo com ${applicationName}"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Où est l’intersection la plus proche avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wo ist die nächstgelegene Kreuzung mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dov’è l’incrocio più vicino con ${applicationName}"
+          }
         }
       }
     },
@@ -1262,6 +2234,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Para onde estou apontando com ${applicationName}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dans quel sens suis-je tourné avec ${applicationName}"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In welche Richtung blicke ich mit ${applicationName}"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In quale direzione guardo con ${applicationName}"
           }
         }
       }
